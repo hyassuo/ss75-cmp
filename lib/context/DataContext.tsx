@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type {
+  AIAnalysis,
   Evidence,
   Item,
   ItemWithRelations,
@@ -40,11 +41,19 @@ interface DataState {
     r: Omit<Reading, "id" | "item_id" | "created_at" | "created_by">
   ) => Promise<void>;
   deleteReading: (id: string, itemId: string) => Promise<void>;
-  addEvidence: (
-    itemId: string,
-    e: Omit<Evidence, "id" | "item_id" | "created_at" | "created_by">
-  ) => Promise<void>;
+  addEvidence: (itemId: string, e: EvidenceInput) => Promise<void>;
   deleteEvidence: (id: string, itemId: string) => Promise<void>;
+}
+
+export interface EvidenceInput {
+  evidence_date: string;
+  description: string | null;
+  file_url?: string | null;
+  file_path: string | null;
+  file_name: string | null;
+  file_type: string | null;
+  file_size: number | null;
+  ai_analysis: AIAnalysis | null;
 }
 
 const DataContext = createContext<DataState | null>(null);
@@ -218,14 +227,16 @@ export function DataProvider({
   }, []);
 
   const addEvidence = useCallback(
-    async (
-      itemId: string,
-      ev: Omit<Evidence, "id" | "item_id" | "created_at" | "created_by">
-    ) => {
+    async (itemId: string, ev: EvidenceInput) => {
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("evidences")
-        .insert({ ...ev, item_id: itemId, created_by: profile.id })
+        .insert({
+          ...ev,
+          file_url: ev.file_url ?? null,
+          item_id: itemId,
+          created_by: profile.id,
+        })
         .select("*")
         .single();
       if (e || !data) {

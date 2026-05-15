@@ -1,3 +1,5 @@
-export default function Page() {
-  return <div style={{ fontSize: 13, color: "#7a95b0" }}>zones — coming soon</div>;
+import { ZonesTab } from "@/components/items/ZonesTab";
+
+export default function ZonesPage() {
+  return <ZonesTab />;
 }
