@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ds-bg: #f0f4f8;
+  --ds-sur: #ffffff;
+  --ds-sur2: #f7f9fc;
+  --ds-bord: #dde4ed;
+  --ds-bord2: #c8d3df;
+  --ds-text: #1e2d3d;
+  --ds-text2: #445566;
+  --ds-text3: #7a95b0;
+  --ds-red: #c0392b;
+  --ds-ora: #c0591b;
+  --ds-yel: #a07c10;
+  --ds-grn: #1e7e45;
+  --ds-blu: #1a5cb5;
+  --ds-vio: #5b3aa0;
+  --ds-sb-bg: #2c3e52;
+  --ds-sb-bord: #374f66;
+  --ds-sb-txt: #c5d6e8;
+  --ds-sb-txt2: #6a8faf;
+  --ds-sb-act: #3b5570;
+  --ds-sb-act-txt: #93d4f5;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-att {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
