@@ -7,6 +7,17 @@ const PUBLIC_PATHS = ["/login", "/auth"];
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
+  // Prefetch requests are background hovers/viewport hints — skip the
+  // Supabase auth round-trip so section switching stays snappy. The real
+  // navigation (no prefetch header) still runs the full auth check.
+  const isPrefetch =
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch" ||
+    (request.headers.get("sec-purpose") ?? "").includes("prefetch");
+  if (isPrefetch) {
+    return supabaseResponse;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
