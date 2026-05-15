@@ -1,3 +1,5 @@
-export default function Page() {
-  return <div style={{ fontSize: 13, color: "#7a95b0" }}>dashboard — coming soon</div>;
+import { Dashboard } from "@/components/dashboard/Dashboard";
+
+export default function DashboardPage() {
+  return <Dashboard />;
 }
