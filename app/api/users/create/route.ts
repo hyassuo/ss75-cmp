@@ -10,16 +10,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  const { email } = (await request.json()) as { email?: string };
+  const { email, password } = (await request.json()) as {
+    email?: string;
+    password?: string;
+  };
   if (!email || !/.+@.+\..+/.test(email)) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
+  if (!password || password.length < 6) {
+    return NextResponse.json(
+      { error: "Password must be at least 6 characters" },
+      { status: 400 }
+    );
+  }
 
   const admin = createServiceClient();
-  const redirectTo =
-    (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000") + "/login";
-  const { error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo,
+  // Create a confirmed user directly (no SMTP dependency). The
+  // handle_new_user trigger auto-creates the profile (viewer by default).
+  const { error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
   });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

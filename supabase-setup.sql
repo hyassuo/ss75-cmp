@@ -464,7 +464,7 @@ INSERT INTO public.zones (zid, name, description, system, default_freq, drops_zo
   ('Z11', 'Accommodation Area',                   'Living quarters, common areas, galley',                  'Safety',      'Monthly', false, 11),
   ('Z12', 'Lifeboats / Muster Areas',             'Lifeboats, davits, muster stations (LSA Code)',          'Safety',      'Monthly', false, 12),
   ('Z13', 'Main Deck',                            'Main deck plating, walkways, pipe racks',                'Marine',      'Weekly',  true,  13),
-  ('Z14', 'ROV Area',                             'ROV launch and recovery, subsea equipment area',         'Subsea',      'Monthly', false, 14)
+  ('Z14', 'ROV Area',                             'ROV launch and recovery, subsea equipment area',         'Third Party', 'Monthly', false, 14)
 ON CONFLICT (zid) DO NOTHING;
 
 
@@ -489,4 +489,8 @@ UNION ALL SELECT 'history',   count(*)::text FROM public.history;
 --
 --   ALTER FUNCTION public.audit_item_changes() SECURITY DEFINER;
 --   ALTER FUNCTION public.audit_item_changes() SET search_path = public;
+--
+-- If Z14's department was seeded as 'Subsea', rename it to 'Third Party':
+--
+--   UPDATE public.zones SET system = 'Third Party' WHERE zid = 'Z14';
 -- =============================================================================

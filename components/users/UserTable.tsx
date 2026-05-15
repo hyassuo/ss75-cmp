@@ -20,6 +20,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
   const [invite, setInvite] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -75,25 +76,35 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             marginBottom: 12,
           }}
         >
-          Invite User
+          Create User
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input
             type="email"
             value={invite}
-            placeholder="email@noble.com"
+            placeholder="e-mail@abc.com"
             onChange={(e) => setInvite(e.target.value)}
-            style={{ ...S.inp, maxWidth: 320, marginBottom: 0 }}
+            style={{ ...S.inp, maxWidth: 280, marginBottom: 0 }}
+          />
+          <input
+            type="password"
+            value={newPassword}
+            placeholder="Temporary password (min 6)"
+            onChange={(e) => setNewPassword(e.target.value)}
+            style={{ ...S.inp, maxWidth: 240, marginBottom: 0 }}
           />
           <button
             onClick={() =>
               void call(
-                "/api/users/invite",
-                { email: invite },
-                "Invitation sent."
-              ).then(() => setInvite(""))
+                "/api/users/create",
+                { email: invite, password: newPassword },
+                "User created."
+              ).then(() => {
+                setInvite("");
+                setNewPassword("");
+              })
             }
-            disabled={busy || !invite}
+            disabled={busy || !invite || newPassword.length < 6}
             style={{
               background: DS.blu,
               color: "#fff",
@@ -101,12 +112,15 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
               borderRadius: 8,
               padding: "9px 20px",
               fontWeight: 700,
-              cursor: busy || !invite ? "default" : "pointer",
+              cursor:
+                busy || !invite || newPassword.length < 6
+                  ? "default"
+                  : "pointer",
               fontSize: 13,
-              opacity: busy || !invite ? 0.6 : 1,
+              opacity: busy || !invite || newPassword.length < 6 ? 0.6 : 1,
             }}
           >
-            Send Invite
+            Create
           </button>
         </div>
         {msg && (
@@ -292,6 +306,36 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             }}
                           >
                             {u.active ? "Deactivate" : "Activate"}
+                          </button>
+                        )}
+                        {!isSelf && (
+                          <button
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Delete user ${u.email}? This permanently removes the account and cannot be undone.`
+                                )
+                              ) {
+                                void call(
+                                  "/api/users/delete",
+                                  { id: u.id },
+                                  "User deleted."
+                                );
+                              }
+                            }}
+                            disabled={busy}
+                            style={{
+                              background: DS.red,
+                              color: "#fff",
+                              border: "none",
+                              borderRadius: 6,
+                              padding: "4px 10px",
+                              fontSize: 11,
+                              cursor: busy ? "default" : "pointer",
+                              fontWeight: 600,
+                            }}
+                          >
+                            Delete
                           </button>
                         )}
                       </div>

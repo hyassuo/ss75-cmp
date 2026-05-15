@@ -17,7 +17,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SS-75 CMP — Corrosion Management Plan",
+  title: "CMP | Noble Courage",
   description: "Corrosion Management Plan — SS-75 Noble Courage",
 };
 

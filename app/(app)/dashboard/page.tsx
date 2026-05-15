@@ -1,5 +1,5 @@
-import { Dashboard } from "@/components/dashboard/Dashboard";
+import { MainTabs } from "@/components/layout/MainTabs";
 
 export default function DashboardPage() {
-  return <Dashboard />;
+  return <MainTabs />;
 }

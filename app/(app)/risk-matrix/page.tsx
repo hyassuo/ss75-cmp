@@ -1,5 +1,5 @@
-import { RiskMatrix } from "@/components/risk/RiskMatrix";
+import { redirect } from "next/navigation";
 
-export default function RiskMatrixPage() {
-  return <RiskMatrix />;
+export default function Page() {
+  redirect("/dashboard");
 }

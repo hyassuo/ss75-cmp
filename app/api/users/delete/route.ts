@@ -1,0 +1,54 @@
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/supabase/adminGuard";
+import { createServiceClient } from "@/lib/supabase/server";
+
+export const runtime = "nodejs";
+
+export async function POST(request: Request) {
+  const guard = await requireAdmin();
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
+
+  const { id } = (await request.json()) as { id?: string };
+  if (!id) {
+    return NextResponse.json({ error: "User id required" }, { status: 400 });
+  }
+  if (id === guard.ctx.userId) {
+    return NextResponse.json(
+      { error: "You cannot delete yourself." },
+      { status: 400 }
+    );
+  }
+
+  const admin = createServiceClient();
+  const { data: target } = await admin
+    .from("profiles")
+    .select("role, active")
+    .eq("id", id)
+    .single();
+  if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  if (target.role === "admin" && target.active) {
+    const { count } = await admin
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .eq("role", "admin")
+      .eq("active", true);
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json(
+        { error: "Cannot delete the only active admin." },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Deleting the auth user cascades to public.profiles (ON DELETE CASCADE).
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+  return NextResponse.json({ ok: true });
+}

@@ -8,11 +8,20 @@ import {
 } from "react";
 import type { SystemFilter } from "@/lib/utils/constants";
 
+export type MainTab =
+  | "dashboard"
+  | "zones"
+  | "risk"
+  | "schedule"
+  | "export";
+
 interface ShellState {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
   sysFilter: SystemFilter;
   setSysFilter: (s: SystemFilter) => void;
+  tab: MainTab;
+  setTab: (t: MainTab) => void;
 }
 
 const ShellContext = createContext<ShellState | null>(null);
@@ -20,6 +29,7 @@ const ShellContext = createContext<ShellState | null>(null);
 export function ShellProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [sysFilter, setSysFilter] = useState<SystemFilter>("All");
+  const [tab, setTab] = useState<MainTab>("dashboard");
 
   return (
     <ShellContext.Provider
@@ -28,6 +38,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
         toggleSidebar: () => setSidebarCollapsed((v) => !v),
         sysFilter,
         setSysFilter,
+        tab,
+        setTab,
       }}
     >
       {children}

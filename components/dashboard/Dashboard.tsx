@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type { CSSProperties } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
@@ -32,7 +31,7 @@ function priorityWeight(it: ItemWithRelations): number {
 
 export function Dashboard() {
   const { zones, itemsByZone } = useData();
-  const { sysFilter } = useShell();
+  const { sysFilter, setTab } = useShell();
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
@@ -67,9 +66,9 @@ export function Dashboard() {
           }}
         >
           {visibleZones.map((z) => (
-            <Link
+            <button
               key={z.zid}
-              href="/zones"
+              onClick={() => setTab("zones")}
               style={{
                 background: DS.sur,
                 border: "1px solid " + DS.bord,
@@ -82,7 +81,6 @@ export function Dashboard() {
                 display: "flex",
                 gap: 6,
                 alignItems: "center",
-                textDecoration: "none",
               }}
             >
               <span
@@ -91,7 +89,7 @@ export function Dashboard() {
                 {z.zid}
               </span>
               {z.name}
-            </Link>
+            </button>
           ))}
         </div>
       </div>

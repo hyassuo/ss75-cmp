@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -95,12 +96,22 @@ export function DataProvider({
     void load();
   }, [load]);
 
+  const grouped = useMemo(() => {
+    const map = new Map<string, ItemWithRelations[]>();
+    for (const i of allItems) {
+      const arr = map.get(i.zone_id);
+      if (arr) arr.push(i);
+      else map.set(i.zone_id, [i]);
+    }
+    map.forEach((arr) =>
+      arr.sort((a, b) => a.created_at.localeCompare(b.created_at))
+    );
+    return map;
+  }, [allItems]);
+
   const itemsByZone = useCallback(
-    (zid: string) =>
-      allItems
-        .filter((i) => i.zone_id === zid)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [allItems]
+    (zid: string) => grouped.get(zid) ?? [],
+    [grouped]
   );
 
   const createItem = useCallback(
