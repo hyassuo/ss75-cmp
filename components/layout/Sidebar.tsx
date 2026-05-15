@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
+import { useNewItem } from "@/lib/context/NewItemContext";
 import { createClient } from "@/lib/supabase/client";
 
 interface TabItem {
@@ -34,6 +35,7 @@ const ADMIN_LINKS: LinkItem[] = [
 export function Sidebar() {
   const { sidebarCollapsed, tab, setTab } = useShell();
   const { profile } = useData();
+  const { openNewItem } = useNewItem();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -163,7 +165,7 @@ export function Sidebar() {
             }}
           >
             <button
-              onClick={() => goTab("zones")}
+              onClick={openNewItem}
               title={collapsed ? "New Item" : ""}
               style={{
                 display: "block",
