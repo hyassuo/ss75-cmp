@@ -7,6 +7,7 @@ import { Topbar } from "@/components/layout/Topbar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { AlertBar } from "@/components/dashboard/AlertBar";
+import { DashboardSkeleton } from "@/components/ui/Skeleton";
 import { useData } from "@/lib/context/DataContext";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -49,16 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
             {loading ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "60px 0",
-                  color: DS.text3,
-                  fontSize: 13,
-                }}
-              >
-                Loading…
-              </div>
+              <DashboardSkeleton />
             ) : (
               <>
                 <AlertBar />
