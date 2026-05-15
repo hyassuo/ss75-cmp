@@ -11,13 +11,22 @@ export function Topbar() {
     useShell();
   const { allItems } = useData();
 
-  const attention = allItems.some(
-    (i) => isOverdue(i.next_insp) || i.status === "Critical"
-  );
-  const chipColor = attention ? DS.ora : DS.grn;
-  const chipBg = attention ? DS.oraBg : DS.grnBg;
-  const chipBord = attention ? DS.oraBord : DS.grnBord;
-  const chipText = attention ? "CMP ATTENTION" : "CMP NOMINAL";
+  const overdue = allItems.filter((i) => isOverdue(i.next_insp));
+  const degraded = overdue.some((i) => i.sece);
+  const attention = !degraded && overdue.length > 0;
+
+  const chipColor = degraded ? DS.red : attention ? DS.ora : DS.grn;
+  const chipBg = degraded ? DS.redBg : attention ? DS.oraBg : DS.grnBg;
+  const chipBord = degraded
+    ? DS.redBord
+    : attention
+      ? DS.oraBord
+      : DS.grnBord;
+  const chipText = degraded
+    ? "CMP DEGRADED"
+    : attention
+      ? "CMP ATTENTION"
+      : "CMP HEALTHY";
 
   return (
     <div

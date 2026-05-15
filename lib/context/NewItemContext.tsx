@@ -24,7 +24,7 @@ interface OpenItem {
 
 export function NewItemProvider({ children }: { children: ReactNode }) {
   const { zones, createItem } = useData();
-  const { sysFilter } = useShell();
+  const { sysFilter, sidebarCollapsed } = useShell();
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<OpenItem | null>(null);
@@ -51,26 +51,26 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(15,23,42,0.6)",
+            background: "transparent",
             zIndex: 600,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            padding: 16,
-            overflowY: "auto",
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
+              position: "fixed",
+              left: sidebarCollapsed ? 64 : 204,
+              top: 116,
+              bottom: 24,
+              width: 340,
+              maxWidth: "calc(100vw - 32px)",
               background: DS.sur,
               border: "1px solid " + DS.bord,
               borderRadius: 10,
-              width: "100%",
-              maxWidth: 420,
-              marginTop: 40,
-              boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.22)",
               overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
             <div
@@ -86,7 +86,7 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
             >
               New Item — select a zone
             </div>
-            <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+            <div style={{ flex: 1, overflowY: "auto" }}>
               {visibleZones.map((z) => (
                 <div
                   key={z.zid}
