@@ -1,3 +1,5 @@
-export default function Page() {
-  return <div style={{ fontSize: 13, color: "#7a95b0" }}>risk-matrix — coming soon</div>;
+import { RiskMatrix } from "@/components/risk/RiskMatrix";
+
+export default function RiskMatrixPage() {
+  return <RiskMatrix />;
 }

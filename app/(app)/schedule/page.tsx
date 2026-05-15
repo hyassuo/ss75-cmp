@@ -1,3 +1,5 @@
-export default function Page() {
-  return <div style={{ fontSize: 13, color: "#7a95b0" }}>schedule — coming soon</div>;
+import { ScheduleView } from "@/components/schedule/ScheduleView";
+
+export default function SchedulePage() {
+  return <ScheduleView />;
 }
