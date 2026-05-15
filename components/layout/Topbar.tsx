@@ -23,10 +23,10 @@ export function Topbar() {
       ? DS.oraBord
       : DS.grnBord;
   const chipText = degraded
-    ? "CMP DEGRADED"
+    ? "DEGRADED"
     : attention
-      ? "CMP ATTENTION"
-      : "CMP HEALTHY";
+      ? "ATTENTION"
+      : "HEALTHY";
 
   return (
     <div
@@ -40,18 +40,18 @@ export function Topbar() {
         zIndex: 100,
       }}
     >
-      {/* Row 1 */}
+      {/* Row 1 — hamburger + title + status */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "7px 0 1px",
+          padding: "8px 0 0",
           gap: 12,
           flexWrap: "wrap",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
             onClick={toggleSidebar}
             title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -68,6 +68,7 @@ export function Topbar() {
               justifyContent: "center",
               padding: 0,
               transition: DS.transition,
+              flexShrink: 0,
             }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -99,45 +100,16 @@ export function Topbar() {
           </button>
           <div
             style={{
-              fontSize: 11,
-              color: DS.sbTxt2,
-              textTransform: "uppercase",
-              letterSpacing: 2,
-              fontWeight: 600,
+              fontSize: 19,
+              fontWeight: 800,
+              color: DS.sbTxt,
+              fontFamily: DS.sans,
+              letterSpacing: -0.3,
+              lineHeight: 1.1,
             }}
           >
-            SS-75 — Noble Courage
+            Corrosion Management Plan
           </div>
-        </div>
-        <div
-          style={{ fontSize: 11, color: DS.sbTxt2, fontFamily: DS.mono }}
-        >
-          {fmt(today())}
-        </div>
-      </div>
-
-      {/* Row 2 */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "1px 0 5px",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 16,
-            fontWeight: 700,
-            color: DS.sbTxt,
-            fontFamily: DS.mono,
-            letterSpacing: -0.2,
-            marginLeft: 38,
-          }}
-        >
-          CORROSION MANAGEMENT PLAN
         </div>
         <div
           style={{
@@ -146,8 +118,9 @@ export function Topbar() {
             gap: 6,
             background: chipBg,
             border: "1px solid " + chipBord,
-            borderRadius: 20,
-            padding: "3px 12px",
+            borderRadius: 8,
+            padding: "4px 12px",
+            flexShrink: 0,
           }}
         >
           <div
@@ -161,15 +134,46 @@ export function Topbar() {
           />
           <span
             style={{
-              fontSize: 11,
-              fontWeight: 700,
+              fontSize: 10,
+              fontWeight: 800,
               fontFamily: DS.mono,
-              letterSpacing: 0.6,
+              letterSpacing: 0.8,
               color: chipColor,
             }}
           >
             {chipText}
           </span>
+        </div>
+      </div>
+
+      {/* Row 2 — subtitle + date */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "1px 0 6px",
+          gap: 12,
+          flexWrap: "wrap",
+          marginLeft: 40,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            color: DS.sbTxt2,
+            textTransform: "uppercase",
+            letterSpacing: 2,
+            fontWeight: 600,
+            fontFamily: DS.mono,
+          }}
+        >
+          Noble Courage SS-75
+        </div>
+        <div
+          style={{ fontSize: 11, color: DS.sbTxt2, fontFamily: DS.mono }}
+        >
+          {fmt(today())}
         </div>
       </div>
 
@@ -179,7 +183,7 @@ export function Topbar() {
           display: "flex",
           alignItems: "center",
           gap: 5,
-          paddingBottom: 7,
+          paddingBottom: 6,
           flexWrap: "wrap",
         }}
       >
