@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Topbar } from "@/components/layout/Topbar";
@@ -10,9 +11,19 @@ import { AlertBar } from "@/components/dashboard/AlertBar";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
 import { NewItemProvider } from "@/lib/context/NewItemContext";
 import { useData } from "@/lib/context/DataContext";
+import { useShell } from "@/lib/context/ShellContext";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { loading, error } = useData();
+  const { tab } = useShell();
+  const pathname = usePathname();
+
+  // The alert bar is only relevant in the operational tabs. Suppress it on
+  // admin/reporting surfaces so it doesn't follow the user into Users,
+  // Audit Log or the Export view.
+  const onAdminRoute =
+    pathname.startsWith("/users") || pathname.startsWith("/audit-log");
+  const showAlerts = !onAdminRoute && tab !== "export";
 
   return (
     <NewItemProvider>
@@ -55,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <DashboardSkeleton />
               ) : (
                 <>
-                  <AlertBar />
+                  {showAlerts && <AlertBar />}
                   {children}
                 </>
               )}
