@@ -107,6 +107,7 @@ export function Sidebar() {
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
         overflowX: "hidden",
         transition: "width 0.22s ease",
       }}

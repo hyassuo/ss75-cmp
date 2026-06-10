@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
-import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Topbar } from "@/components/layout/Topbar";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -27,7 +26,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <NewItemProvider>
-      <div style={{ ...S.page, height: "100dvh", overflow: "hidden" }}>
+      <div
+        style={{
+          // position:fixed/inset:0 anchors to the *visible* viewport on iOS
+          // Safari, sidestepping the 100vh/100dvh quirks where the layout
+          // ends up taller than the visible area (cutting the sidebar
+          // bottom and forcing rubber-band scrolling on main content).
+          position: "fixed",
+          inset: 0,
+          display: "flex",
+          flexDirection: "column",
+          background: DS.bg,
+          color: DS.text,
+          fontFamily: DS.sans,
+        }}
+      >
         <Topbar />
         <div
           style={{
@@ -42,6 +55,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             style={{
               flex: 1,
               overflowY: "auto",
+              WebkitOverflowScrolling: "touch",
+              overscrollBehavior: "contain",
               background: DS.bg,
               padding: "0 24px 24px",
             }}
