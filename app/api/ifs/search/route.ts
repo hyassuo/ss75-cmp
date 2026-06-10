@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { requireUser } from "@/lib/supabase/adminGuard";
 import { rateLimit } from "@/lib/utils/rateLimit";
+import { aiGenerate, aiConfigured } from "@/lib/ai/client";
+
+export const runtime = "nodejs";
 
 const MAX_QUERY_LENGTH = 80;
 const MAX_CACHE_ENTRIES = 500;
 // Generous for live-typing autocomplete (debounced client-side), but caps
-// a single user's Anthropic spend.
+// a single user's AI spend.
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 60_000;
 const cache = new Map<string, unknown>();
@@ -32,7 +34,7 @@ export async function POST(request: Request) {
   const term = query.slice(0, MAX_QUERY_LENGTH);
 
   const key = term.toUpperCase();
-  // Cache hits don't hit Anthropic, so check the cache before rate limiting.
+  // Cache hits don't hit the AI provider, so check the cache before limiting.
   if (cache.has(key)) return NextResponse.json(cache.get(key));
 
   const rl = rateLimit(`ifs:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
@@ -43,26 +45,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  if (!aiConfigured()) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
+      { error: "AI provider not configured" },
       { status: 503 }
     );
   }
 
   try {
-    const anthropic = new Anthropic({ apiKey });
-    const msg = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
-      max_tokens: 800,
+    const text = await aiGenerate({
       system: SYSTEM,
-      messages: [{ role: "user", content: "Search: " + term }],
+      userText: "Search: " + term,
+      maxTokens: 800,
+      json: true,
     });
-    const text = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("");
     const clean = text.replace(/```json|```/g, "").trim();
     let results: unknown = [];
     try {

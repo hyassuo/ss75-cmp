@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { requireAdmin } from "@/lib/supabase/adminGuard";
 import { rateLimit } from "@/lib/utils/rateLimit";
+import { aiGenerate, aiConfigured, type AiMediaType } from "@/lib/ai/client";
+
+export const runtime = "nodejs";
 
 // 10 MB file -> ~13.7 MB base64 (matches the storage bucket limit).
 const MAX_BASE64_LENGTH = 14_000_000;
@@ -20,7 +22,12 @@ const SYSTEM =
   "(string: 2-3 sentence description), recommendation (string: 1-2 sentence " +
   "next step). Return ONLY the JSON object, no markdown, no preamble.";
 
-type MediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+const ALLOWED: AiMediaType[] = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
 
 export async function POST(request: Request) {
   const guard = await requireAdmin();
@@ -36,10 +43,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  if (!aiConfigured()) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
+      { error: "AI provider not configured" },
       { status: 503 }
     );
   }
@@ -57,37 +63,19 @@ export async function POST(request: Request) {
       { status: 413 }
     );
   }
+  const media: AiMediaType = ALLOWED.includes(mediaType as AiMediaType)
+    ? (mediaType as AiMediaType)
+    : "image/jpeg";
 
   try {
-    const anthropic = new Anthropic({ apiKey });
-    const msg = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
-      max_tokens: 600,
+    const text = await aiGenerate({
       system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: (mediaType as MediaType) || "image/jpeg",
-                data: base64,
-              },
-            },
-            {
-              type: "text",
-              text: "Analyse this corrosion photo from an offshore semisubmersible drilling unit.",
-            },
-          ],
-        },
-      ],
+      userText:
+        "Analyse this corrosion photo from an offshore semisubmersible drilling unit.",
+      maxTokens: 600,
+      json: true,
+      image: { base64, mediaType: media },
     });
-    const text = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("");
     const clean = text.replace(/```json|```/g, "").trim();
     try {
       return NextResponse.json(JSON.parse(clean));
