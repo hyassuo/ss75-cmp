@@ -14,6 +14,7 @@ export function Topbar() {
   const overdue = allItems.filter((i) => isOverdue(i.next_insp));
   const degraded = overdue.some((i) => i.sece);
   const attention = !degraded && overdue.length > 0;
+  const healthy = !degraded && !attention;
 
   const chipColor = degraded ? DS.red : attention ? DS.ora : DS.grn;
   const chipBg = degraded ? DS.redBg : attention ? DS.oraBg : DS.grnBg;
@@ -132,6 +133,19 @@ export function Topbar() {
               animation: "pulse-att 1.8s infinite",
             }}
           />
+          {!healthy && (
+            <span
+              aria-hidden
+              style={{
+                fontSize: 12,
+                lineHeight: 1,
+                color: chipColor,
+                fontWeight: 800,
+              }}
+            >
+              ⚡
+            </span>
+          )}
           <span
             style={{
               fontSize: 10,
@@ -191,13 +205,11 @@ export function Topbar() {
           style={{
             fontSize: 11,
             color: DS.sbTxt2,
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: 1,
-            marginRight: 4,
+            fontWeight: 500,
+            marginRight: 6,
           }}
         >
-          DEPT
+          Escopo de visualização:
         </span>
         {SYSTEMS.map((s) => (
           <button

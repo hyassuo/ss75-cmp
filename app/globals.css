@@ -33,7 +33,7 @@ body {
   overflow: hidden;
   background: var(--ds-bg);
   color: var(--ds-text);
-  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
 }
 
 * {
