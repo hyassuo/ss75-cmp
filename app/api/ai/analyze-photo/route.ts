@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireAdmin } from "@/lib/supabase/adminGuard";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 // 10 MB file -> ~13.7 MB base64 (matches the storage bucket limit).
 const MAX_BASE64_LENGTH = 14_000_000;
+// Vision calls are expensive; cap per admin per minute.
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
 
 const SYSTEM =
   "You are a corrosion assessment expert for offshore drilling units. " +
@@ -22,6 +26,14 @@ export async function POST(request: Request) {
   const guard = await requireAdmin();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
+
+  const rl = rateLimit(`photo:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;

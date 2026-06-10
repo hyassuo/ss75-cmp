@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireUser } from "@/lib/supabase/adminGuard";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 const MAX_QUERY_LENGTH = 80;
 const MAX_CACHE_ENTRIES = 500;
+// Generous for live-typing autocomplete (debounced client-side), but caps
+// a single user's Anthropic spend.
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60_000;
 const cache = new Map<string, unknown>();
 
 const SYSTEM =
@@ -27,7 +32,16 @@ export async function POST(request: Request) {
   const term = query.slice(0, MAX_QUERY_LENGTH);
 
   const key = term.toUpperCase();
+  // Cache hits don't hit Anthropic, so check the cache before rate limiting.
   if (cache.has(key)) return NextResponse.json(cache.get(key));
+
+  const rl = rateLimit(`ifs:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
