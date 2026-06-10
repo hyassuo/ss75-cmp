@@ -43,3 +43,17 @@ export async function requireAdmin(): Promise<GuardResult> {
   }
   return result;
 }
+
+// CSRF defense-in-depth: reject cross-site mutations. Cookies are SameSite=Lax
+// (so cross-site POSTs already drop the session), this is a second layer.
+// Allows same-origin requests and server-to-server calls with no Origin header.
+export function sameOrigin(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return true; // non-browser / same-origin fetch without Origin
+  const host = request.headers.get("host");
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}

@@ -322,13 +322,19 @@ BEGIN
     assigned_role := 'viewer';
   END IF;
 
-  INSERT INTO public.profiles (id, email, full_name, role, unit_id)
+  -- New profiles are INACTIVE by default. The admin "Create User" API route
+  -- activates the ones it creates. This neutralises rogue public sign-ups:
+  -- even if signups are enabled, a self-registered account can read nothing
+  -- (RLS helpers + guards reject inactive users) until an admin activates it.
+  -- The bootstrap admin is the exception so the very first login works.
+  INSERT INTO public.profiles (id, email, full_name, role, unit_id, active)
   VALUES (
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
     assigned_role,
-    default_unit_id
+    default_unit_id,
+    (NEW.email = 'hyassuo@gmail.com')
   );
   RETURN NEW;
 END;

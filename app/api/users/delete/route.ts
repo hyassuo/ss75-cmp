@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/supabase/adminGuard";
+import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const guard = await requireAdmin();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
