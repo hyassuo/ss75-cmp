@@ -38,9 +38,14 @@ export async function updateSession(request: NextRequest) {
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            // Session-only cookies: drop maxAge/expires so the session
+            // ends when the browser closes.
+            const sessionOpts = { ...options };
+            delete sessionOpts.maxAge;
+            delete sessionOpts.expires;
+            supabaseResponse.cookies.set(name, value, sessionOpts);
+          });
         },
       },
     });
