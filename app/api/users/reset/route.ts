@@ -19,6 +19,17 @@ export async function POST(request: Request) {
   }
 
   const admin = createServiceClient();
+  // Only send resets to users that actually exist in this system — prevents
+  // using the endpoint to fire Supabase emails at arbitrary addresses.
+  const { data: target } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
   const redirectTo =
     (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000") + "/login";
   const { error } = await admin.auth.resetPasswordForEmail(email, {

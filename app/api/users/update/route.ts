@@ -22,6 +22,9 @@ export async function POST(request: Request) {
   if (!id) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
   }
+  if (role && !["admin", "inspector", "viewer"].includes(role)) {
+    return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+  }
 
   const isSelf = id === guard.ctx.userId;
   const demotingSelf = isSelf && role && role !== "admin";
