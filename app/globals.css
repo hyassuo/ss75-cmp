@@ -139,7 +139,25 @@ body {
   flex-shrink: 0;
 }
 
+/* Footer: full on desktop, compact "Rev.01" only on mobile so it doesn't
+   eat valuable vertical space on phones. */
+.ft-bar {
+  padding: 10px 24px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 640px) {
+  .ft-bar {
+    padding: 5px 12px;
+    flex-wrap: nowrap;
+    justify-content: center;
+  }
+  .ft-standards {
+    display: none;
+  }
+  .ft-rev {
+    text-align: center;
+  }
   .tb-band-top {
     padding: 6px 12px 4px;
   }

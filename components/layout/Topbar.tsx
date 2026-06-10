@@ -160,7 +160,7 @@ export function Topbar() {
           display: "flex",
           alignItems: "center",
           gap: 10,
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
           borderTop: "1px solid rgba(0,0,0,0.18)",
         }}
       >
