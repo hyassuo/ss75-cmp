@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
+import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
 import { rateLimit } from "@/lib/utils/rateLimit";
 import { aiGenerate, aiConfigured, type AiMediaType } from "@/lib/ai/client";
 
@@ -33,7 +33,9 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  const guard = await requireAdmin();
+  // Free Gemini tier removed the cost rationale for admin-only access;
+  // any active authenticated user (rate-limited below) may analyse a photo.
+  const guard = await requireUser();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }

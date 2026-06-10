@@ -1,4 +1,8 @@
 import { DS } from "@/lib/design/tokens";
+import pkg from "@/package.json";
+
+// Single source of truth for the displayed version. Bump package.json.
+const VERSION = (pkg as { version: string }).version;
 
 export function Footer() {
   return (
@@ -22,7 +26,7 @@ export function Footer() {
         className="ft-rev"
         style={{ fontSize: 9, color: DS.sbTxt2, fontFamily: DS.mono }}
       >
-        Rev.01 · Developed by Helcio Yassuo
+        v{VERSION} · Developed by Helcio Yassuo
       </div>
     </div>
   );
