@@ -86,10 +86,13 @@ export function AlertBar() {
               style={{
                 background: DS.red,
                 color: "#fff",
-                borderRadius: 20,
-                padding: "1px 8px",
+                borderRadius: 999,
+                padding: "3px 10px",
                 fontSize: 11,
                 fontWeight: 700,
+                lineHeight: 1,
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
               {danger} critical
@@ -100,10 +103,13 @@ export function AlertBar() {
               style={{
                 background: DS.ora,
                 color: "#fff",
-                borderRadius: 20,
-                padding: "1px 8px",
+                borderRadius: 999,
+                padding: "3px 10px",
                 fontSize: 11,
                 fontWeight: 700,
+                lineHeight: 1,
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
               {warn} warning

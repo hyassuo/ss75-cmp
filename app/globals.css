@@ -115,11 +115,19 @@ body {
   text-overflow: ellipsis;
 }
 .tb-pills {
-  display: inline-flex;
+  display: flex;
   border-radius: 8px;
   padding: 3px;
   gap: 2px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tb-pills::-webkit-scrollbar {
+  display: none;
 }
 .tb-pill {
   border: none;
@@ -128,6 +136,7 @@ body {
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 @media (max-width: 640px) {
