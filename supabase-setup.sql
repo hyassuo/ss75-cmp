@@ -271,6 +271,38 @@ CREATE TRIGGER trg_audit_items
   AFTER INSERT OR UPDATE ON public.items
   FOR EACH ROW EXECUTE FUNCTION public.audit_item_changes();
 
+-- Server-enforced authorship: created_by/updated_by always reflect the JWT,
+-- never a client-supplied value (service-role writes pass through unchanged).
+CREATE OR REPLACE FUNCTION public.enforce_author()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL THEN
+    IF TG_OP = 'INSERT' THEN
+      NEW.created_by := auth.uid();
+    END IF;
+    IF TG_TABLE_NAME = 'items' THEN
+      NEW.updated_by := auth.uid();
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_items_author ON public.items;
+CREATE TRIGGER trg_items_author
+  BEFORE INSERT OR UPDATE ON public.items
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_author();
+
+DROP TRIGGER IF EXISTS trg_readings_author ON public.readings;
+CREATE TRIGGER trg_readings_author
+  BEFORE INSERT ON public.readings
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_author();
+
+DROP TRIGGER IF EXISTS trg_evidences_author ON public.evidences;
+CREATE TRIGGER trg_evidences_author
+  BEFORE INSERT ON public.evidences
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_author();
+
 
 -- =============================================================================
 -- SECTION 5 — AUTH HOOK: auto-create profile on signup
@@ -320,15 +352,17 @@ ALTER TABLE public.readings   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.evidences  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.history    ENABLE ROW LEVEL SECURITY;
 
+-- Helpers return NULL for deactivated profiles so a deactivated user loses
+-- all RLS-mediated access immediately (not only at JWT expiry).
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS user_role AS $$
-  SELECT role FROM public.profiles WHERE id = auth.uid()
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT role FROM public.profiles WHERE id = auth.uid() AND active = true
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 
 CREATE OR REPLACE FUNCTION public.current_user_unit()
 RETURNS uuid AS $$
-  SELECT unit_id FROM public.profiles WHERE id = auth.uid()
-$$ LANGUAGE sql STABLE SECURITY DEFINER;
+  SELECT unit_id FROM public.profiles WHERE id = auth.uid() AND active = true
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 
 -- units
 DROP POLICY IF EXISTS "units_select_authenticated" ON public.units;
@@ -348,6 +382,12 @@ CREATE POLICY "profiles_update_self" ON public.profiles
 DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
 CREATE POLICY "profiles_admin_all" ON public.profiles
   FOR ALL TO authenticated USING (public.current_user_role() = 'admin');
+
+-- Column-level guard: without this, profiles_update_self would let any user
+-- set their own role/active (privilege escalation). role/active/unit_id are
+-- managed only via the admin API routes (service role).
+REVOKE UPDATE ON public.profiles FROM authenticated;
+GRANT UPDATE (full_name, dept) ON public.profiles TO authenticated;
 
 -- zones
 DROP POLICY IF EXISTS "zones_select_authenticated" ON public.zones;
@@ -376,6 +416,14 @@ CREATE POLICY "items_update_inspector_admin" ON public.items
 DROP POLICY IF EXISTS "items_delete_admin" ON public.items;
 CREATE POLICY "items_delete_admin" ON public.items
   FOR DELETE TO authenticated USING (public.current_user_role() = 'admin');
+-- Creators may delete their own items (needed for discarding new-item drafts).
+DROP POLICY IF EXISTS "items_delete_creator" ON public.items;
+CREATE POLICY "items_delete_creator" ON public.items
+  FOR DELETE TO authenticated USING (
+    created_by = auth.uid()
+    AND public.current_user_role() IN ('admin', 'inspector')
+    AND unit_id = public.current_user_unit()
+  );
 
 -- readings
 DROP POLICY IF EXISTS "readings_select_unit" ON public.readings;
@@ -385,7 +433,14 @@ CREATE POLICY "readings_select_unit" ON public.readings
   );
 DROP POLICY IF EXISTS "readings_insert_inspector_admin" ON public.readings;
 CREATE POLICY "readings_insert_inspector_admin" ON public.readings
-  FOR INSERT TO authenticated WITH CHECK (public.current_user_role() IN ('admin', 'inspector'));
+  FOR INSERT TO authenticated WITH CHECK (
+    public.current_user_role() IN ('admin', 'inspector')
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id = readings.item_id
+        AND items.unit_id = public.current_user_unit()
+    )
+  );
 DROP POLICY IF EXISTS "readings_delete_admin" ON public.readings;
 CREATE POLICY "readings_delete_admin" ON public.readings
   FOR DELETE TO authenticated USING (public.current_user_role() = 'admin');
@@ -398,7 +453,14 @@ CREATE POLICY "evidences_select_unit" ON public.evidences
   );
 DROP POLICY IF EXISTS "evidences_insert_inspector_admin" ON public.evidences;
 CREATE POLICY "evidences_insert_inspector_admin" ON public.evidences
-  FOR INSERT TO authenticated WITH CHECK (public.current_user_role() IN ('admin', 'inspector'));
+  FOR INSERT TO authenticated WITH CHECK (
+    public.current_user_role() IN ('admin', 'inspector')
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id = evidences.item_id
+        AND items.unit_id = public.current_user_unit()
+    )
+  );
 DROP POLICY IF EXISTS "evidences_delete_admin" ON public.evidences;
 CREATE POLICY "evidences_delete_admin" ON public.evidences
   FOR DELETE TO authenticated USING (public.current_user_role() = 'admin');
@@ -425,9 +487,18 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+-- Photos are stored under {item_id}/... — readable only if the item belongs
+-- to the user's unit.
 DROP POLICY IF EXISTS "evidence_select_authenticated" ON storage.objects;
 CREATE POLICY "evidence_select_authenticated" ON storage.objects
-  FOR SELECT TO authenticated USING (bucket_id = 'evidence-photos');
+  FOR SELECT TO authenticated USING (
+    bucket_id = 'evidence-photos'
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id::text = (storage.foldername(name))[1]
+        AND items.unit_id = public.current_user_unit()
+    )
+  );
 
 DROP POLICY IF EXISTS "evidence_insert_inspector_admin" ON storage.objects;
 CREATE POLICY "evidence_insert_inspector_admin" ON storage.objects
@@ -493,4 +564,7 @@ UNION ALL SELECT 'history',   count(*)::text FROM public.history;
 -- If Z14's department was seeded as 'Subsea', rename it to 'Third Party':
 --
 --   UPDATE public.zones SET system = 'Third Party' WHERE zid = 'Z14';
+--
+-- If the schema was provisioned before the security review, run
+-- supabase-security-fixes.sql (idempotent) to apply the RLS hardening.
 -- =============================================================================

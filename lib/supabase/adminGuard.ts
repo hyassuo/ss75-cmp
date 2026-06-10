@@ -1,14 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
+import type { UserRole } from "@/lib/types/domain";
 
-export interface AdminContext {
+export interface GuardContext {
   userId: string;
   email: string;
+  role: UserRole;
 }
 
-// Returns the admin's context, or an error string if not an active admin.
-export async function requireAdmin(): Promise<
-  { ok: true; ctx: AdminContext } | { ok: false; status: number; error: string }
-> {
+type GuardResult =
+  | { ok: true; ctx: GuardContext }
+  | { ok: false; status: number; error: string };
+
+// Any authenticated AND active user. Deactivated accounts keep a valid JWT
+// until it expires, so active must be re-checked on every API call.
+export async function requireUser(): Promise<GuardResult> {
   const supabase = createClient();
   const {
     data: { user },
@@ -21,8 +26,20 @@ export async function requireAdmin(): Promise<
     .eq("id", user.id)
     .single();
 
-  if (!profile || !profile.active || profile.role !== "admin") {
+  if (!profile || !profile.active) {
+    return { ok: false, status: 403, error: "Account inactive" };
+  }
+  return {
+    ok: true,
+    ctx: { userId: user.id, email: profile.email, role: profile.role },
+  };
+}
+
+export async function requireAdmin(): Promise<GuardResult> {
+  const result = await requireUser();
+  if (!result.ok) return result;
+  if (result.ctx.role !== "admin") {
     return { ok: false, status: 403, error: "Admin access required" };
   }
-  return { ok: true, ctx: { userId: user.id, email: profile.email } };
+  return result;
 }

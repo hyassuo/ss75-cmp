@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/adminGuard";
+
+// 10 MB file -> ~13.7 MB base64 (matches the storage bucket limit).
+const MAX_BASE64_LENGTH = 14_000_000;
 
 const SYSTEM =
   "You are a corrosion assessment expert for offshore drilling units. " +
@@ -16,23 +19,9 @@ const SYSTEM =
 type MediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 
 export async function POST(request: Request) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-  if (!profile || profile.role !== "admin") {
-    return NextResponse.json(
-      { error: "AI analysis is admin-only" },
-      { status: 403 }
-    );
+  const guard = await requireAdmin();
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -49,6 +38,12 @@ export async function POST(request: Request) {
   };
   if (!base64) {
     return NextResponse.json({ error: "No image provided" }, { status: 400 });
+  }
+  if (base64.length > MAX_BASE64_LENGTH) {
+    return NextResponse.json(
+      { error: "Image too large (max 10 MB)" },
+      { status: 413 }
+    );
   }
 
   try {

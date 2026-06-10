@@ -27,6 +27,7 @@ interface Props {
   }) => Promise<void> | void;
   onRemove: (id: string) => void;
   isAdmin: boolean;
+  canEdit?: boolean;
   onAIApply: (r: AIAnalysis) => void;
 }
 
@@ -36,6 +37,7 @@ export function EvidencePanel({
   onAdd,
   onRemove,
   isAdmin,
+  canEdit = true,
   onAIApply,
 }: Props) {
   const [date, setDate] = useState(today());
@@ -149,6 +151,7 @@ export function EvidencePanel({
 
   return (
     <div>
+      {canEdit && (
       <div
         style={{
           background: DS.sur2,
@@ -251,6 +254,7 @@ export function EvidencePanel({
           rows={2}
         />
       </div>
+      )}
 
       {aiLoading && (
         <div
@@ -383,20 +387,22 @@ export function EvidencePanel({
               </div>
             )}
           </div>
-          <button
-            onClick={() => onRemove(ev.id)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "rgba(192,57,43,0.5)",
-              cursor: "pointer",
-              fontSize: 16,
-              padding: "0 4px",
-              flexShrink: 0,
-            }}
-          >
-            ×
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => onRemove(ev.id)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "rgba(192,57,43,0.5)",
+                cursor: "pointer",
+                fontSize: 16,
+                padding: "0 4px",
+                flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
     </div>
