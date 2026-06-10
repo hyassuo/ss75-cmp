@@ -419,8 +419,16 @@ CREATE POLICY "items_insert_inspector_admin" ON public.items
     AND unit_id = public.current_user_unit()
   );
 DROP POLICY IF EXISTS "items_update_inspector_admin" ON public.items;
+-- USING filters which existing rows can be touched; WITH CHECK validates the
+-- post-update row so an inspector cannot change unit_id and move the item
+-- into another unit (silent transfer / data loss).
 CREATE POLICY "items_update_inspector_admin" ON public.items
-  FOR UPDATE TO authenticated USING (
+  FOR UPDATE TO authenticated
+  USING (
+    public.current_user_role() IN ('admin', 'inspector')
+    AND unit_id = public.current_user_unit()
+  )
+  WITH CHECK (
     public.current_user_role() IN ('admin', 'inspector')
     AND unit_id = public.current_user_unit()
   );
@@ -512,9 +520,17 @@ CREATE POLICY "evidence_select_authenticated" ON storage.objects
   );
 
 DROP POLICY IF EXISTS "evidence_insert_inspector_admin" ON storage.objects;
+-- Upload only into folders that map to an item in the user's unit. Path is
+-- {item_id}/..., so storage.foldername(name)[1] gives the item id.
 CREATE POLICY "evidence_insert_inspector_admin" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (
-    bucket_id = 'evidence-photos' AND public.current_user_role() IN ('admin', 'inspector')
+    bucket_id = 'evidence-photos'
+    AND public.current_user_role() IN ('admin', 'inspector')
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id::text = (storage.foldername(name))[1]
+        AND items.unit_id = public.current_user_unit()
+    )
   );
 
 DROP POLICY IF EXISTS "evidence_delete_admin" ON storage.objects;

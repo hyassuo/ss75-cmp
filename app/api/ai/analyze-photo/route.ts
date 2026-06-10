@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/supabase/adminGuard";
+import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { rateLimit } from "@/lib/utils/rateLimit";
 import { aiGenerate, aiConfigured, type AiMediaType } from "@/lib/ai/client";
 
@@ -30,6 +30,9 @@ const ALLOWED: AiMediaType[] = [
 ];
 
 export async function POST(request: Request) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const guard = await requireAdmin();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });

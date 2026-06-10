@@ -89,7 +89,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
           <input
             type="password"
             value={newPassword}
-            placeholder="Temporary password (min 6)"
+            placeholder="Temporary password (min 8)"
             onChange={(e) => setNewPassword(e.target.value)}
             style={{ ...S.inp, maxWidth: 240, marginBottom: 0 }}
           />
@@ -104,7 +104,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                 setNewPassword("");
               })
             }
-            disabled={busy || !invite || newPassword.length < 6}
+            disabled={busy || !invite || newPassword.length < 8}
             style={{
               background: DS.blu,
               color: "#fff",
@@ -113,11 +113,11 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
               padding: "9px 20px",
               fontWeight: 700,
               cursor:
-                busy || !invite || newPassword.length < 6
+                busy || !invite || newPassword.length < 8
                   ? "default"
                   : "pointer",
               fontSize: 13,
-              opacity: busy || !invite || newPassword.length < 6 ? 0.6 : 1,
+              opacity: busy || !invite || newPassword.length < 8 ? 0.6 : 1,
             }}
           >
             Create

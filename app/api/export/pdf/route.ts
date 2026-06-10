@@ -8,7 +8,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { createElement } from "react";
-import { requireUser } from "@/lib/supabase/adminGuard";
+import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
 
 const MAX_EXPORT_ITEMS = 5000;
 
@@ -62,6 +62,9 @@ const s = StyleSheet.create({
 });
 
 export async function POST(request: Request) {
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const guard = await requireUser();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
