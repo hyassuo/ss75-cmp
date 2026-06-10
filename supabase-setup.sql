@@ -380,8 +380,13 @@ CREATE POLICY "units_admin_all" ON public.units
 
 -- profiles
 DROP POLICY IF EXISTS "profiles_select_authenticated" ON public.profiles;
-CREATE POLICY "profiles_select_authenticated" ON public.profiles
-  FOR SELECT TO authenticated USING (true);
+-- Visibility limited to self OR admins. Avoids leaking emails/names of other
+-- users to viewers/inspectors via direct PostgREST calls.
+DROP POLICY IF EXISTS "profiles_select_self_or_admin" ON public.profiles;
+CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
+  FOR SELECT TO authenticated USING (
+    id = auth.uid() OR public.current_user_role() = 'admin'
+  );
 DROP POLICY IF EXISTS "profiles_update_self" ON public.profiles;
 CREATE POLICY "profiles_update_self" ON public.profiles
   FOR UPDATE TO authenticated USING (id = auth.uid());

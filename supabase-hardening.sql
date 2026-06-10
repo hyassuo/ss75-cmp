@@ -43,10 +43,25 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Existing users created before this change stay active. Nothing else to do.
 
+
+-- FIX: restrict public.profiles visibility to self + admins.
+-- Before: any authenticated user could SELECT every row in profiles via a
+-- direct PostgREST call, leaking the list of emails/names of all users in
+-- the org. Now: a user sees only their own profile; admins see all.
+DROP POLICY IF EXISTS "profiles_select_authenticated" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_select_self_or_admin" ON public.profiles;
+CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
+  FOR SELECT TO authenticated USING (
+    id = auth.uid() OR public.current_user_role() = 'admin'
+  );
+
+
 -- =============================================================================
 -- VERIFICATION
 -- =============================================================================
--- After this runs, a brand-new sign-up (if signups are enabled) gets
--- active=false and cannot read any rows. Confirm with:
---   SELECT email, role, active FROM public.profiles ORDER BY created_at DESC;
+-- 1) After this runs, a brand-new sign-up (if signups are enabled) gets
+--    active=false and cannot read any rows. Confirm with:
+--      SELECT email, role, active FROM public.profiles ORDER BY created_at DESC;
+-- 2) As a non-admin user, `SELECT * FROM public.profiles;` must return only
+--    that user's own row. As an admin, it returns all rows.
 -- =============================================================================
