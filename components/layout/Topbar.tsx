@@ -44,18 +44,10 @@ export function Topbar() {
       }}
     >
       {/* ── Top band: title block ─────────────────────────────────────────── */}
-      <div style={{ background: TOP_BAND, padding: "8px 20px 6px" }}>
-        {/* Row 1 — hamburger + title + status */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="tb-band-top" style={{ background: TOP_BAND }}>
+        {/* Row 1 — hamburger + title + status (never wraps; title truncates) */}
+        <div className="tb-row1">
+          <div className="tb-left">
             <button
               onClick={toggleSidebar}
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -82,14 +74,8 @@ export function Topbar() {
               </div>
             </button>
             <div
-              style={{
-                fontSize: 19,
-                fontWeight: 800,
-                color: DS.sbTxt,
-                fontFamily: DS.sans,
-                letterSpacing: -0.3,
-                lineHeight: 1.1,
-              }}
+              className="tb-title"
+              style={{ color: DS.sbTxt, fontFamily: DS.sans }}
             >
               Corrosion Management Plan
             </div>
@@ -102,7 +88,7 @@ export function Topbar() {
               background: chipBg,
               border: "1px solid " + chipBord,
               borderRadius: 8,
-              padding: "4px 12px",
+              padding: "4px 10px",
               flexShrink: 0,
             }}
           >
@@ -117,6 +103,7 @@ export function Topbar() {
             />
             {!healthy && (
               <span
+                className="tb-chip-extra"
                 aria-hidden
                 style={{
                   fontSize: 12,
@@ -129,6 +116,7 @@ export function Topbar() {
               </span>
             )}
             <span
+              className="tb-chip-extra"
               style={{
                 fontSize: 10,
                 fontWeight: 800,
@@ -143,26 +131,10 @@ export function Topbar() {
         </div>
 
         {/* Row 2 — subtitle + short date */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-            marginLeft: 40,
-            marginTop: 2,
-          }}
-        >
+        <div className="tb-row2">
           <div
-            style={{
-              fontSize: 11,
-              color: DS.sbTxt2,
-              textTransform: "uppercase",
-              letterSpacing: 1.4,
-              fontWeight: 500,
-              fontFamily: DS.mono,
-            }}
+            className="tb-sub"
+            style={{ color: DS.sbTxt2, fontFamily: DS.mono }}
           >
             Noble Courage SS-75
           </div>
@@ -172,6 +144,7 @@ export function Topbar() {
               color: DS.sbTxt2,
               fontFamily: DS.mono,
               letterSpacing: 0.4,
+              flexShrink: 0,
             }}
           >
             {fmtShort(today())}
@@ -181,12 +154,12 @@ export function Topbar() {
 
       {/* ── Bottom band: dept filter with pill selector ───────────────────── */}
       <div
+        className="tb-band-bottom"
         style={{
           background: BOTTOM_BAND,
-          padding: "8px 20px",
           display: "flex",
           alignItems: "center",
-          gap: 12,
+          gap: 10,
           flexWrap: "wrap",
           borderTop: "1px solid rgba(0,0,0,0.18)",
         }}
@@ -196,6 +169,7 @@ export function Topbar() {
             fontSize: 11,
             color: DS.sbTxt2,
             fontWeight: 500,
+            flexShrink: 0,
           }}
         >
           Departments:
@@ -203,14 +177,10 @@ export function Topbar() {
         <div
           role="group"
           aria-label="Department filter"
+          className="tb-pills"
           style={{
-            display: "inline-flex",
             background: "rgba(0,0,0,0.22)",
             border: "1px solid " + DS.sbBord,
-            borderRadius: 8,
-            padding: 3,
-            gap: 2,
-            flexWrap: "wrap",
           }}
         >
           {SYSTEMS.map((s) => {
@@ -220,18 +190,13 @@ export function Topbar() {
                 key={s}
                 onClick={() => setSysFilter(s)}
                 aria-pressed={active}
+                className="tb-pill"
                 style={{
                   background: active ? "#3b5570" : "transparent",
                   color: active ? "#ffffff" : DS.sbTxt2,
-                  border: "none",
-                  borderRadius: 6,
-                  padding: "5px 12px",
-                  fontSize: 12,
-                  cursor: "pointer",
                   fontWeight: active ? 700 : 500,
                   fontFamily: DS.sans,
                   transition: DS.transition,
-                  whiteSpace: "nowrap",
                 }}
               >
                 {s}
