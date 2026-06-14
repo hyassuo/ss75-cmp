@@ -228,6 +228,20 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["history"]["Insert"]>;
         Relationships: [];
       };
+      ifs_objects: {
+        Row: {
+          id: string;
+          description: string;
+          sece: boolean;
+        };
+        Insert: {
+          id: string;
+          description: string;
+          sece?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["ifs_objects"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
