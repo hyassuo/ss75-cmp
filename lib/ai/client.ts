@@ -33,7 +33,7 @@ type GeminiReqPart =
 export async function aiGenerate(req: AiRequest): Promise<string> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY not configured");
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   const parts: GeminiReqPart[] = [];
   if (req.image) {

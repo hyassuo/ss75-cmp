@@ -18,9 +18,20 @@ export function Modal({ onClose, children }: ModalProps) {
   }, []);
   if (!mounted) return null;
 
+  // No backdrop-click-to-close — too easy to lose half-filled forms by
+  // accident. The card carries an X in the top-right, and consumers still
+  // have their own Cancel button.
   return createPortal(
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-card">
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={onClose}
+          className="modal-close"
+        >
+          ×
+        </button>
         {children}
       </div>
     </div>,
