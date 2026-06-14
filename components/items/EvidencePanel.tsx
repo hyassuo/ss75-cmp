@@ -383,6 +383,11 @@ export function EvidencePanel({
             {ev.file_name && (
               <div style={{ marginTop: 7 }}>
                 {ev.file_type?.startsWith("image") && urls[ev.id] ? (
+                  // Plain <img>: next/image would need a loader configured
+                  // for Supabase signed URLs (which rotate every 1 h), and
+                  // these are tiny thumbnails inside a modal — the cost of
+                  // unoptimised loading is negligible here.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={urls[ev.id]}
                     alt={ev.file_name}

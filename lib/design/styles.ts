@@ -1,17 +1,10 @@
 import type { CSSProperties } from "react";
 import { DS } from "@/lib/design/tokens";
 
+// Shared inline style atoms. Only the entries actually consumed across
+// components live here — page/modal containers moved to globals.css class
+// rules so they can carry responsive @media tweaks.
 export const S: Record<string, CSSProperties> = {
-  page: {
-    fontFamily: DS.sans,
-    background: DS.bg,
-    minHeight: "100vh",
-    color: DS.text,
-    padding: 0,
-    margin: 0,
-    display: "flex",
-    flexDirection: "column",
-  },
   card: {
     background: DS.sur,
     border: "1px solid " + DS.bord,
@@ -19,16 +12,6 @@ export const S: Record<string, CSSProperties> = {
     padding: "16px 20px",
     boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
     transition: DS.transition,
-  },
-  modal: {
-    background: DS.sur,
-    border: "1px solid " + DS.bord,
-    borderRadius: 10,
-    padding: 24,
-    width: "100%",
-    maxWidth: 700,
-    marginBottom: 24,
-    boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
   },
   inp: {
     width: "100%",

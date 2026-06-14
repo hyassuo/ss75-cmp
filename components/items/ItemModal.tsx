@@ -24,7 +24,6 @@ import {
   PROTECTIONS,
   STATUSES,
   FREQUENCIES,
-  FREQUENCY_LABELS,
   PRIORITY_COLOR,
 } from "@/lib/utils/constants";
 import type {
@@ -264,7 +263,7 @@ function ItemModalInner({
     }))
   );
   const freqOpts = [{ v: "", l: blank }].concat(
-    FREQUENCIES.map((fr) => ({ v: fr, l: t(`freq.${fr}` as DictKey) || FREQUENCY_LABELS[fr] }))
+    FREQUENCIES.map((fr) => ({ v: fr, l: t(`freq.${fr}` as DictKey) }))
   );
 
   const rpn = f.prob && f.cons ? f.prob * f.cons : null;

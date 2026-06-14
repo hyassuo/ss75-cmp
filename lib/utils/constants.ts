@@ -5,6 +5,8 @@ import type {
   ItemPriority,
 } from "@/lib/types/domain";
 
+// Display colour maps. Values stored in the DB stay in English; these
+// only paint the badges.
 export const PRIORITY_COLOR: Record<ItemPriority, string> = {
   Critical: DS.red,
   High: DS.ora,
@@ -20,6 +22,9 @@ export const STATUS_COLOR: Record<EffectiveStatus, string> = {
   Overdue: DS.red,
 };
 
+// Enum value lists used to drive dropdowns. The human-readable labels for
+// each value come from lib/i18n/dict.ts (mech.*, prot.*, freq.*,
+// statusOpt.*) so they translate with the EN/PT toggle.
 export const MECHANISMS: string[] = [
   "Atmospheric Corrosion",
   "CO2 Corrosion (Sweet)",
@@ -48,39 +53,6 @@ export const PROTECTIONS: string[] = [
   "Other",
 ];
 
-export const INSPECTION_METHODS: string[] = [
-  "Visual Inspection (VT)",
-  "Ultrasonic Testing (UT)",
-  "ACFM",
-  "Magnetic Particle (MT)",
-  "Liquid Penetrant (PT)",
-  "ROV Survey",
-  "Fluid Analysis",
-  "Corrosion Coupon",
-  "Cathodic Potential",
-  "Other",
-];
-
-// Per the SS-75 Risk Matrix (MSC_2123.0_A) — probability of an event of this
-// severity occurring at the facility / company / industry level.
-export const PROB_LABELS = [
-  "Never occurred in the Industry",
-  "Has occurred in the Industry",
-  "Has occurred in the Company",
-  "Multiple occurrences per year in the Company",
-  "Multiple occurrences per year at the Facility",
-];
-
-export const CONS_LABELS = [
-  "Insignificant",
-  "Minor",
-  "Moderate",
-  "Serious",
-  "Critical",
-];
-
-export const PRIORITIES: ItemPriority[] = ["Critical", "High", "Medium", "Low"];
-
 export const STATUSES = ["OK", "Attention", "Critical", "Pending"] as const;
 
 export const FREQUENCIES: InspectionFrequency[] = [
@@ -95,19 +67,6 @@ export const FREQUENCIES: InspectionFrequency[] = [
   "Per operation",
   "As required",
 ];
-
-export const FREQUENCY_LABELS: Record<InspectionFrequency, string> = {
-  Weekly: "Weekly",
-  Monthly: "Monthly",
-  Quarterly: "Quarterly (every 3 months)",
-  "Semi-annual": "Semi-annual (every 6 months)",
-  Annual: "Annual (once a year)",
-  "Every 2 years": "Every 2 years",
-  "Every 2.5 years": "Every 2.5 years (SPS / Dry Dock)",
-  "Every 5 years": "Every 5 years (Special Survey)",
-  "Per operation": "Per operation (pre/post use)",
-  "As required": "As required / Condition-based",
-};
 
 export const SYSTEMS = [
   "All",
