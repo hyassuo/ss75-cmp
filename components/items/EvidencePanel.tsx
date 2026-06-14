@@ -9,6 +9,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { AIResultCard } from "@/components/items/AIResultCard";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/utils/compressImage";
 import type { AIAnalysis, Evidence } from "@/lib/types/domain";
 
 const BUCKET = "evidence-photos";
@@ -44,6 +45,7 @@ export function EvidencePanel({
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [b64, setB64] = useState<string | null>(null);
+  const [compressInfo, setCompressInfo] = useState("");
   const [mediaType, setMediaType] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -72,10 +74,20 @@ export function EvidencePanel({
     };
   }, [evidences]);
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const fl = e.target.files?.[0];
-    if (!fl) return;
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.files?.[0];
+    if (!raw) return;
+    setCompressInfo("");
+    // Compress phone-sized photos (5–8 MB) down to ~300–500 KB before any
+    // upload / base64 conversion. PDFs and small images pass through.
+    const { file: fl, compressed, originalBytes, finalBytes } =
+      await compressImage(raw);
     setFile(fl);
+    if (compressed) {
+      setCompressInfo(
+        `Optimised ${(originalBytes / 1024 / 1024).toFixed(1)} MB → ${(finalBytes / 1024).toFixed(0)} KB`
+      );
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const result = ev.target?.result as string;
@@ -143,6 +155,7 @@ export function EvidencePanel({
     setFile(null);
     setB64(null);
     setMediaType("");
+    setCompressInfo("");
     setAiResult(null);
     setAiErr("");
     if (fileRef.current) fileRef.current.value = "";
@@ -221,6 +234,11 @@ export function EvidencePanel({
               {aiLoading && <Spinner size={12} />}
               {aiLoading ? "Analysing..." : "🔍 Analyse with AI"}
             </button>
+            {compressInfo && (
+              <div style={{ fontSize: 10, color: DS.grn, marginTop: 4 }}>
+                {compressInfo}
+              </div>
+            )}
             <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
               {b64
                 ? "Image ready — click to run AI corrosion analysis."
