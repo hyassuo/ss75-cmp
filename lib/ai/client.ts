@@ -35,8 +35,26 @@ function selectProvider(): Provider {
 }
 
 // Returns the model's raw text output. Throws on transport failure.
+// If the primary provider fails and the other provider's key is configured,
+// fall back to it transparently — keeps the user moving when Gemini's free
+// tier hits its quota.
 export async function aiGenerate(req: AiRequest): Promise<string> {
-  return selectProvider() === "gemini" ? viaGemini(req) : viaAnthropic(req);
+  const primary = selectProvider();
+  try {
+    return primary === "gemini" ? await viaGemini(req) : await viaAnthropic(req);
+  } catch (e) {
+    const haveAnthropic = Boolean(process.env.ANTHROPIC_API_KEY);
+    const haveGemini = Boolean(process.env.GEMINI_API_KEY);
+    if (primary === "gemini" && haveAnthropic) {
+      console.warn("[ai] gemini failed, falling back to anthropic:", e);
+      return viaAnthropic(req);
+    }
+    if (primary === "anthropic" && haveGemini) {
+      console.warn("[ai] anthropic failed, falling back to gemini:", e);
+      return viaGemini(req);
+    }
+    throw e;
+  }
 }
 
 // ── Gemini (Google AI Studio, free tier) ────────────────────────────────────
