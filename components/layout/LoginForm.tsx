@@ -44,10 +44,9 @@ export function LoginForm() {
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        // Push the card down a bit so it sits in the upper third rather
-        // than dead-centre — feels balanced on phones (where the keyboard
-        // would cover a centred card anyway) and reads as "form first".
-        paddingTop: "12vh",
+        // Anchored near the top so the iOS keyboard / password autofill
+        // tray doesn't cover the Sign In button.
+        paddingTop: "5vh",
         fontFamily: DS.sans,
       }}
     >
