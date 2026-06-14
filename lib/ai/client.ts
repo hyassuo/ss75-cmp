@@ -105,7 +105,7 @@ async function viaGemini(req: AiRequest): Promise<string> {
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(
-      `Gemini ${res.status} (model=${model}): ${detail.slice(0, 300)}`
+      `Gemini ${res.status} (model=${model}): ${detail.slice(0, 1000)}`
     );
   }
   const data = (await res.json()) as GeminiResponse;
