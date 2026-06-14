@@ -103,6 +103,9 @@ export interface Database {
           priority: ItemPriority | null;
           status: ItemStatus;
           sece: boolean;
+          drops_risk: boolean;
+          structural: boolean;
+          obs_source: string | null;
           freq_insp: InspectionFrequency | null;
           last_insp: string | null;
           next_insp: string | null;
@@ -130,6 +133,9 @@ export interface Database {
           priority?: ItemPriority | null;
           status?: ItemStatus;
           sece?: boolean;
+          drops_risk?: boolean;
+          structural?: boolean;
+          obs_source?: string | null;
           freq_insp?: InspectionFrequency | null;
           last_insp?: string | null;
           next_insp?: string | null;

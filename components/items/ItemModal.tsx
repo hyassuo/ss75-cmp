@@ -23,6 +23,7 @@ import {
   MECHANISMS,
   PROTECTIONS,
   STATUSES,
+  OBS_SOURCES,
   FREQUENCIES,
   PRIORITY_COLOR,
 } from "@/lib/utils/constants";
@@ -56,6 +57,9 @@ type Form = {
   priority: ItemPriority | null;
   status: ItemStatus;
   sece: boolean;
+  drops_risk: boolean;
+  structural: boolean;
+  obs_source: string;
   freq_insp: InspectionFrequency | null;
   last_insp: string | null;
   next_insp: string | null;
@@ -106,6 +110,9 @@ function ItemModalInner({
     priority: item.priority ?? null,
     status: item.status ?? "Pending",
     sece: item.sece ?? false,
+    drops_risk: item.drops_risk ?? false,
+    structural: item.structural ?? false,
+    obs_source: item.obs_source ?? "",
     freq_insp: item.freq_insp ?? null,
     last_insp: item.last_insp ?? null,
     next_insp: item.next_insp ?? null,
@@ -128,7 +135,9 @@ function ItemModalInner({
         merged.prob,
         merged.cons,
         merged.sece,
-        merged.next_insp
+        merged.next_insp,
+        merged.drops_risk,
+        merged.structural
       );
       return { ...merged, priority: p ?? merged.priority };
     });
@@ -143,7 +152,9 @@ function ItemModalInner({
         withNi.prob,
         withNi.cons,
         withNi.sece,
-        withNi.next_insp
+        withNi.next_insp,
+        withNi.drops_risk,
+        withNi.structural
       );
       return { ...withNi, priority: p ?? withNi.priority };
     });
@@ -202,6 +213,9 @@ function ItemModalInner({
       priority: f.priority,
       status: f.status,
       sece: f.sece,
+      drops_risk: f.drops_risk,
+      structural: f.structural,
+      obs_source: f.obs_source || null,
       freq_insp: f.freq_insp,
       last_insp: f.last_insp,
       next_insp: f.next_insp,
@@ -264,6 +278,9 @@ function ItemModalInner({
   );
   const freqOpts = [{ v: "", l: blank }].concat(
     FREQUENCIES.map((fr) => ({ v: fr, l: t(`freq.${fr}` as DictKey) }))
+  );
+  const obsSourceOpts = [{ v: "", l: blank }].concat(
+    OBS_SOURCES.map((s) => ({ v: s, l: t(`obsSrc.${s}` as DictKey) }))
   );
 
   const rpn = f.prob && f.cons ? f.prob * f.cons : null;
@@ -381,6 +398,12 @@ function ItemModalInner({
           value={f.protection}
           onChange={(v) => set("protection", v)}
           options={protOpts}
+        />
+        <Select
+          label={t("f.obsSource")}
+          value={f.obs_source}
+          onChange={(v) => set("obs_source", v)}
+          options={obsSourceOpts}
         />
       </Section>
 
@@ -571,6 +594,105 @@ function ItemModalInner({
             <span style={{ fontSize: 10, fontWeight: 500, color: DS.text3 }}>
               {f.ifs_obj_id ? null : t("f.seceSelect")}
             </span>
+          </div>
+        </div>
+
+        {/* DROPS + Structural — additional risk contributors (+2 each on
+            priority weight). Manually toggled, unlike SECE which is
+            sourced from IFS. */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            marginTop: 12,
+          }}
+        >
+          <div>
+            <Label>{t("f.dropsRisk")}</Label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => recalcPriority({ drops_risk: true })}
+                style={{
+                  flex: 1,
+                  background: f.drops_risk ? DS.oraBg : DS.sur2,
+                  color: f.drops_risk ? DS.ora : DS.text3,
+                  border:
+                    "1px solid " +
+                    (f.drops_risk ? DS.oraBord : DS.bord),
+                  borderRadius: 6,
+                  padding: "7px 0",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                {t("sece.yes")}
+              </button>
+              <button
+                type="button"
+                onClick={() => recalcPriority({ drops_risk: false })}
+                style={{
+                  flex: 1,
+                  background: !f.drops_risk ? DS.grnBg : DS.sur2,
+                  color: !f.drops_risk ? DS.grn : DS.text3,
+                  border:
+                    "1px solid " +
+                    (!f.drops_risk ? DS.grnBord : DS.bord),
+                  borderRadius: 6,
+                  padding: "7px 0",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                {t("sece.no")}
+              </button>
+            </div>
+          </div>
+          <div>
+            <Label>{t("f.structural")}</Label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => recalcPriority({ structural: true })}
+                style={{
+                  flex: 1,
+                  background: f.structural ? DS.oraBg : DS.sur2,
+                  color: f.structural ? DS.ora : DS.text3,
+                  border:
+                    "1px solid " +
+                    (f.structural ? DS.oraBord : DS.bord),
+                  borderRadius: 6,
+                  padding: "7px 0",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                {t("sece.yes")}
+              </button>
+              <button
+                type="button"
+                onClick={() => recalcPriority({ structural: false })}
+                style={{
+                  flex: 1,
+                  background: !f.structural ? DS.grnBg : DS.sur2,
+                  color: !f.structural ? DS.grn : DS.text3,
+                  border:
+                    "1px solid " +
+                    (!f.structural ? DS.grnBord : DS.bord),
+                  borderRadius: 6,
+                  padding: "7px 0",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                {t("sece.no")}
+              </button>
+            </div>
           </div>
         </div>
       </Section>

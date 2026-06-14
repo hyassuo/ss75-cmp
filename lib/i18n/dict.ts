@@ -144,6 +144,14 @@ const en = {
   "f.status": "Status",
   "f.sece": "SECE (Safety & Environmental Critical Element)",
   "f.seceSelect": "select an IFS Object",
+  "f.dropsRisk": "DROPS risk",
+  "f.structural": "Structural element",
+  "f.obsSource": "Observation source",
+  "obsSrc.Routine Inspection": "Routine Inspection",
+  "obsSrc.Eventual Inspection": "Eventual Inspection",
+  "obsSrc.3C Card": "3C Card",
+  "obsSrc.Petrobras Pending": "Petrobras Pending",
+  "obsSrc.Other": "Other",
   "f.frequency": "Inspection Frequency",
   "f.lastInsp": "Last Inspection",
   "f.nextInsp": "Next Inspection (auto)",
@@ -269,7 +277,7 @@ const en = {
   // Priority-logic explanation (RISK ASSESSMENT section)
   "f.priorityLogicLabel": "Priority logic:",
   "f.priorityLogicBody":
-    "RPN (P×C) × SECE weight (1.5× if YES) + Overdue penalty (+5) or Due soon (+2). ",
+    "RPN (P×C) × SECE (1.5× if YES) + DROPS (+2) + Structural (+2) + Overdue penalty (+5) or Due soon (+2). ",
   "f.priorityLogicTiers": "<6=Low • 6-12=Medium • 13-21=High • ≥22=Critical",
 
   // Readings table headers
@@ -409,6 +417,14 @@ const pt: Translations = {
   "f.status": "Status",
   "f.sece": "SECE (Elemento Crítico de Segurança e Meio Ambiente)",
   "f.seceSelect": "selecione um Objeto IFS",
+  "f.dropsRisk": "Risco de DROPS",
+  "f.structural": "Elemento estrutural",
+  "f.obsSource": "Fonte da observação",
+  "obsSrc.Routine Inspection": "Inspeção Rotineira",
+  "obsSrc.Eventual Inspection": "Inspeção Eventual",
+  "obsSrc.3C Card": "Cartão 3C",
+  "obsSrc.Petrobras Pending": "Pendência Petrobras",
+  "obsSrc.Other": "Outro",
   "f.frequency": "Frequência de Inspeção",
   "f.lastInsp": "Última Inspeção",
   "f.nextInsp": "Próxima Inspeção (auto)",
@@ -530,7 +546,7 @@ const pt: Translations = {
 
   "f.priorityLogicLabel": "Lógica de prioridade:",
   "f.priorityLogicBody":
-    "RPN (P×C) × peso SECE (1,5× se SIM) + penalidade de vencimento (+5) ou próximo do vencimento (+2). ",
+    "RPN (P×C) × SECE (1,5× se SIM) + DROPS (+2) + Estrutural (+2) + vencimento (+5) ou próximo (+2). ",
   "f.priorityLogicTiers":
     "<6=Baixa • 6-12=Média • 13-21=Alta • ≥22=Crítica",
 

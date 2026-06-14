@@ -55,6 +55,16 @@ export const PROTECTIONS: string[] = [
 
 export const STATUSES = ["OK", "Attention", "Critical", "Pending"] as const;
 
+// Where an inspection observation comes from. Values stored in DB; dict
+// has obsSrc.* keys for the EN/PT display labels.
+export const OBS_SOURCES = [
+  "Routine Inspection",
+  "Eventual Inspection",
+  "3C Card",
+  "Petrobras Pending",
+  "Other",
+] as const;
+
 export const FREQUENCIES: InspectionFrequency[] = [
   "Weekly",
   "Monthly",
