@@ -22,8 +22,6 @@ import { today } from "@/lib/utils/format";
 import {
   MECHANISMS,
   PROTECTIONS,
-  PROB_LABELS,
-  CONS_LABELS,
   STATUSES,
   FREQUENCIES,
   FREQUENCY_LABELS,
@@ -91,7 +89,13 @@ function ItemModalInner({
   const { t } = useLang();
 
   const [f, setF] = useState<Form>(() => ({
-    name: item.name ?? "",
+    // On a freshly created draft the DB row carries the "Untitled" fallback;
+    // surface it as an empty field so the user types their own name instead
+    // of having to manually erase the placeholder text.
+    name:
+      item.name && item.name !== "Untitled" && item.name !== "Sem nome"
+        ? item.name
+        : "",
     mechanism: item.mechanism ?? "",
     protection: item.protection ?? "",
     ifs_obj_id: item.ifs_obj_id ?? "",
@@ -236,21 +240,31 @@ function ItemModalInner({
     ? { id: f.ifs_obj_id, desc: f.ifs_obj_desc, sece: f.sece }
     : null;
 
-  const mechOpts = [{ v: "", l: "-- select --" }].concat(
-    MECHANISMS.map((m) => ({ v: m, l: m }))
+  const blank = t("select.placeholder");
+  const mechOpts = [{ v: "", l: blank }].concat(
+    MECHANISMS.map((m) => ({ v: m, l: t(`mech.${m}` as DictKey) || m }))
   );
-  const protOpts = [{ v: "", l: "-- select --" }].concat(
-    PROTECTIONS.map((p) => ({ v: p, l: p }))
+  const protOpts = [{ v: "", l: blank }].concat(
+    PROTECTIONS.map((p) => ({ v: p, l: t(`prot.${p}` as DictKey) || p }))
   );
-  const statusOpts = STATUSES.map((s) => ({ v: s, l: s }));
+  const statusOpts = STATUSES.map((s) => ({
+    v: s,
+    l: t(`statusOpt.${s}` as DictKey) || s,
+  }));
   const probOpts = [{ v: "", l: "-" }].concat(
-    PROB_LABELS.map((_l, i) => ({ v: String(i + 1), l: `${i + 1} - ${t(`prob.${i + 1}` as DictKey)}` }))
+    [1, 2, 3, 4, 5].map((i) => ({
+      v: String(i),
+      l: `${i} - ${t(`prob.${i}` as DictKey)}`,
+    }))
   );
   const consOpts = [{ v: "", l: "-" }].concat(
-    CONS_LABELS.map((l, i) => ({ v: String(i + 1), l: `${i + 1} - ${l}` }))
+    [1, 2, 3, 4, 5].map((i) => ({
+      v: String(i),
+      l: `${i} - ${t(`cons.${i}` as DictKey)}`,
+    }))
   );
-  const freqOpts = [{ v: "", l: "-- select --" }].concat(
-    FREQUENCIES.map((fr) => ({ v: fr, l: FREQUENCY_LABELS[fr] }))
+  const freqOpts = [{ v: "", l: blank }].concat(
+    FREQUENCIES.map((fr) => ({ v: fr, l: t(`freq.${fr}` as DictKey) || FREQUENCY_LABELS[fr] }))
   );
 
   const rpn = f.prob && f.cons ? f.prob * f.cons : null;
@@ -415,28 +429,13 @@ function ItemModalInner({
             </div>
           </div>
         )}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-          }}
-        >
-          <Input
-            label={t("f.wo")}
-            value={f.ifs_wo}
-            onChange={(v) => set("ifs_wo", v)}
-            placeholder="ex: 320045678"
-            mono
-          />
-          <Input
-            label={t("f.fl")}
-            value={f.ifs_fl}
-            onChange={(v) => set("ifs_fl", v)}
-            placeholder="ex: UNIT/HULL/FR12/PS"
-            mono
-          />
-        </div>
+        <Input
+          label={t("f.wo")}
+          value={f.ifs_wo}
+          onChange={(v) => set("ifs_wo", v)}
+          placeholder="ex: 320045678"
+          mono
+        />
       </Section>
 
       <Section title={t("sec.risk")} accent={DS.vio}>
@@ -537,12 +536,11 @@ function ItemModalInner({
           }}
         >
           <span style={{ fontWeight: 700, color: DS.text2 }}>
-            Priority logic:{" "}
+            {t("f.priorityLogicLabel")}{" "}
           </span>
-          RPN (P×C) × SECE weight (1.5× if YES) + Overdue penalty (+5) or Due
-          soon (+2).{" "}
+          {t("f.priorityLogicBody")}
           <span style={{ fontFamily: "monospace", color: DS.vio }}>
-            &lt;6=Low • 6-12=Medium • 13-21=High • ≥22=Critical
+            {t("f.priorityLogicTiers")}
           </span>
         </div>
         <div>
@@ -571,14 +569,8 @@ function ItemModalInner({
                   ? t("sece.yes") : t("sece.no")
                 : "—"}
             </span>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 500,
-                color: DS.text3,
-              }}
-            >
-              {f.ifs_obj_id ? t("f.seceFromIFS") : t("f.seceSelect")}
+            <span style={{ fontSize: 10, fontWeight: 500, color: DS.text3 }}>
+              {f.ifs_obj_id ? null : t("f.seceSelect")}
             </span>
           </div>
         </div>

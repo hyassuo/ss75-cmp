@@ -4,6 +4,7 @@ import { useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
+import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import type { Reading } from "@/lib/types/domain";
@@ -28,6 +29,7 @@ export function ReadingsPanel({
   canEdit = true,
   canDelete = true,
 }: Props) {
+  const { t } = useLang();
   const [date, setDate] = useState(today());
   const [depth, setDepth] = useState("");
   const [loc, setLoc] = useState("");
@@ -74,7 +76,7 @@ export function ReadingsPanel({
           }}
         >
           <div>
-            <Label>Date</Label>
+            <Label>{t("f.date")}</Label>
             <input
               type="date"
               value={date}
@@ -83,7 +85,7 @@ export function ReadingsPanel({
             />
           </div>
           <div>
-            <Label>Pit Depth (mm)</Label>
+            <Label>{t("f.pitDepth")}</Label>
             <input
               type="number"
               value={depth}
@@ -93,7 +95,7 @@ export function ReadingsPanel({
             />
           </div>
           <div>
-            <Label>Location / Point</Label>
+            <Label>{t("f.location")}</Label>
             <input
               type="text"
               value={loc}
@@ -112,7 +114,7 @@ export function ReadingsPanel({
           }}
         >
           <div>
-            <Label>Checked by</Label>
+            <Label>{t("f.checkedBy")}</Label>
             <input
               type="text"
               value={tech}
@@ -136,9 +138,7 @@ export function ReadingsPanel({
               boxSizing: "border-box",
               fontFamily: DS.sans,
             }}
-          >
-            + Reading
-          </button>
+          >{t("f.addReading")}</button>
         </div>
       </div>
       )}
@@ -166,9 +166,7 @@ export function ReadingsPanel({
                 letterSpacing: 1,
                 marginBottom: 2,
               }}
-            >
-              Pit Growth Rate
-            </div>
+            >{t("f.pitRate")}</div>
             <div
               style={{
                 fontSize: 28,
@@ -192,12 +190,12 @@ export function ReadingsPanel({
             }}
           >
             {rate > 0.5
-              ? "CRITICAL - Immediate Action"
+              ? t("rate.critical")
               : rate > 0.2
-                ? "Severe - Increase Monitoring"
+                ? t("rate.severe")
                 : rate > 0
-                  ? "Moderate - Monitor"
-                  : "Stable"}
+                  ? t("rate.moderate")
+                  : t("rate.stable")}
           </div>
         </div>
       )}
@@ -210,9 +208,7 @@ export function ReadingsPanel({
             color: DS.bord2,
             padding: "12px 0",
           }}
-        >
-          No readings recorded yet
-        </div>
+        >{t("f.notRecorded")}</div>
       )}
 
       {sorted.length > 0 && (
@@ -226,7 +222,7 @@ export function ReadingsPanel({
           >
             <thead>
               <tr style={{ borderBottom: "2px solid " + DS.bord }}>
-                {["Date", "Depth (mm)", "Change", "Location", "Inspector", ""].map(
+                {[t("tbl.date"), t("tbl.depth"), t("tbl.change"), t("tbl.location"), t("tbl.inspector"), ""].map(
                   (h) => (
                     <th
                       key={h}

@@ -224,6 +224,68 @@ const en = {
     "Include evidence photos in PDF (up to 4 per item — larger file, slower to generate)",
   "exp.summary": "Summary Table",
   "exp.pdfFail": "PDF export failed.",
+
+  // Generic select placeholder
+  "select.placeholder": "-- select --",
+
+  // Status enum
+  "statusOpt.OK": "OK",
+  "statusOpt.Attention": "Attention",
+  "statusOpt.Critical": "Critical",
+  "statusOpt.Pending": "Pending",
+
+  // Corrosion mechanisms (display labels; DB stores English)
+  "mech.Atmospheric Corrosion": "Atmospheric Corrosion",
+  "mech.CO2 Corrosion (Sweet)": "CO2 Corrosion (Sweet)",
+  "mech.Corrosion Fatigue": "Corrosion Fatigue",
+  "mech.Crevice Corrosion": "Crevice Corrosion",
+  "mech.Erosion-Corrosion": "Erosion-Corrosion",
+  "mech.Galvanic Corrosion": "Galvanic Corrosion",
+  "mech.H2S Corrosion (Sour Service)": "H2S Corrosion (Sour Service)",
+  "mech.MIC (Microbiologically Influenced)": "MIC (Microbiologically Influenced)",
+  "mech.Pitting Corrosion": "Pitting Corrosion",
+  "mech.Uniform Corrosion": "Uniform Corrosion",
+
+  // Protections
+  "prot.Epoxy Coating (C5-M)": "Epoxy Coating (C5-M)",
+  "prot.Internal Epoxy Coating (PSPC)": "Internal Epoxy Coating (PSPC)",
+  "prot.Splash Zone Compound": "Splash Zone Compound",
+  "prot.Sacrificial Anodes Al-Zn-In": "Sacrificial Anodes Al-Zn-In",
+  "prot.ICCP (Impressed Current)": "ICCP (Impressed Current)",
+  "prot.Anodes + Coating": "Anodes + Coating",
+  "prot.Resistant Material (Duplex/316L)": "Resistant Material (Duplex/316L)",
+  "prot.NACE MR0175/ISO 15156": "NACE MR0175/ISO 15156",
+  "prot.Corrosion Inhibitor": "Corrosion Inhibitor",
+  "prot.Special Greases / Lubricants": "Special Greases / Lubricants",
+  "prot.No Specific Protection": "No Specific Protection",
+  "prot.Other": "Other",
+
+  // Inspection frequencies
+  "freq.Weekly": "Weekly",
+  "freq.Monthly": "Monthly",
+  "freq.Quarterly": "Quarterly (every 3 months)",
+  "freq.Semi-annual": "Semi-annual (every 6 months)",
+  "freq.Annual": "Annual (once a year)",
+  "freq.Every 2 years": "Every 2 years",
+  "freq.Every 2.5 years": "Every 2.5 years (SPS / Dry Dock)",
+  "freq.Every 5 years": "Every 5 years (Special Survey)",
+  "freq.Per operation": "Per operation (pre/post use)",
+  "freq.As required": "As required / Condition-based",
+
+  // Priority-logic explanation (RISK ASSESSMENT section)
+  "f.priorityLogicLabel": "Priority logic:",
+  "f.priorityLogicBody":
+    "RPN (P×C) × SECE weight (1.5× if YES) + Overdue penalty (+5) or Due soon (+2). ",
+  "f.priorityLogicTiers": "<6=Low • 6-12=Medium • 13-21=High • ≥22=Critical",
+
+  // Readings table headers
+  "tbl.date": "Date",
+  "tbl.depth": "Depth (mm)",
+  "tbl.change": "Change",
+  "tbl.location": "Location",
+  "tbl.inspector": "Inspector",
+  "f.aiAnalysing": "AI is analysing the photo...",
+  "f.optimised": "Optimised",
 } satisfies DictMap;
 
 type Key = keyof typeof en;
@@ -241,7 +303,7 @@ const pt: Translations = {
   "dept.All": "Todos",
   "dept.Drilling": "Perfuração",
   "dept.Maintenance": "Manutenção",
-  "dept.Marine": "Marítimo",
+  "dept.Marine": "Marinha",
   "dept.Safety": "Segurança",
   "dept.Third Party": "Terceirizado",
 
@@ -431,6 +493,63 @@ const pt: Translations = {
     "Incluir fotos de evidência no PDF (até 4 por item — arquivo maior, geração mais lenta)",
   "exp.summary": "Tabela Resumo",
   "exp.pdfFail": "Falha ao exportar PDF.",
+
+  "select.placeholder": "-- selecione --",
+
+  "statusOpt.OK": "OK",
+  "statusOpt.Attention": "Atenção",
+  "statusOpt.Critical": "Crítico",
+  "statusOpt.Pending": "Pendente",
+
+  "mech.Atmospheric Corrosion": "Corrosão Atmosférica",
+  "mech.CO2 Corrosion (Sweet)": "Corrosão por CO2 (Doce)",
+  "mech.Corrosion Fatigue": "Fadiga por Corrosão",
+  "mech.Crevice Corrosion": "Corrosão em Frestas",
+  "mech.Erosion-Corrosion": "Erosão-Corrosão",
+  "mech.Galvanic Corrosion": "Corrosão Galvânica",
+  "mech.H2S Corrosion (Sour Service)": "Corrosão por H2S (Serviço Ácido)",
+  "mech.MIC (Microbiologically Influenced)":
+    "MIC (Influenciada por Microrganismos)",
+  "mech.Pitting Corrosion": "Corrosão por Pites",
+  "mech.Uniform Corrosion": "Corrosão Uniforme",
+
+  "prot.Epoxy Coating (C5-M)": "Revestimento Epóxi (C5-M)",
+  "prot.Internal Epoxy Coating (PSPC)": "Revestimento Epóxi Interno (PSPC)",
+  "prot.Splash Zone Compound": "Composto de Zona de Borrifo",
+  "prot.Sacrificial Anodes Al-Zn-In": "Anodos de Sacrifício Al-Zn-In",
+  "prot.ICCP (Impressed Current)": "ICCP (Corrente Impressa)",
+  "prot.Anodes + Coating": "Anodos + Revestimento",
+  "prot.Resistant Material (Duplex/316L)": "Material Resistente (Duplex/316L)",
+  "prot.NACE MR0175/ISO 15156": "NACE MR0175/ISO 15156",
+  "prot.Corrosion Inhibitor": "Inibidor de Corrosão",
+  "prot.Special Greases / Lubricants": "Graxas / Lubrificantes Especiais",
+  "prot.No Specific Protection": "Sem Proteção Específica",
+  "prot.Other": "Outro",
+
+  "freq.Weekly": "Semanal",
+  "freq.Monthly": "Mensal",
+  "freq.Quarterly": "Trimestral (cada 3 meses)",
+  "freq.Semi-annual": "Semestral (cada 6 meses)",
+  "freq.Annual": "Anual (uma vez por ano)",
+  "freq.Every 2 years": "A cada 2 anos",
+  "freq.Every 2.5 years": "A cada 2,5 anos (SPS / Dique Seco)",
+  "freq.Every 5 years": "A cada 5 anos (Vistoria Especial)",
+  "freq.Per operation": "Por operação (pré/pós uso)",
+  "freq.As required": "Conforme necessidade / Baseada em condição",
+
+  "f.priorityLogicLabel": "Lógica de prioridade:",
+  "f.priorityLogicBody":
+    "RPN (P×C) × peso SECE (1,5× se SIM) + penalidade de vencimento (+5) ou próximo do vencimento (+2). ",
+  "f.priorityLogicTiers":
+    "<6=Baixa • 6-12=Média • 13-21=Alta • ≥22=Crítica",
+
+  "tbl.date": "Data",
+  "tbl.depth": "Profundidade (mm)",
+  "tbl.change": "Variação",
+  "tbl.location": "Localização",
+  "tbl.inspector": "Inspetor",
+  "f.aiAnalysing": "IA analisando a foto...",
+  "f.optimised": "Otimizada",
 };
 
 const dicts: Record<Lang, Translations> = { en, pt };

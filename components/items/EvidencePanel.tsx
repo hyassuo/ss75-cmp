@@ -10,6 +10,7 @@ import { AIResultCard } from "@/components/items/AIResultCard";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/compressImage";
+import { useLang } from "@/lib/context/LangContext";
 import type { AIAnalysis, Evidence } from "@/lib/types/domain";
 
 const BUCKET = "evidence-photos";
@@ -41,6 +42,7 @@ export function EvidencePanel({
   canEdit = true,
   onAIApply,
 }: Props) {
+  const { t } = useLang();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -85,7 +87,7 @@ export function EvidencePanel({
     setFile(fl);
     if (compressed) {
       setCompressInfo(
-        `Optimised ${(originalBytes / 1024 / 1024).toFixed(1)} MB → ${(finalBytes / 1024).toFixed(0)} KB`
+        `${t("f.optimised")} ${(originalBytes / 1024 / 1024).toFixed(1)} MB → ${(finalBytes / 1024).toFixed(0)} KB`
       );
     }
     const reader = new FileReader();
@@ -175,7 +177,7 @@ export function EvidencePanel({
         }}
       >
         <div style={{ marginBottom: 10 }}>
-          <Label>Photo / Evidence</Label>
+          <Label>{t("f.photoEv")}</Label>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
             <input
               ref={fileRef}
@@ -207,7 +209,7 @@ export function EvidencePanel({
                 opacity: uploading ? 0.6 : 1,
               }}
             >
-              {uploading ? "Saving…" : "+ Add"}
+              {uploading ? t("common.saving") : t("common.add")}
             </button>
           </div>
           <div style={{ marginTop: 8 }}>
@@ -232,7 +234,7 @@ export function EvidencePanel({
               }}
             >
               {aiLoading && <Spinner size={12} />}
-              {aiLoading ? "Analysing..." : "🔍 Analyse with AI"}
+              {aiLoading ? t("f.analysing") : t("f.analyse")}
             </button>
             {compressInfo && (
               <div style={{ fontSize: 10, color: DS.grn, marginTop: 4 }}>
@@ -241,14 +243,13 @@ export function EvidencePanel({
             )}
             <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
               {b64
-                ? "Image ready — click to run AI corrosion analysis."
-                : "Upload an image to enable AI analysis."}
+                ? t("f.imageReady") : t("f.uploadFirst")}
             </div>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
           <div>
-            <Label>Date</Label>
+            <Label>{t("f.date")}</Label>
             <input
               type="date"
               value={date}
@@ -258,7 +259,7 @@ export function EvidencePanel({
           </div>
         </div>
         <Textarea
-          label="Finding / Description"
+          label={t("f.findingDesc")}
           value={desc}
           onChange={setDesc}
           rows={2}
@@ -281,7 +282,7 @@ export function EvidencePanel({
         >
           <Spinner size={16} color={DS.blu} />
           <span style={{ fontSize: 12, color: DS.blu, fontWeight: 600 }}>
-            AI is analysing the photo...
+            {t("f.aiAnalysing")}
           </span>
         </div>
       )}
@@ -318,9 +319,7 @@ export function EvidencePanel({
             color: DS.text3,
             padding: "12px 0",
           }}
-        >
-          No evidence recorded yet
-        </div>
+        >{t("f.noEvidence")}</div>
       )}
 
       {evidences.map((ev) => (
