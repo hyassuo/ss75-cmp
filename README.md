@@ -2,8 +2,7 @@
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
 Next.js 14 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
-Storage) · Tailwind 3 · Gemini (free tier) for AI photo analysis,
-Anthropic as fallback.
+Storage) · Tailwind 3 · Gemini for AI photo analysis.
 
 ## Setup
 
@@ -18,11 +17,11 @@ Anthropic as fallback.
 
 ### AI provider
 
-`lib/ai/client.ts` auto-selects **Gemini** when `GEMINI_API_KEY` is set
-(free tier, no Anthropic tokens spent), otherwise Anthropic. Force one
-with `AI_PROVIDER=gemini|anthropic`. AI output is advisory triage only —
-item criticality is driven by the deterministic risk matrix (P×C, SECE,
-overdue) plus quantitative pit-depth readings.
+`lib/ai/client.ts` calls the **Gemini** API. Set `GEMINI_API_KEY` and
+optionally `GEMINI_MODEL` (defaults to `gemini-2.0-flash`). AI output
+is advisory triage only — item criticality is driven by the
+deterministic risk matrix (P×C, SECE, overdue) plus quantitative
+pit-depth readings.
 
 ## Supabase schema
 

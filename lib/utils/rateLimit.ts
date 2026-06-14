@@ -2,7 +2,7 @@
 //
 // NOTE: serverless instances are ephemeral and may run in parallel, so this
 // throttles per warm instance, not globally. It is enough to stop a single
-// client hammering the Anthropic proxy and burning credits. For hard global
+// client hammering the Gemini proxy and burning quota. For hard global
 // limits, back this with Vercel KV / Upstash Redis.
 
 interface Window {
