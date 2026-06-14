@@ -39,11 +39,15 @@ export function LoginForm() {
   return (
     <div
       style={{
-        height: "100vh",
+        minHeight: "100dvh",
         background: DS.sbBg,
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
+        // Push the card down a bit so it sits in the upper third rather
+        // than dead-centre — feels balanced on phones (where the keyboard
+        // would cover a centred card anyway) and reads as "form first".
+        paddingTop: "12vh",
         fontFamily: DS.sans,
       }}
     >
