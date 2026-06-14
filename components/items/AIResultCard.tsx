@@ -9,14 +9,6 @@ interface Props {
 }
 
 export function AIResultCard({ result: r, onApply }: Props) {
-  const sevClr =
-    r.severity === "Critical"
-      ? DS.red
-      : r.severity === "High"
-        ? DS.ora
-        : r.severity === "Moderate"
-          ? DS.yel
-          : DS.grn;
   const actClr =
     r.immediateAction === "Urgent Treatment Required"
       ? DS.red
@@ -65,21 +57,41 @@ export function AIResultCard({ result: r, onApply }: Props) {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
+          gridTemplateColumns: "1fr 1fr 1fr 1fr",
           gap: 8,
           marginBottom: 10,
         }}
       >
         <div style={tile(DS.bord)}>
           <div style={cap}>Type</div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: DS.text }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: DS.text }}>
             {r.corrosionType}
           </div>
         </div>
-        <div style={tile(sevClr + "50")}>
-          <div style={cap}>Severity</div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: sevClr }}>
-            {r.severity}
+        <div style={tile(DS.bord)}>
+          <div style={cap}>Prob</div>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 800,
+              color: DS.text,
+              fontFamily: "monospace",
+            }}
+          >
+            {r.probability}
+          </div>
+        </div>
+        <div style={tile(DS.bord)}>
+          <div style={cap}>Cons</div>
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 800,
+              color: DS.text,
+              fontFamily: "monospace",
+            }}
+          >
+            {r.consequence}
           </div>
         </div>
         <div style={tile(actClr + "50")}>

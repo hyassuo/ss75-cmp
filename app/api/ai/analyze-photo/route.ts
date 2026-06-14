@@ -11,16 +11,36 @@ const MAX_BASE64_LENGTH = 14_000_000;
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60_000;
 
-const SYSTEM =
-  "You are a corrosion assessment expert for offshore drilling units. " +
-  "Analyze the provided photo and return a JSON object with these exact " +
-  "fields: corrosionType (string: one of Galvanic, Atmospheric, Pitting, " +
-  "Crevice, MIC, Erosion-Corrosion, Uniform, Unknown), severity (string: one " +
-  "of Low, Moderate, High, Critical), affectedAreaPct (number 0-100), " +
-  "pitDepthEstMM (number, 0 if not pitting), immediateAction (string: one of " +
-  "Monitor, Inspect Closely, Treat Soon, Urgent Treatment Required), findings " +
-  "(string: 2-3 sentence description), recommendation (string: 1-2 sentence " +
-  "next step). Return ONLY the JSON object, no markdown, no preamble.";
+const SYSTEM = [
+  "You are a corrosion assessment expert for offshore drilling units.",
+  "Analyse the photo and return ONLY a JSON object (no markdown, no preamble)",
+  "with these exact fields:",
+  "- corrosionType: one of Galvanic, Atmospheric, Pitting, Crevice, MIC,",
+  "  Erosion-Corrosion, Uniform, Unknown.",
+  "- probability: integer 1-5 on the unit risk matrix —",
+  "  1 = Never occurred in the Industry,",
+  "  2 = Has occurred in the Industry,",
+  "  3 = Has occurred in the Company,",
+  "  4 = Multiple occurrences per year in the Company,",
+  "  5 = Multiple occurrences per year at the Facility.",
+  "  Choose based on how common this corrosion mode + extent is on offshore",
+  "  rigs. Atmospheric corrosion on external steel is typically 4-5. Pitting",
+  "  on internal piping is typically 3-4. Exotic failures are 1-2.",
+  "- consequence: integer 1-5 on the unit risk matrix —",
+  "  1 = Insignificant, 2 = Minor, 3 = Moderate, 4 = Serious, 5 = Critical.",
+  "  Choose based on what the affected item likely is. A handrail or",
+  "  walkway is 2-3. A pressure-containing component, lifting equipment or",
+  "  safety-critical element is 4-5. Decorative or non-load-bearing is 1-2.",
+  "  If you cannot identify the component, default to 3.",
+  "- affectedAreaPct: number 0-100 (visible affected area).",
+  "- pitDepthEstMM: number, 0 if not pitting.",
+  "- immediateAction: one of Monitor, Inspect Closely, Treat Soon,",
+  "  Urgent Treatment Required.",
+  "- findings: 2-3 sentence description of what you see.",
+  "- recommendation: 1-2 sentence next step.",
+  "Never invent a severity field — priority is computed downstream from",
+  "probability × consequence.",
+].join(" ");
 
 const ALLOWED: AiMediaType[] = [
   "image/jpeg",

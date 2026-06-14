@@ -175,17 +175,29 @@ function ItemModalInner({
       if (r.corrosionType && mechMap[r.corrosionType]) {
         next.mechanism = mechMap[r.corrosionType];
       }
-      const priorMap: Record<string, ItemPriority> = {
-        Critical: "Critical",
-        High: "High",
-        Moderate: "Medium",
-        Low: "Low",
-      };
-      if (r.severity && priorMap[r.severity]) {
-        next.priority = priorMap[r.severity];
+      // Set the inputs to the risk matrix and let calcPriority derive the
+      // priority — the AI never chooses the priority directly.
+      if (r.probability >= 1 && r.probability <= 5) next.prob = r.probability;
+      if (r.consequence >= 1 && r.consequence <= 5) next.cons = r.consequence;
+      const p = calcPriority(
+        next.prob,
+        next.cons,
+        next.sece,
+        next.next_insp,
+        next.drops_risk,
+        next.structural
+      );
+      if (p) next.priority = p;
+      // Status maps from the AI's recommended action: urgent → Critical,
+      // anything else nudging us to act → Attention.
+      if (r.immediateAction === "Urgent Treatment Required") {
+        next.status = "Critical";
+      } else if (
+        r.immediateAction === "Treat Soon" ||
+        r.immediateAction === "Inspect Closely"
+      ) {
+        next.status = "Attention";
       }
-      if (r.severity === "Critical") next.status = "Critical";
-      else if (r.severity === "High") next.status = "Attention";
       return next;
     });
     if (r.pitDepthEstMM > 0 && item.readings.length === 0) {

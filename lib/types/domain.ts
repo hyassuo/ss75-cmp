@@ -63,7 +63,10 @@ export interface Reading {
 
 export interface AIAnalysis {
   corrosionType: string;
-  severity: "Low" | "Moderate" | "High" | "Critical";
+  // 1-5 on the unit's risk matrix. Priority is derived from probability ×
+  // consequence by calcPriority — never set directly by the AI.
+  probability: 1 | 2 | 3 | 4 | 5;
+  consequence: 1 | 2 | 3 | 4 | 5;
   affectedAreaPct: number;
   pitDepthEstMM: number;
   immediateAction: string;

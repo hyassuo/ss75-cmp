@@ -133,7 +133,8 @@ export function ExportTab() {
             Description: e.description ?? "",
             File: e.file_name ?? "",
             "AI Type": e.ai_analysis?.corrosionType ?? "",
-            "AI Severity": e.ai_analysis?.severity ?? "",
+            "AI Prob": e.ai_analysis?.probability ?? "",
+            "AI Cons": e.ai_analysis?.consequence ?? "",
           }))
         )
       ),
