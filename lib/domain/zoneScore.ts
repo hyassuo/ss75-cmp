@@ -1,9 +1,14 @@
 import { itemScore } from "@/lib/domain/itemScore";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
-// Weighted average — handoff 6.5. Needs >=2 items.
+// Weighted average of itemScore by priority × SECE.
+// Returns null only for empty zones. A zone with a single item shows that
+// item's effective score — surfacing a 1-of-1 CRITICAL is more useful than
+// hiding it behind "N/A". (The original handoff §6.5 required ≥2 items as
+// a "statistically meaningful" floor; for an operational dashboard the
+// floor of 1 is the right call.)
 export function zoneScore(items: ItemWithRelations[]): number | null {
-  if (!items || items.length < 2) return null;
+  if (!items || items.length === 0) return null;
   let totalWeight = 0;
   let weightedSum = 0;
   for (const it of items) {

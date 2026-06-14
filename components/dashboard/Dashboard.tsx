@@ -202,7 +202,7 @@ export function Dashboard() {
               </div>
               <div
                 style={{
-                  fontSize: k.gauge !== undefined ? 18 : 26,
+                  fontSize: 26,
                   fontWeight: 800,
                   color: k.color,
                   fontFamily: "monospace",
@@ -299,7 +299,6 @@ export function Dashboard() {
                     style={{ fontSize: 10, color: DS.text3, flexShrink: 0 }}
                   >
                     {items.length} {items.length !== 1 ? t("dash.items") : t("dash.item")}
-                    {items.length < 2 ? " *" : ""}
                   </span>
                 </div>
                 <div
@@ -325,9 +324,8 @@ export function Dashboard() {
             );
           })}
         </div>
-        <div style={{ fontSize: 9, color: DS.bord2, marginTop: 10 }}>
-          * {t("dash.needsTwo")}
-        </div>
+        {/* No "needs 2+ items" footnote anymore — zoneScore now handles
+            single-item zones, so the asterisk legend is no longer needed. */}
       </div>
 
       <div style={gridAuto}>
