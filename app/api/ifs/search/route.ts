@@ -6,9 +6,10 @@ export const runtime = "nodejs";
 
 const MAX_QUERY_LENGTH = 80;
 const RESULT_LIMIT = 25;
-// Fetch a wider candidate set, then rank by relevance and trim to
-// RESULT_LIMIT so the most likely matches always surface first.
-const CANDIDATE_LIMIT = 200;
+// Fetch a wider candidate set, then rank by relevance and trim. With multi
+// word AND filters the candidate count drops naturally, so 500 keeps even
+// a single-word "pump" query from being clipped before ranking.
+const CANDIDATE_LIMIT = 500;
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {
@@ -31,38 +32,55 @@ export async function POST(request: Request) {
     .replace(/[^A-Za-z0-9 _\-/.]/g, "")
     .trim();
   if (term.length < 2) return NextResponse.json([]);
-  // Escape the % / _ ILIKE wildcards so the user can't broaden their search
-  // to the whole table by sending "%%".
-  const escaped = term.replace(/[%_\\]/g, (c) => "\\" + c);
+
+  // Split into space-separated tokens, escape ILIKE wildcards, drop tokens
+  // shorter than 2 characters to avoid expanding the search to half the
+  // table. "fire pump" → ["fire", "pump"]; each token must appear in id
+  // OR description, regardless of order.
+  const tokens = term
+    .split(/\s+/)
+    .filter((t) => t.length >= 2)
+    .map((t) => t.replace(/[%_\\]/g, (c) => "\\" + c));
+  if (tokens.length === 0) return NextResponse.json([]);
 
   const supabase = createClient();
-  const pattern = `%${escaped}%`;
-  const { data, error } = await supabase
-    .from("ifs_objects")
-    .select("id, description, sece")
-    .or(`id.ilike.${pattern},description.ilike.${pattern}`)
-    .limit(CANDIDATE_LIMIT);
+  let q = supabase.from("ifs_objects").select("id, description, sece");
+  // Each .or() call AND-joins with the previous filters, so chaining one
+  // per token produces (id ILIKE %A% OR desc ILIKE %A%) AND
+  //                    (id ILIKE %B% OR desc ILIKE %B%) ...
+  for (const tok of tokens) {
+    const pattern = `%${tok}%`;
+    q = q.or(`id.ilike.${pattern},description.ilike.${pattern}`);
+  }
+  const { data, error } = await q.limit(CANDIDATE_LIMIT);
 
   if (error) {
-    return NextResponse.json(
-      { error: "IFS search failed" },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "IFS search failed" }, { status: 502 });
   }
 
-  // Rank: exact id match > id startsWith > description startsWith >
-  // description contains (with shorter descriptions favoured as more
-  // specific). Without this, ORDER BY id alone buries obvious hits.
-  const lcTerm = escaped.toLowerCase();
+  // Rank candidates so the most likely match floats to the top.
+  // Single-token: prefer exact / startsWith hits in id or description.
+  // Multi-token: prefer rows where the full phrase appears as a substring
+  // (whitespace-joined), then shorter descriptions as a specificity proxy.
+  const lc = (s: string) => s.toLowerCase();
+  const joined = lc(tokens.join(" "));
+  const single = tokens.length === 1 ? lc(tokens[0]) : null;
+
   const score = (row: { id: string; description: string }) => {
-    const id = row.id.toLowerCase();
-    const desc = row.description.toLowerCase();
-    if (id === lcTerm) return 0;
-    if (id.startsWith(lcTerm)) return 1;
-    if (desc.startsWith(lcTerm)) return 2;
-    if (id.includes(lcTerm)) return 3;
-    return 4;
+    const id = lc(row.id);
+    const desc = lc(row.description);
+    if (single) {
+      if (id === single) return 0;
+      if (id.startsWith(single)) return 1;
+      if (desc.startsWith(single)) return 2;
+      if (id.includes(single)) return 3;
+      return 4;
+    }
+    // Multi-token: phrase appears intact → top; otherwise rely on length.
+    if (desc.includes(joined) || id.includes(joined)) return 0;
+    return 1;
   };
+
   const ranked = (data ?? [])
     .map((r) => ({ r, s: score(r) }))
     .sort(

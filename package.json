@@ -1,6 +1,6 @@
 {
   "name": "ss75-cmp",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "scripts": {
     "dev": "next dev",
