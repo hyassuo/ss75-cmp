@@ -81,15 +81,14 @@ export function AlertBar() {
           borderBottom: "1px solid " + DS.redBord,
         }}
       >
-        {/* Left: title + count pills. Inner wrap allows the pills to drop
-            to a second line on narrow screens without pushing "X total" off
-            of the top line. min-width:0 lets this flex item shrink. */}
+        {/* Left: title + count pills. Pills are now stacked (number above
+            label) so they stay narrow and the whole header — title, both
+            pills, total — fits on one line on phones. */}
         <div
           style={{
             display: "flex",
             gap: 8,
             alignItems: "center",
-            flexWrap: "wrap",
             minWidth: 0,
             flex: 1,
           }}
@@ -102,16 +101,21 @@ export function AlertBar() {
               style={{
                 background: DS.red,
                 color: "#fff",
-                borderRadius: 999,
-                padding: "3px 10px",
-                fontSize: 11,
+                borderRadius: 8,
+                padding: "3px 8px",
                 fontWeight: 700,
-                lineHeight: 1,
+                lineHeight: 1.05,
                 display: "inline-flex",
+                flexDirection: "column",
                 alignItems: "center",
+                textAlign: "center",
+                flexShrink: 0,
               }}
             >
-              {danger} {t("alert.critical")}
+              <span style={{ fontSize: 12 }}>{danger}</span>
+              <span style={{ fontSize: 8, opacity: 0.9, marginTop: 1 }}>
+                {t("alert.critical")}
+              </span>
             </span>
           )}
           {warn > 0 && (
@@ -119,16 +123,21 @@ export function AlertBar() {
               style={{
                 background: DS.ora,
                 color: "#fff",
-                borderRadius: 999,
-                padding: "3px 10px",
-                fontSize: 11,
+                borderRadius: 8,
+                padding: "3px 8px",
                 fontWeight: 700,
-                lineHeight: 1,
+                lineHeight: 1.05,
                 display: "inline-flex",
+                flexDirection: "column",
                 alignItems: "center",
+                textAlign: "center",
+                flexShrink: 0,
               }}
             >
-              {warn} {t("alert.warning")}
+              <span style={{ fontSize: 12 }}>{warn}</span>
+              <span style={{ fontSize: 8, opacity: 0.9, marginTop: 1 }}>
+                {t("alert.warning")}
+              </span>
             </span>
           )}
         </div>
