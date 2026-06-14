@@ -106,7 +106,7 @@ body {
    Layout/typography live here so media queries can compact the header on
    small screens (colors stay inline with DS tokens). */
 .tb-band-top {
-  padding: 7px 20px 5px;
+  padding: 7px 20px 5px 14px;
 }
 .tb-band-bottom {
   padding: 7px 20px;
@@ -196,7 +196,7 @@ body {
     text-align: center;
   }
   .tb-band-top {
-    padding: 6px 12px 4px;
+    padding: 6px 12px 4px 14px;
   }
   .tb-band-bottom {
     padding: 6px 12px;

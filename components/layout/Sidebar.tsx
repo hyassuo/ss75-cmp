@@ -112,21 +112,7 @@ export function Sidebar() {
         transition: "width 0.22s ease",
       }}
     >
-      <div style={{ padding: "16px 0" }}>
-        {!collapsed && (
-          <div
-            style={{
-              fontSize: 9,
-              color: DS.sbTxt2,
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: 1.5,
-              padding: "0 16px 10px",
-            }}
-          >
-            NAVIGATION
-          </div>
-        )}
+      <div style={{ padding: "12px 0" }}>
         {TABS.map((t) => {
           const active = onMain && tab === t.tab;
           return (
