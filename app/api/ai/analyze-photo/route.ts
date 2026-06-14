@@ -85,14 +85,20 @@ export async function POST(request: Request) {
     try {
       return NextResponse.json(JSON.parse(clean));
     } catch {
+      console.error("[ai/analyze-photo] parse failed:", clean.slice(0, 500));
       return NextResponse.json(
         { error: "Could not parse AI response." },
         { status: 502 }
       );
     }
-  } catch {
+  } catch (e) {
+    // Surface the upstream reason so the user can act on it (quota, model
+    // name, key invalid, timeout). Route is auth-gated + rate-limited, so the
+    // message isn't sensitive. Also log full error to Vercel for diagnostics.
+    const reason = e instanceof Error ? e.message : "Unknown error";
+    console.error("[ai/analyze-photo] upstream failed:", e);
     return NextResponse.json(
-      { error: "AI analysis request failed." },
+      { error: `AI analysis failed: ${reason}` },
       { status: 502 }
     );
   }

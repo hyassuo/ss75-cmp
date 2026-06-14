@@ -84,7 +84,12 @@ async function viaGemini(req: AiRequest): Promise<string> {
       body: JSON.stringify(body),
     }
   );
-  if (!res.ok) throw new Error("Gemini request failed: " + res.status);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(
+      `Gemini ${res.status} (model=${model}): ${detail.slice(0, 300)}`
+    );
+  }
   const data = (await res.json()) as GeminiResponse;
   return (data.candidates?.[0]?.content?.parts ?? [])
     .map((p) => p.text ?? "")
