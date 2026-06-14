@@ -316,6 +316,15 @@ function ItemModalInner({
         </div>
       </div>
 
+      <fieldset
+        disabled={isReadOnly}
+        style={{
+          border: "none",
+          padding: 0,
+          margin: 0,
+          minWidth: 0,
+        }}
+      >
       <Section title="INSPECTION EVIDENCE" accent={DS.vio}>
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 10 }}>
           Start by adding a photo. AI analysis will auto-populate corrosion
@@ -662,6 +671,7 @@ function ItemModalInner({
           rows={3}
         />
       </Section>
+      </fieldset>
 
       <div
         style={{

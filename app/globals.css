@@ -65,6 +65,43 @@ body {
   }
 }
 
+/* ── Modal (portal-rendered) ──────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.modal-card {
+  background: var(--ds-sur);
+  border: 1px solid var(--ds-bord);
+  border-radius: 10px;
+  padding: 24px;
+  width: 100%;
+  max-width: 700px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+}
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+  .modal-card {
+    border-radius: 0;
+    border: none;
+    margin-bottom: 0;
+    padding: 16px;
+    min-height: 100%;
+  }
+}
+
 /* ── Topbar responsive layout ─────────────────────────────────────────────
    Layout/typography live here so media queries can compact the header on
    small screens (colors stay inline with DS tokens). */

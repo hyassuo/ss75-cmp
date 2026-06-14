@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { S } from "@/lib/design/styles";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   onClose: () => void;
@@ -9,24 +9,21 @@ interface ModalProps {
 }
 
 export function Modal({ onClose, children }: ModalProps) {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(15,23,42,0.6)",
-        zIndex: 500,
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        padding: 16,
-        overflowY: "auto",
-      }}
-      onClick={onClose}
-    >
-      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+  // Portal-mount only after hydration so SSR doesn't see a document.body
+  // reference; also escapes any ancestor with position: fixed / transform
+  // that would otherwise confine the modal to a corner on iOS Safari.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
