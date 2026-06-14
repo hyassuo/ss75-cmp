@@ -29,9 +29,11 @@ html,
 body {
   padding: 0;
   margin: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--ds-bg);
   color: var(--ds-text);
-  font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -60,5 +62,124 @@ body {
   }
   100% {
     background-position: -200% 0;
+  }
+}
+
+/* ── Topbar responsive layout ─────────────────────────────────────────────
+   Layout/typography live here so media queries can compact the header on
+   small screens (colors stay inline with DS tokens). */
+.tb-band-top {
+  padding: 7px 20px 5px;
+}
+.tb-band-bottom {
+  padding: 7px 20px;
+}
+.tb-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+.tb-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.tb-title {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-row2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-left: 40px;
+  margin-top: 1px;
+}
+.tb-sub {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-pills {
+  display: flex;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tb-pills::-webkit-scrollbar {
+  display: none;
+}
+.tb-pill {
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Footer: full on desktop, compact "Rev.01" only on mobile so it doesn't
+   eat valuable vertical space on phones. */
+.ft-bar {
+  padding: 10px 24px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .ft-bar {
+    padding: 5px 12px;
+    flex-wrap: nowrap;
+    justify-content: center;
+  }
+  .ft-standards {
+    display: none;
+  }
+  .ft-rev {
+    text-align: center;
+  }
+  .tb-band-top {
+    padding: 6px 12px 4px;
+  }
+  .tb-band-bottom {
+    padding: 6px 12px;
+  }
+  .tb-title {
+    font-size: 15px;
+  }
+  .tb-row2 {
+    margin-left: 40px;
+  }
+  .tb-sub {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  /* Status chip collapses to dot-only, like the reference mobile header */
+  .tb-chip-extra {
+    display: none;
+  }
+  .tb-pill {
+    padding: 4px 9px;
+    font-size: 11px;
   }
 }

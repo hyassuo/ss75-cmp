@@ -325,6 +325,7 @@ function ItemModalInner({
           itemId={item.id}
           evidences={item.evidences}
           isAdmin={isAdmin}
+          canEdit={!isReadOnly}
           onAdd={(e) => addEvidence(item.id, e)}
           onRemove={(id) => void deleteEvidence(id, item.id)}
           onAIApply={applyAI}
@@ -643,6 +644,8 @@ function ItemModalInner({
           readings={item.readings}
           onAdd={(r) => void addReading(item.id, r)}
           onRemove={(id) => void deleteReading(id, item.id)}
+          canEdit={!isReadOnly}
+          canDelete={isAdmin}
         />
       </Section>
 

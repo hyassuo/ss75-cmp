@@ -1,5 +1,5 @@
-import { ExportTab } from "@/components/export/ExportTab";
+import { redirect } from "next/navigation";
 
-export default function ExportPage() {
-  return <ExportTab />;
+export default function Page() {
+  redirect("/dashboard");
 }

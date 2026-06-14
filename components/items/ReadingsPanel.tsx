@@ -17,9 +17,17 @@ interface Props {
     checked_by: string | null;
   }) => void;
   onRemove: (id: string) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
-export function ReadingsPanel({ readings, onAdd, onRemove }: Props) {
+export function ReadingsPanel({
+  readings,
+  onAdd,
+  onRemove,
+  canEdit = true,
+  canDelete = true,
+}: Props) {
   const [date, setDate] = useState(today());
   const [depth, setDepth] = useState("");
   const [loc, setLoc] = useState("");
@@ -46,6 +54,7 @@ export function ReadingsPanel({ readings, onAdd, onRemove }: Props) {
 
   return (
     <div>
+      {canEdit && (
       <div
         style={{
           background: DS.sur2,
@@ -132,6 +141,7 @@ export function ReadingsPanel({ readings, onAdd, onRemove }: Props) {
           </button>
         </div>
       </div>
+      )}
 
       {rate !== null && (
         <div
@@ -290,18 +300,20 @@ export function ReadingsPanel({ readings, onAdd, onRemove }: Props) {
                       {r.checked_by || "-"}
                     </td>
                     <td style={{ padding: "7px 8px" }}>
-                      <button
-                        onClick={() => onRemove(r.id)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "rgba(192,57,43,0.5)",
-                          cursor: "pointer",
-                          fontSize: 14,
-                        }}
-                      >
-                        ×
-                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={() => onRemove(r.id)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "rgba(192,57,43,0.5)",
+                            cursor: "pointer",
+                            fontSize: 14,
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

@@ -27,6 +27,7 @@ interface Props {
   }) => Promise<void> | void;
   onRemove: (id: string) => void;
   isAdmin: boolean;
+  canEdit?: boolean;
   onAIApply: (r: AIAnalysis) => void;
 }
 
@@ -36,6 +37,7 @@ export function EvidencePanel({
   onAdd,
   onRemove,
   isAdmin,
+  canEdit = true,
   onAIApply,
 }: Props) {
   const [date, setDate] = useState(today());
@@ -149,6 +151,7 @@ export function EvidencePanel({
 
   return (
     <div>
+      {canEdit && (
       <div
         style={{
           background: DS.sur2,
@@ -194,44 +197,36 @@ export function EvidencePanel({
               {uploading ? "Saving…" : "+ Add"}
             </button>
           </div>
-          {isAdmin ? (
-            <div style={{ marginTop: 8 }}>
-              <button
-                onClick={() => void runAI()}
-                disabled={!b64 || aiLoading}
-                style={{
-                  background: b64 && !aiLoading ? DS.vio : "transparent",
-                  color: b64 && !aiLoading ? "#fff" : DS.text3,
-                  border:
-                    "1px solid " + (b64 && !aiLoading ? DS.vio : DS.bord),
-                  borderRadius: 7,
-                  padding: "7px 16px",
-                  fontWeight: 700,
-                  cursor: b64 && !aiLoading ? "pointer" : "default",
-                  fontSize: 12,
-                  fontFamily: DS.sans,
-                  transition: DS.transition,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                {aiLoading && <Spinner size={12} />}
-                {aiLoading ? "Analysing..." : "🔍 Analyse with AI"}
-              </button>
-              <div
-                style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}
-              >
-                {b64
-                  ? "Image ready — click to run AI corrosion analysis."
-                  : "Upload an image to enable AI analysis."}
-              </div>
-            </div>
-          ) : (
+          <div style={{ marginTop: 8 }}>
+            <button
+              onClick={() => void runAI()}
+              disabled={!b64 || aiLoading}
+              style={{
+                background: b64 && !aiLoading ? DS.vio : "transparent",
+                color: b64 && !aiLoading ? "#fff" : DS.text3,
+                border:
+                  "1px solid " + (b64 && !aiLoading ? DS.vio : DS.bord),
+                borderRadius: 7,
+                padding: "7px 16px",
+                fontWeight: 700,
+                cursor: b64 && !aiLoading ? "pointer" : "default",
+                fontSize: 12,
+                fontFamily: DS.sans,
+                transition: DS.transition,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              {aiLoading && <Spinner size={12} />}
+              {aiLoading ? "Analysing..." : "🔍 Analyse with AI"}
+            </button>
             <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
-              Attach a photo or file as inspection evidence.
+              {b64
+                ? "Image ready — click to run AI corrosion analysis."
+                : "Upload an image to enable AI analysis."}
             </div>
-          )}
+          </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
           <div>
@@ -251,6 +246,7 @@ export function EvidencePanel({
           rows={2}
         />
       </div>
+      )}
 
       {aiLoading && (
         <div
@@ -383,20 +379,22 @@ export function EvidencePanel({
               </div>
             )}
           </div>
-          <button
-            onClick={() => onRemove(ev.id)}
-            style={{
-              background: "none",
-              border: "none",
-              color: "rgba(192,57,43,0.5)",
-              cursor: "pointer",
-              fontSize: 16,
-              padding: "0 4px",
-              flexShrink: 0,
-            }}
-          >
-            ×
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => onRemove(ev.id)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "rgba(192,57,43,0.5)",
+                cursor: "pointer",
+                fontSize: 16,
+                padding: "0 4px",
+                flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
       ))}
     </div>

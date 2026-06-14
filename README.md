@@ -2,8 +2,8 @@
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
 Next.js 14 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
-Storage) · Tailwind 3 · Anthropic API (IFS autocomplete + AI photo
-analysis).
+Storage) · Tailwind 3 · pluggable AI provider for IFS autocomplete + photo
+analysis (Google Gemini free tier by default, Anthropic as fallback).
 
 ## Setup
 
@@ -12,9 +12,18 @@ analysis).
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `ANTHROPIC_API_KEY`
+   - `GEMINI_API_KEY` (free at https://aistudio.google.com/apikey)
    - `NEXT_PUBLIC_APP_URL`
 3. `npm run dev` → http://localhost:3000
+
+### AI provider
+
+The photo analysis and IFS search use a single provider abstraction
+(`lib/ai/client.ts`). It auto-selects **Gemini** when `GEMINI_API_KEY`
+is set (free tier, no Anthropic tokens spent), otherwise Anthropic.
+Force one with `AI_PROVIDER=gemini|anthropic`. AI output is advisory
+triage only — item criticality is driven by the deterministic risk
+matrix (P×C, SECE, overdue) plus quantitative pit-depth readings.
 
 The Supabase schema (7 tables, RLS, triggers, storage bucket, 1 unit +
 14 DROPS zones) is already provisioned via `supabase-setup.sql` — do not

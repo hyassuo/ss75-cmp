@@ -113,7 +113,7 @@ export const SYSTEMS = [
   "Maintenance",
   "Marine",
   "Safety",
-  "Subsea",
+  "Third Party",
 ] as const;
 
 export type SystemFilter = (typeof SYSTEMS)[number];

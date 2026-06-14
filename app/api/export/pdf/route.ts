@@ -8,7 +8,9 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import { createElement } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
+
+const MAX_EXPORT_ITEMS = 5000;
 
 export const runtime = "nodejs";
 
@@ -60,15 +62,18 @@ const s = StyleSheet.create({
 });
 
 export async function POST(request: Request) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const guard = await requireUser();
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
   const data = (await request.json()) as Payload;
+  if (!Array.isArray(data.items) || data.items.length > MAX_EXPORT_ITEMS) {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  }
 
   const zones = Array.from(new Set(data.items.map((i) => i.zid))).sort();
 

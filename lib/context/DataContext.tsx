@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
@@ -95,12 +96,22 @@ export function DataProvider({
     void load();
   }, [load]);
 
+  const grouped = useMemo(() => {
+    const map = new Map<string, ItemWithRelations[]>();
+    for (const i of allItems) {
+      const arr = map.get(i.zone_id);
+      if (arr) arr.push(i);
+      else map.set(i.zone_id, [i]);
+    }
+    map.forEach((arr) =>
+      arr.sort((a, b) => a.created_at.localeCompare(b.created_at))
+    );
+    return map;
+  }, [allItems]);
+
   const itemsByZone = useCallback(
-    (zid: string) =>
-      allItems
-        .filter((i) => i.zone_id === zid)
-        .sort((a, b) => a.created_at.localeCompare(b.created_at)),
-    [allItems]
+    (zid: string) => grouped.get(zid) ?? [],
+    [grouped]
   );
 
   const createItem = useCallback(
@@ -171,8 +182,30 @@ export function DataProvider({
   const deleteItem = useCallback(
     async (id: string) => {
       const prevItems = allItems;
+      const target = prevItems.find((i) => i.id === id);
       setAllItems((prev) => prev.filter((i) => i.id !== id));
       const supabase = createClient();
+
+      // Storage doesn't cascade with the DB FK. List + remove anything under
+      // the item's folder before deleting the row so we don't leave orphaned
+      // files burning quota (RLS already hides them, but they'd persist).
+      const storagePaths: string[] = [];
+      for (const ev of target?.evidences ?? []) {
+        if (ev.file_path) storagePaths.push(ev.file_path);
+      }
+      const { data: listed } = await supabase.storage
+        .from("evidence-photos")
+        .list(id);
+      if (listed && listed.length) {
+        for (const obj of listed) {
+          const full = `${id}/${obj.name}`;
+          if (!storagePaths.includes(full)) storagePaths.push(full);
+        }
+      }
+      if (storagePaths.length) {
+        await supabase.storage.from("evidence-photos").remove(storagePaths);
+      }
+
       const { error: e } = await supabase.from("items").delete().eq("id", id);
       if (e) {
         setAllItems(prevItems);
@@ -254,8 +287,19 @@ export function DataProvider({
     [profile.id]
   );
 
-  const deleteEvidence = useCallback(async (id: string, itemId: string) => {
+  const deleteEvidence = useCallback(
+    async (id: string, itemId: string) => {
     const supabase = createClient();
+    // Remove the storage file before the row so a failure leaves at worst
+    // a row pointing at a missing file (recoverable), not an orphaned blob.
+    const evidence = allItems
+      .find((i) => i.id === itemId)
+      ?.evidences.find((e) => e.id === id);
+    if (evidence?.file_path) {
+      await supabase.storage
+        .from("evidence-photos")
+        .remove([evidence.file_path]);
+    }
     const { error: e } = await supabase.from("evidences").delete().eq("id", id);
     if (e) {
       setError(e.message);
@@ -268,7 +312,9 @@ export function DataProvider({
           : i
       )
     );
-  }, []);
+    },
+    [allItems]
+  );
 
   return (
     <DataContext.Provider

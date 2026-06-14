@@ -30,9 +30,11 @@ export const DS = {
   sbAct: "#3b5570",
   sbActTxt: "#93d4f5",
 
-  // Typography
-  sans: "'IBM Plex Sans', system-ui, sans-serif",
-  mono: "'IBM Plex Mono', 'Courier New', monospace",
+  // Typography — values use CSS variables loaded by next/font in app/layout.tsx
+  // (Inter for sans, IBM Plex Mono for mono). Without var(--font-sans) inline
+  // styles fall back to system fonts, which is the look that felt off.
+  sans: "var(--font-sans), system-ui, -apple-system, sans-serif",
+  mono: "var(--font-mono), 'IBM Plex Mono', 'Courier New', monospace",
 
   // Motion
   transition: "all 0.18s ease",

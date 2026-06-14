@@ -1,5 +1,5 @@
-import { ZonesTab } from "@/components/items/ZonesTab";
+import { redirect } from "next/navigation";
 
-export default function ZonesPage() {
-  return <ZonesTab />;
+export default function Page() {
+  redirect("/dashboard");
 }

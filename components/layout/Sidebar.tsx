@@ -3,36 +3,51 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
-import { useShell } from "@/lib/context/ShellContext";
+import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
+import { useNewItem } from "@/lib/context/NewItemContext";
 import { createClient } from "@/lib/supabase/client";
 
-interface NavItem {
+interface TabItem {
+  tab: MainTab;
+  icon: string;
+  label: string;
+}
+interface LinkItem {
   href: string;
   icon: string;
   label: string;
-  adminOnly?: boolean;
 }
 
-const NAV: NavItem[] = [
-  { href: "/dashboard", icon: "▦", label: "Dashboard" },
-  { href: "/zones", icon: "☰", label: "Zones & Items" },
-  { href: "/risk-matrix", icon: "△", label: "Risk Matrix" },
-  { href: "/schedule", icon: "◷", label: "Schedule" },
-  { href: "/export", icon: "↗", label: "Export" },
-  { href: "/users", icon: "◉", label: "Users", adminOnly: true },
-  { href: "/audit-log", icon: "≡", label: "Audit Log", adminOnly: true },
+const TABS: TabItem[] = [
+  { tab: "dashboard", icon: "▦", label: "Dashboard" },
+  { tab: "zones", icon: "☰", label: "Zones & Items" },
+  { tab: "risk", icon: "△", label: "Risk Matrix" },
+  { tab: "schedule", icon: "◷", label: "Schedule" },
+  { tab: "export", icon: "↗", label: "Export" },
+];
+
+const ADMIN_LINKS: LinkItem[] = [
+  { href: "/users", icon: "◉", label: "Users" },
+  { href: "/audit-log", icon: "≡", label: "Audit Log" },
 ];
 
 export function Sidebar() {
-  const { sidebarCollapsed } = useShell();
+  const { sidebarCollapsed, tab, setTab } = useShell();
   const { profile } = useData();
+  const { openNewItem } = useNewItem();
   const pathname = usePathname();
   const router = useRouter();
 
   const isAdmin = profile.role === "admin";
   const isReadOnly = profile.role === "viewer";
   const collapsed = sidebarCollapsed;
+  const onMain = pathname === "/dashboard";
+
+  function goTab(t: MainTab) {
+    setTab(t);
+    if (!onMain) router.push("/dashboard");
+  }
 
   async function signOut() {
     if (!confirm("Sign out?")) return;
@@ -58,6 +73,30 @@ export function Sidebar() {
       ? DS.bluBord
       : DS.bord;
 
+  const itemStyle = (active: boolean) => ({
+    display: "flex" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    padding: collapsed ? "10px 0" : "10px 16px",
+    justifyContent: collapsed ? ("center" as const) : ("flex-start" as const),
+    cursor: "pointer",
+    textDecoration: "none",
+    background: active ? DS.sbAct : "transparent",
+    borderLeft: active
+      ? "3px solid " + DS.sbActTxt
+      : "3px solid transparent",
+    color: active ? DS.sbActTxt : DS.sbTxt,
+    fontSize: 12,
+    fontWeight: active ? 600 : 400,
+    fontFamily: DS.sans,
+    transition: DS.transition,
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden",
+    border: "none",
+    width: "100%",
+    textAlign: "left" as const,
+  });
+
   return (
     <div
       style={{
@@ -68,6 +107,7 @@ export function Sidebar() {
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
         overflowX: "hidden",
         transition: "width 0.22s ease",
       }}
@@ -87,39 +127,35 @@ export function Sidebar() {
             NAVIGATION
           </div>
         )}
-        {NAV.filter((n) => !n.adminOnly || isAdmin).map((n) => {
-          const active = pathname === n.href;
+        {TABS.map((t) => {
+          const active = onMain && tab === t.tab;
           return (
-            <Link
-              key={n.href}
-              href={n.href}
-              title={collapsed ? n.label : ""}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: collapsed ? "10px 0" : "10px 16px",
-                justifyContent: collapsed ? "center" : "flex-start",
-                cursor: "pointer",
-                textDecoration: "none",
-                background: active ? DS.sbAct : "transparent",
-                borderLeft: active
-                  ? "3px solid " + DS.sbActTxt
-                  : "3px solid transparent",
-                color: active ? DS.sbActTxt : DS.sbTxt,
-                fontSize: 12,
-                fontWeight: active ? 600 : 400,
-                fontFamily: DS.sans,
-                transition: DS.transition,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-              }}
+            <button
+              key={t.tab}
+              onClick={() => goTab(t.tab)}
+              title={collapsed ? t.label : ""}
+              style={itemStyle(active)}
             >
-              <span style={{ fontSize: 14, opacity: 0.85 }}>{n.icon}</span>
-              {!collapsed && <span>{n.label}</span>}
-            </Link>
+              <span style={{ fontSize: 14, opacity: 0.85 }}>{t.icon}</span>
+              {!collapsed && <span>{t.label}</span>}
+            </button>
           );
         })}
+        {isAdmin &&
+          ADMIN_LINKS.map((n) => {
+            const active = pathname === n.href;
+            return (
+              <Link
+                key={n.href}
+                href={n.href}
+                title={collapsed ? n.label : ""}
+                style={itemStyle(active)}
+              >
+                <span style={{ fontSize: 14, opacity: 0.85 }}>{n.icon}</span>
+                {!collapsed && <span>{n.label}</span>}
+              </Link>
+            );
+          })}
 
         {!isReadOnly && (
           <div
@@ -129,25 +165,27 @@ export function Sidebar() {
               paddingTop: 12,
             }}
           >
-            <Link
-              href="/zones"
+            <button
+              onClick={openNewItem}
               title={collapsed ? "New Item" : ""}
               style={{
                 display: "block",
                 textAlign: "center",
-                textDecoration: "none",
                 background: DS.blu,
                 color: "#fff",
+                border: "none",
                 borderRadius: 6,
                 padding: "9px 0",
                 fontWeight: 700,
                 fontSize: collapsed ? 14 : 12,
                 fontFamily: DS.sans,
                 whiteSpace: "nowrap",
+                width: "100%",
+                cursor: "pointer",
               }}
             >
               {collapsed ? "+" : "+ New Item"}
-            </Link>
+            </button>
           </div>
         )}
       </div>
@@ -164,7 +202,11 @@ export function Sidebar() {
         }}
       >
         <div
-          title={collapsed ? `${profile.role.toUpperCase()} — ${profile.full_name ?? ""}` : ""}
+          title={
+            collapsed
+              ? `${profile.role.toUpperCase()} — ${profile.full_name ?? ""}`
+              : ""
+          }
           style={{
             background: roleBg,
             border: "1px solid " + roleBord,

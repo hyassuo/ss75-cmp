@@ -16,7 +16,12 @@ export function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
+              // Strip maxAge/expires so the session ends when the browser
+              // closes — required by the session-policy decision.
+              const sessionOpts = { ...options };
+              delete sessionOpts.maxAge;
+              delete sessionOpts.expires;
+              cookieStore.set(name, value, sessionOpts);
             });
           } catch {
             // Called from a Server Component — middleware refreshes the session.

@@ -16,6 +16,16 @@ export function today(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+// "DD/MM/YYYY" short form for header chrome where the long Portuguese
+// month form is too verbose.
+export function fmtShort(d: string | null | undefined): string {
+  if (!d) return "-";
+  const parts = d.split("-");
+  if (parts.length < 3) return d;
+  const [y, m, day] = parts;
+  return `${day.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+}
+
 export function isOverdue(d: string | null | undefined): boolean {
   return !!d && d < today();
 }
