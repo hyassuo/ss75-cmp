@@ -8,11 +8,13 @@ import { useData } from "@/lib/context/DataContext";
 import { fmt, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
+import { useLang } from "@/lib/context/LangContext";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
 type Row = ItemWithRelations & { zid: string; zname: string };
 
 export function ScheduleView() {
+  const { t, tPriority } = useLang();
   const { zones, itemsByZone } = useData();
   const [horizon, setHorizon] = useState(90);
 
@@ -67,7 +69,7 @@ export function ScheduleView() {
             minWidth: 80,
           }}
         >
-          {isOd ? "OVERDUE " + -dd + "d" : "in " + dd + "d"}
+          {isOd ? `${t("statusItem.Overdue").toUpperCase()} ${-dd}d` : `${dd}d`}
         </div>
         <div
           style={{
@@ -99,7 +101,7 @@ export function ScheduleView() {
         >
           {it.priority && (
             <Badge
-              text={it.priority}
+              text={tPriority(it.priority)}
               color={PRIORITY_COLOR[it.priority]}
               sm
             />
@@ -140,9 +142,7 @@ export function ScheduleView() {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ fontSize: 12, color: DS.text3, fontWeight: 600 }}>
-          Horizon:
-        </div>
+        <div style={{ fontSize: 12, color: DS.text3, fontWeight: 600 }}>{t("sched.horizon")}</div>
         {[30, 60, 90, 180].map((h) => (
           <button
             key={h}
@@ -162,7 +162,7 @@ export function ScheduleView() {
           </button>
         ))}
         <div style={{ fontSize: 11, color: DS.text3, marginLeft: 8 }}>
-          Until {fmt(cutStr)}
+          {t("sched.until")} {fmt(cutStr)}
         </div>
       </div>
 
@@ -178,7 +178,7 @@ export function ScheduleView() {
               marginBottom: 10,
             }}
           >
-            Overdue ({overdue.length})
+            {t("sched.overdue")} ({overdue.length})
           </div>
           {overdue.map((it) => (
             <RowItem key={it.id} it={it} isOd />
@@ -198,7 +198,7 @@ export function ScheduleView() {
               marginBottom: 10,
             }}
           >
-            Due in next {horizon} days ({upcoming.length})
+            {t("sched.dueIn")} {horizon} {t("sched.days")} ({upcoming.length})
           </div>
           {upcoming.map((it) => (
             <RowItem key={it.id} it={it} isOd={false} />
@@ -216,7 +216,7 @@ export function ScheduleView() {
           }}
         >
           <div style={{ fontSize: 14, color: DS.grn, fontWeight: 600 }}>
-            No overdue or upcoming inspections within {horizon} days.
+            {t("sched.allClear", horizon)}
           </div>
         </div>
       )}
@@ -233,7 +233,7 @@ export function ScheduleView() {
               marginBottom: 10,
             }}
           >
-            Not scheduled ({noSched.length})
+            {t("sched.notScheduled")} ({noSched.length})
           </div>
           <div
             style={{ display: "flex", flexWrap: "wrap", gap: 7 }}

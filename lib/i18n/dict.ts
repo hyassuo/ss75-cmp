@@ -47,6 +47,7 @@ const en = {
   "nav.audit": "Audit Log",
   "nav.newItem": "+ New Item",
   "nav.newItemShort": "+",
+  "nav.addItem": "+ Item",
   "nav.signOut": "⏻  Sign out",
   "nav.signOutShort": "⏻",
   "nav.signOutConfirm": "Sign out?",
@@ -247,6 +248,7 @@ const pt: Translations = {
   "nav.users": "Usuários",
   "nav.audit": "Auditoria",
   "nav.newItem": "+ Novo Item",
+  "nav.addItem": "+ Item",
   "nav.signOut": "⏻  Sair",
   "nav.signOutConfirm": "Encerrar sessão?",
 

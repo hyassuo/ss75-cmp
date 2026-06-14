@@ -12,6 +12,7 @@ import { useShell } from "@/lib/context/ShellContext";
 import { isOverdue } from "@/lib/utils/format";
 import { zoneScore } from "@/lib/domain/zoneScore";
 import { integrityColor, integrityLabel } from "@/lib/domain/itemScore";
+import { useLang } from "@/lib/context/LangContext";
 
 interface Open {
   itemId: string;
@@ -20,6 +21,7 @@ interface Open {
 }
 
 export function ZonesTab() {
+  const { t, tDept, tIntegrity } = useLang();
   const { zones, itemsByZone, createItem } = useData();
   const { sysFilter } = useShell();
   const [open, setOpen] = useState<Open | null>(null);
@@ -46,8 +48,7 @@ export function ZonesTab() {
   return (
     <div>
       <div style={{ fontSize: 11, color: DS.text3, marginBottom: 16 }}>
-        {visibleZones.length} zones / {totalItems} items · Click an item to
-        edit
+        {visibleZones.length} {visibleZones.length !== 1 ? t("dash.items") : t("dash.item")} · {totalItems} items
       </div>
 
       {visibleZones.map((z) => {
@@ -102,7 +103,7 @@ export function ZonesTab() {
                     >
                       {z.name}
                     </span>
-                    <Badge text={z.system} color={DS.blu} sm />
+                    <Badge text={tDept(z.system)} color={DS.blu} sm />
                     {z.default_freq && (
                       <Badge
                         text={"DROPS: " + z.default_freq}
@@ -130,7 +131,7 @@ export function ZonesTab() {
                   >
                     <span style={{ fontSize: 10, color: DS.text3 }}>
                       {activeItems.length +
-                        (activeItems.length !== 1 ? " items" : " item")}
+                        (activeItems.length !== 1 ? " " + t("dash.items") : " " + t("dash.item"))}
                     </span>
                     {sec > 0 && (
                       <Badge text={sec + " SECE"} color={DS.red} sm />
@@ -147,7 +148,7 @@ export function ZonesTab() {
                     )}
                     {sc !== null && (
                       <Badge
-                        text={integrityLabel(sc)}
+                        text={tIntegrity(integrityLabel(sc))}
                         color={integrityColor(sc)}
                         sm
                       />
@@ -168,9 +169,7 @@ export function ZonesTab() {
                   fontWeight: 700,
                   whiteSpace: "nowrap",
                 }}
-              >
-                + Item
-              </button>
+              >{t("nav.addItem")}</button>
             </div>
             {activeItems.length > 0 && (
               <div

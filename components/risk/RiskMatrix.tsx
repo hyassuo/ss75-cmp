@@ -4,6 +4,7 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
+import { useLang } from "@/lib/context/LangContext";
 import { PROB_LABELS, CONS_LABELS, PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
@@ -14,6 +15,7 @@ function cellClr(p: number, c: number): string {
 
 export function RiskMatrix() {
   const { zones, itemsByZone } = useData();
+  const { t, tPriority, tStatus } = useLang();
   const allItems: Array<ItemWithRelations & { zoneName: string }> = zones.flatMap(
     (z) => itemsByZone(z.zid).map((i) => ({ ...i, zoneName: z.name }))
   );
@@ -30,12 +32,8 @@ export function RiskMatrix() {
             fontWeight: 600,
             marginBottom: 6,
           }}
-        >
-          No items with risk assessment
-        </div>
-        <div style={{ fontSize: 13, color: DS.text3 }}>
-          Edit items and fill in Probability and Consequence.
-        </div>
+        >{t("risk.empty.title")}</div>
+        <div style={{ fontSize: 13, color: DS.text3 }}>{t("risk.empty.hint")}</div>
       </div>
     );
   }
@@ -59,11 +57,9 @@ export function RiskMatrix() {
             fontWeight: 700,
             marginBottom: 4,
           }}
-        >
-          Risk Matrix — API 580 / DNV-RP-G101
-        </div>
+        >{t("risk.title")}</div>
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 20 }}>
-          {withRisk.length} of {allItems.length} items assessed
+          {t("risk.assessedOf", withRisk.length, allItems.length)}
         </div>
         <div style={{ overflowX: "auto" }}>
           <table
@@ -238,9 +234,7 @@ export function RiskMatrix() {
               fontWeight: 700,
               marginBottom: 14,
             }}
-          >
-            High / Critical Risk Items (RPN ≥ 8)
-          </div>
+          >{t("risk.highTitle")}</div>
           {highRisk.map((it) => {
             const rpn = (it.prob || 0) * (it.cons || 0);
             const c = rpn >= 15 ? DS.red : DS.ora;
@@ -288,14 +282,14 @@ export function RiskMatrix() {
                 >
                   {it.priority && (
                     <Badge
-                      text={it.priority}
+                      text={tPriority(it.priority)}
                       color={PRIORITY_COLOR[it.priority]}
                       sm
                     />
                   )}
                   {it.sece && <Badge text="SECE" color={DS.red} sm />}
                   <Badge
-                    text={it.status}
+                    text={tStatus(it.status)}
                     color={STATUS_COLOR[it.status] || DS.text3}
                     sm
                   />

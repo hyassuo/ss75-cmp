@@ -14,6 +14,8 @@ import { ReadingsPanel } from "@/components/items/ReadingsPanel";
 import { HistoryPanel } from "@/components/items/HistoryPanel";
 import { IfsObjectSearch } from "@/components/items/IfsObjectSearch";
 import { useData } from "@/lib/context/DataContext";
+import { useLang } from "@/lib/context/LangContext";
+import type { DictKey } from "@/lib/i18n/dict";
 import { calcPriority } from "@/lib/domain/calcPriority";
 import { calcNextInspection } from "@/lib/domain/calcNextInspection";
 import { today } from "@/lib/utils/format";
@@ -86,6 +88,7 @@ function ItemModalInner({
     addEvidence,
     deleteEvidence,
   } = useData();
+  const { t } = useLang();
 
   const [f, setF] = useState<Form>(() => ({
     name: item.name ?? "",
@@ -184,7 +187,7 @@ function ItemModalInner({
   async function save() {
     setSaving(true);
     const patch: Partial<Item> = {
-      name: f.name || "Untitled",
+      name: f.name || t("modal.untitled"),
       mechanism: f.mechanism || null,
       protection: f.protection || null,
       ifs_obj_id: f.ifs_obj_id || null,
@@ -208,7 +211,7 @@ function ItemModalInner({
   }
 
   async function remove() {
-    if (!confirm("Delete this item? This cannot be undone.")) return;
+    if (!confirm(t("common.confirmDelete"))) return;
     await deleteItem(item.id);
     onClose();
   }
@@ -241,7 +244,7 @@ function ItemModalInner({
   );
   const statusOpts = STATUSES.map((s) => ({ v: s, l: s }));
   const probOpts = [{ v: "", l: "-" }].concat(
-    PROB_LABELS.map((l, i) => ({ v: String(i + 1), l: `${i + 1} - ${l}` }))
+    PROB_LABELS.map((_l, i) => ({ v: String(i + 1), l: `${i + 1} - ${t(`prob.${i + 1}` as DictKey)}` }))
   );
   const consOpts = [{ v: "", l: "-" }].concat(
     CONS_LABELS.map((l, i) => ({ v: String(i + 1), l: `${i + 1} - ${l}` }))
@@ -274,11 +277,11 @@ function ItemModalInner({
               marginBottom: 3,
             }}
           >
-            {isNew ? "New Item - " : "Edit Item - "}
+            {isNew ? t("modal.newItem") + " " : t("modal.editItem") + " "}
             {zoneName}
           </div>
           <div style={{ fontSize: 17, fontWeight: 800, color: DS.text }}>
-            {f.name || f.ifs_obj_desc || "Untitled"}
+            {f.name || f.ifs_obj_desc || t("modal.untitled")}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -295,9 +298,7 @@ function ItemModalInner({
                 cursor: "pointer",
                 fontWeight: 700,
               }}
-            >
-              Delete
-            </button>
+            >{t("common.delete")}</button>
           )}
           <button
             onClick={() => void cancel()}
@@ -325,7 +326,7 @@ function ItemModalInner({
           minWidth: 0,
         }}
       >
-      <Section title="INSPECTION EVIDENCE" accent={DS.vio}>
+      <Section title={t("sec.evidence")} accent={DS.vio}>
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 10 }}>
           Start by adding a photo. AI analysis will auto-populate corrosion
           type, severity and suggested priority.
@@ -341,7 +342,7 @@ function ItemModalInner({
         />
       </Section>
 
-      <Section title="IDENTIFICATION" accent={DS.blu}>
+      <Section title={t("sec.identification")} accent={DS.blu}>
         <div
           style={{
             display: "grid",
@@ -350,27 +351,27 @@ function ItemModalInner({
           }}
         >
           <Input
-            label="Item Name / Tag"
+            label={t("f.itemName")}
             value={f.name}
             onChange={(v) => set("name", v)}
             placeholder="ex: Anode Row 3 Port, FR-22"
           />
           <Select
-            label="Corrosion Mechanism"
+            label={t("f.mechanism")}
             value={f.mechanism}
             onChange={(v) => set("mechanism", v)}
             options={mechOpts}
           />
         </div>
         <Select
-          label="Applied Protection"
+          label={t("f.protection")}
           value={f.protection}
           onChange={(v) => set("protection", v)}
           options={protOpts}
         />
       </Section>
 
-      <Section title="IFS OBJECT" accent={DS.grn}>
+      <Section title={t("sec.ifs")} accent={DS.grn}>
         <IfsObjectSearch
           value={ifsValue}
           onSelect={(o) =>
@@ -422,14 +423,14 @@ function ItemModalInner({
           }}
         >
           <Input
-            label="IFS Work Order"
+            label={t("f.wo")}
             value={f.ifs_wo}
             onChange={(v) => set("ifs_wo", v)}
             placeholder="ex: 320045678"
             mono
           />
           <Input
-            label="IFS Functional Location"
+            label={t("f.fl")}
             value={f.ifs_fl}
             onChange={(v) => set("ifs_fl", v)}
             placeholder="ex: UNIT/HULL/FR12/PS"
@@ -438,7 +439,7 @@ function ItemModalInner({
         </div>
       </Section>
 
-      <Section title="RISK ASSESSMENT" accent={DS.vio}>
+      <Section title={t("sec.risk")} accent={DS.vio}>
         <div
           style={{
             display: "grid",
@@ -448,7 +449,7 @@ function ItemModalInner({
           }}
         >
           <Select
-            label="Probability (1-5)"
+            label={t("f.probability")}
             value={f.prob ? String(f.prob) : ""}
             onChange={(v) =>
               recalcPriority({ prob: v ? parseInt(v, 10) : null })
@@ -456,7 +457,7 @@ function ItemModalInner({
             options={probOpts}
           />
           <Select
-            label="Consequence (1-5)"
+            label={t("f.consequence")}
             value={f.cons ? String(f.cons) : ""}
             onChange={(v) =>
               recalcPriority({ cons: v ? parseInt(v, 10) : null })
@@ -491,7 +492,7 @@ function ItemModalInner({
                 justifyContent: "center",
               }}
             >
-              {f.priority || (f.prob && f.cons ? "Calculating..." : "Set P + C")}
+              {f.priority ? t(`priority.${f.priority}`) : (f.prob && f.cons ? t("f.calculating") : t("f.setPC"))}
             </div>
           </div>
           <div>
@@ -518,7 +519,7 @@ function ItemModalInner({
             </div>
           </div>
           <Select
-            label="Status"
+            label={t("f.status")}
             value={f.status}
             onChange={(v) => set("status", v as ItemStatus)}
             options={statusOpts}
@@ -567,8 +568,7 @@ function ItemModalInner({
             <span>
               {f.ifs_obj_id
                 ? f.sece
-                  ? "YES"
-                  : "NO"
+                  ? t("sece.yes") : t("sece.no")
                 : "—"}
             </span>
             <span
@@ -578,13 +578,13 @@ function ItemModalInner({
                 color: DS.text3,
               }}
             >
-              {f.ifs_obj_id ? "from IFS" : "select an IFS Object"}
+              {f.ifs_obj_id ? t("f.seceFromIFS") : t("f.seceSelect")}
             </span>
           </div>
         </div>
       </Section>
 
-      <Section title="INSPECTION & PLANNING" accent={DS.ora}>
+      <Section title={t("sec.inspection")} accent={DS.ora}>
         <div
           style={{
             display: "grid",
@@ -594,7 +594,7 @@ function ItemModalInner({
           }}
         >
           <div>
-            <Label>Inspection Frequency</Label>
+            <Label>{t("f.frequency")}</Label>
             <select
               value={f.freq_insp ?? ""}
               onChange={(e) =>
@@ -614,7 +614,7 @@ function ItemModalInner({
             </select>
           </div>
           <div>
-            <Label>Last Inspection</Label>
+            <Label>{t("f.lastInsp")}</Label>
             <input
               type="date"
               value={f.last_insp ?? ""}
@@ -625,7 +625,7 @@ function ItemModalInner({
             />
           </div>
           <div>
-            <Label>Next Inspection (auto)</Label>
+            <Label>{t("f.nextInsp")}</Label>
             <div
               style={{
                 background: DS.sur2,
@@ -647,7 +647,7 @@ function ItemModalInner({
         </div>
       </Section>
 
-      <Section title="PIT DEPTH MEASUREMENTS (Manual Gauge)" accent={DS.ora}>
+      <Section title={t("sec.pit")} accent={DS.ora}>
         <ReadingsPanel
           readings={item.readings}
           onAdd={(r) => void addReading(item.id, r)}
@@ -658,12 +658,12 @@ function ItemModalInner({
       </Section>
 
       {!isNew && (
-        <Section title="HISTORY" accent={DS.text3}>
+        <Section title={t("sec.history")} accent={DS.text3}>
           <HistoryPanel itemId={item.id} />
         </Section>
       )}
 
-      <Section title="NOTES" accent={DS.text3}>
+      <Section title={t("sec.notes")} accent={DS.text3}>
         <Textarea
           value={f.notes}
           onChange={(v) => set("notes", v)}
@@ -711,8 +711,7 @@ function ItemModalInner({
                 {f.status === "OK" && f.resolved_at ? "✓" : "○"}
               </span>
               {f.status === "OK" && f.resolved_at
-                ? "Resolved"
-                : "Mark as Resolved"}
+                ? t("modal.resolved") : t("modal.markResolved")}
             </button>
           )}
         </div>
@@ -728,9 +727,7 @@ function ItemModalInner({
               cursor: "pointer",
               fontSize: 14,
             }}
-          >
-            Cancel
-          </button>
+          >{t("common.cancel")}</button>
           {!isReadOnly && (
             <button
               onClick={() => void save()}
@@ -747,7 +744,7 @@ function ItemModalInner({
                 opacity: saving ? 0.6 : 1,
               }}
             >
-              {saving ? "Saving…" : isNew ? "Create Item" : "Save"}
+              {saving ? t("common.saving") : isNew ? t("modal.createItem") : t("common.save")}
             </button>
           )}
         </div>

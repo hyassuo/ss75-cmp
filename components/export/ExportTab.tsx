@@ -10,6 +10,7 @@ import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
+import { useLang } from "@/lib/context/LangContext";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 function download(blob: Blob, filename: string) {
@@ -22,6 +23,7 @@ function download(blob: Blob, filename: string) {
 }
 
 export function ExportTab() {
+  const { t, tPriority, tStatus } = useLang();
   const { zones, itemsByZone } = useData();
   const [busy, setBusy] = useState<string | null>(null);
   const [includePhotos, setIncludePhotos] = useState(false);
@@ -195,12 +197,12 @@ export function ExportTab() {
         body: JSON.stringify(payload),
       });
       if (!r.ok) {
-        alert("PDF export failed.");
+        alert(t("exp.pdfFail"));
       } else {
         download(await r.blob(), `ss75-cmp_${today()}.pdf`);
       }
     } catch {
-      alert("PDF export failed.");
+      alert(t("exp.pdfFail"));
     }
     setBusy(null);
   }
@@ -221,7 +223,7 @@ export function ExportTab() {
         opacity: busy || !flat.length ? 0.6 : 1,
       }}
     >
-      {busy === key ? "Generating…" : label}
+      {busy === key ? t("common.generating") : label}
     </button>
   );
 
@@ -238,16 +240,15 @@ export function ExportTab() {
             marginBottom: 4,
           }}
         >
-          Export — {flat.length} items
+          {t("exp.title")} — {flat.length} {t("exp.itemsSuffix")}
         </div>
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 16 }}>
-          CSV (flat list) · XLSX (Items / Readings / Evidences / History) ·
-          PDF (formatted report)
+          {t("exp.format")}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {btn("Export CSV", exportCSV, "csv")}
-          {btn("Export XLSX", () => void exportXLSX(), "xlsx")}
-          {btn("Export PDF", () => void exportPDF(), "pdf")}
+          {btn(t("exp.csv"), exportCSV, "csv")}
+          {btn(t("exp.xlsx"), () => void exportXLSX(), "xlsx")}
+          {btn(t("exp.pdf"), () => void exportPDF(), "pdf")}
         </div>
         <label
           style={{
@@ -267,8 +268,7 @@ export function ExportTab() {
             disabled={busy !== null}
             style={{ cursor: "pointer" }}
           />
-          Include evidence photos in PDF (up to 4 per item — larger file,
-          slower to generate)
+          {t("exp.includePhotos")}
         </label>
       </div>
 
@@ -282,9 +282,7 @@ export function ExportTab() {
             fontWeight: 700,
             marginBottom: 14,
           }}
-        >
-          Summary Table
-        </div>
+        >{t("exp.summary")}</div>
         <div style={{ overflowX: "auto" }}>
           <table
             style={{
@@ -372,7 +370,7 @@ export function ExportTab() {
                     <td style={{ padding: "8px 10px" }}>
                       {it.priority ? (
                         <Badge
-                          text={it.priority}
+                          text={tPriority(it.priority)}
                           color={PRIORITY_COLOR[it.priority]}
                           sm
                         />
@@ -382,7 +380,7 @@ export function ExportTab() {
                     </td>
                     <td style={{ padding: "8px 10px" }}>
                       <Badge
-                        text={it.status}
+                        text={tStatus(it.status)}
                         color={STATUS_COLOR[it.status] || DS.text3}
                         sm
                       />

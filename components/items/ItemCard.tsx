@@ -2,6 +2,7 @@
 
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
+import { useLang } from "@/lib/context/LangContext";
 import { Gauge } from "@/components/ui/Gauge";
 import { fmt, isOverdue, daysUntil } from "@/lib/utils/format";
 import { itemScore } from "@/lib/domain/itemScore";
@@ -17,6 +18,7 @@ export function ItemCard({
   item: ItemWithRelations;
   onClick: () => void;
 }) {
+  const { tPriority, tStatus } = useLang();
   const sc = itemScore(item);
   const rt = calcRate(item.readings);
   const dd = daysUntil(item.next_insp);
@@ -77,12 +79,12 @@ export function ItemCard({
         >
           {item.priority && (
             <Badge
-              text={item.priority}
+              text={tPriority(item.priority)}
               color={PRIORITY_COLOR[item.priority]}
               sm
             />
           )}
-          <Badge text={eff} color={STATUS_COLOR[eff] || DS.text3} sm />
+          <Badge text={tStatus(eff)} color={STATUS_COLOR[eff] || DS.text3} sm />
           {item.sece && <Badge text="SECE" color={DS.red} sm />}
           {rt !== null && (
             <Badge
