@@ -11,11 +11,20 @@ import {
 import { createElement, type ReactNode } from "react";
 import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 const MAX_EXPORT_ITEMS = 5000;
 // Cap per item to keep PDF size sane (~250KB per jpeg => 1MB max per item).
 const MAX_PHOTOS_PER_ITEM = 4;
+// Hard ceiling on how many items can carry photos in one PDF. Without this
+// a 5000-item export with photos would trigger 20 000 storage fetches and
+// blow past the serverless function's 10s budget. Items beyond the cap
+// still appear in the PDF — they just render without thumbnails.
+const MAX_ITEMS_WITH_PHOTOS = 50;
 const PHOTO_SIGNED_URL_TTL = 60 * 10; // 10 min
+// PDF generation is expensive (especially with photos).
+const RATE_LIMIT = 6;
+const RATE_WINDOW_MS = 60_000;
 
 export const runtime = "nodejs";
 
@@ -175,13 +184,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
+  const rl = rateLimit(`pdf:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
   const data = (await request.json()) as Payload;
   if (!Array.isArray(data.items) || data.items.length > MAX_EXPORT_ITEMS) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const photosByItem = data.includePhotos
-    ? await loadPhotos(data.items.map((i) => i.id).filter(Boolean))
+  // Cap photo loading to keep storage fetches and function time bounded.
+  const idsForPhotos = data.includePhotos
+    ? data.items
+        .map((i) => i.id)
+        .filter(Boolean)
+        .slice(0, MAX_ITEMS_WITH_PHOTOS)
+    : [];
+  const photosByItem = idsForPhotos.length
+    ? await loadPhotos(idsForPhotos)
     : new Map<string, PhotoRef[]>();
 
   const zones = Array.from(new Set(data.items.map((i) => i.zid))).sort();
