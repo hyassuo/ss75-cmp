@@ -8,34 +8,38 @@ import { useData } from "@/lib/context/DataContext";
 import { useNewItem } from "@/lib/context/NewItemContext";
 import { createClient } from "@/lib/supabase/client";
 
+import type { DictKey } from "@/lib/i18n/dict";
+import { useLang } from "@/lib/context/LangContext";
+
 interface TabItem {
   tab: MainTab;
   icon: string;
-  label: string;
+  i18n: DictKey;
 }
 interface LinkItem {
   href: string;
   icon: string;
-  label: string;
+  i18n: DictKey;
 }
 
 const TABS: TabItem[] = [
-  { tab: "dashboard", icon: "▦", label: "Dashboard" },
-  { tab: "zones", icon: "☰", label: "Zones & Items" },
-  { tab: "risk", icon: "△", label: "Risk Matrix" },
-  { tab: "schedule", icon: "◷", label: "Schedule" },
-  { tab: "export", icon: "↗", label: "Export" },
+  { tab: "dashboard", icon: "▦", i18n: "nav.dashboard" },
+  { tab: "zones", icon: "☰", i18n: "nav.zones" },
+  { tab: "risk", icon: "△", i18n: "nav.risk" },
+  { tab: "schedule", icon: "◷", i18n: "nav.schedule" },
+  { tab: "export", icon: "↗", i18n: "nav.export" },
 ];
 
 const ADMIN_LINKS: LinkItem[] = [
-  { href: "/users", icon: "◉", label: "Users" },
-  { href: "/audit-log", icon: "≡", label: "Audit Log" },
+  { href: "/users", icon: "◉", i18n: "nav.users" },
+  { href: "/audit-log", icon: "≡", i18n: "nav.audit" },
 ];
 
 export function Sidebar() {
   const { sidebarCollapsed, tab, setTab } = useShell();
   const { profile } = useData();
   const { openNewItem } = useNewItem();
+  const { t } = useLang();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -50,7 +54,7 @@ export function Sidebar() {
   }
 
   async function signOut() {
-    if (!confirm("Sign out?")) return;
+    if (!confirm(t("nav.signOutConfirm"))) return;
     const supabase = createClient();
     await supabase.auth.signOut();
     router.replace("/login");
@@ -113,32 +117,34 @@ export function Sidebar() {
       }}
     >
       <div style={{ padding: "12px 0" }}>
-        {TABS.map((t) => {
-          const active = onMain && tab === t.tab;
+        {TABS.map((nav) => {
+          const active = onMain && tab === nav.tab;
+          const label = t(nav.i18n);
           return (
             <button
-              key={t.tab}
-              onClick={() => goTab(t.tab)}
-              title={collapsed ? t.label : ""}
+              key={nav.tab}
+              onClick={() => goTab(nav.tab)}
+              title={collapsed ? label : ""}
               style={itemStyle(active)}
             >
-              <span style={{ fontSize: 14, opacity: 0.85 }}>{t.icon}</span>
-              {!collapsed && <span>{t.label}</span>}
+              <span style={{ fontSize: 14, opacity: 0.85 }}>{nav.icon}</span>
+              {!collapsed && <span>{label}</span>}
             </button>
           );
         })}
         {isAdmin &&
           ADMIN_LINKS.map((n) => {
             const active = pathname === n.href;
+            const label = t(n.i18n);
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                title={collapsed ? n.label : ""}
+                title={collapsed ? label : ""}
                 style={itemStyle(active)}
               >
                 <span style={{ fontSize: 14, opacity: 0.85 }}>{n.icon}</span>
-                {!collapsed && <span>{n.label}</span>}
+                {!collapsed && <span>{label}</span>}
               </Link>
             );
           })}
@@ -170,7 +176,7 @@ export function Sidebar() {
                 cursor: "pointer",
               }}
             >
-              {collapsed ? "+" : "+ New Item"}
+              {collapsed ? "+" : t("nav.newItem")}
             </button>
           </div>
         )}
@@ -248,7 +254,7 @@ export function Sidebar() {
             gap: 6,
           }}
         >
-          {collapsed ? "⏻" : "⏻  Sign out"}
+          {collapsed ? "⏻" : t("nav.signOut")}
         </button>
       </div>
     </div>

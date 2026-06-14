@@ -6,7 +6,7 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
-import { fmt, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
@@ -167,7 +167,7 @@ export function ExportTab() {
     setBusy("pdf");
     try {
       const payload = {
-        generated: fmt(today()),
+        generated: fmtCompact(today()),
         total: flat.length,
         sece: flat.filter((i) => i.sece).length,
         critical: flat.filter((i) => i.priority === "Critical").length,
@@ -183,8 +183,8 @@ export function ExportTab() {
             priority: it.priority ?? "",
             status: it.status,
             sece: it.sece,
-            last_insp: it.last_insp ? fmt(it.last_insp) : "",
-            next_insp: it.next_insp ? fmt(it.next_insp) : "",
+            last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
+            next_insp: it.next_insp ? fmtCompact(it.next_insp) : "",
             rate: rt !== null ? rt.toFixed(3) : "",
           };
         }),
@@ -402,7 +402,7 @@ export function ExportTab() {
                         color: it.last_insp ? DS.text3 : DS.bord2,
                       }}
                     >
-                      {fmt(it.last_insp)}
+                      {fmtCompact(it.last_insp)}
                     </td>
                     <td
                       style={{
@@ -413,7 +413,7 @@ export function ExportTab() {
                       }}
                     >
                       {(isOverdue(it.next_insp) ? "! " : "") +
-                        fmt(it.next_insp)}
+                        fmtCompact(it.next_insp)}
                     </td>
                     <td
                       style={{

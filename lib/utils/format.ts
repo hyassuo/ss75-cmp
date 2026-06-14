@@ -2,6 +2,10 @@ const MONTHS_PT = [
   "jan.", "fev.", "mar.", "abr.", "mai.", "jun.",
   "jul.", "ago.", "set.", "out.", "nov.", "dez.",
 ];
+const MONTHS_EN_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
 // Brazilian long-form date — matches iOS native date input rendering.
 export function fmt(d: string | null | undefined): string {
@@ -10,6 +14,16 @@ export function fmt(d: string | null | undefined): string {
   if (parts.length < 3) return d;
   const [y, m, day] = parts;
   return `${parseInt(day, 10)} de ${MONTHS_PT[parseInt(m, 10) - 1]} de ${y}`;
+}
+
+// Compact English form for reports / tables: "22-Jun-2026".
+export function fmtCompact(d: string | null | undefined): string {
+  if (!d) return "-";
+  const parts = d.split("-");
+  if (parts.length < 3) return d;
+  const [y, m, day] = parts;
+  const dd = day.padStart(2, "0");
+  return `${dd}-${MONTHS_EN_SHORT[parseInt(m, 10) - 1]}-${y}`;
 }
 
 export function today(): string {

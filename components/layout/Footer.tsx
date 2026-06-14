@@ -1,10 +1,14 @@
+"use client";
+
 import { DS } from "@/lib/design/tokens";
+import { useLang } from "@/lib/context/LangContext";
 import pkg from "@/package.json";
 
 // Single source of truth for the displayed version. Bump package.json.
 const VERSION = (pkg as { version: string }).version;
 
 export function Footer() {
+  const { t } = useLang();
   return (
     <div
       className="ft-bar"
@@ -26,7 +30,7 @@ export function Footer() {
         className="ft-rev"
         style={{ fontSize: 9, color: DS.sbTxt2, fontFamily: DS.mono }}
       >
-        v{VERSION} · Developed by Helcio Yassuo
+        v{VERSION} · {t("footer.developedBy")}
       </div>
     </div>
   );

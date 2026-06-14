@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
+import { useLang } from "@/lib/context/LangContext";
 import { isOverdue, daysUntil } from "@/lib/utils/format";
 import {
   itemScore,
@@ -32,6 +33,7 @@ function priorityWeight(it: ItemWithRelations): number {
 export function Dashboard() {
   const { zones, itemsByZone } = useData();
   const { sysFilter, setTab } = useShell();
+  const { t, tIntegrity, tPriority } = useLang();
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
@@ -52,10 +54,10 @@ export function Dashboard() {
             marginBottom: 6,
           }}
         >
-          No items registered
+          {t("dash.noItems")}
         </div>
         <div style={{ fontSize: 13, color: DS.text3, marginBottom: 20 }}>
-          Go to Zones &amp; Items to add your first inspection item.
+          {t("dash.noItemsCta")}
         </div>
         <div
           style={{
@@ -131,26 +133,26 @@ export function Dashboard() {
     gauge?: number | null;
   }> = [
     {
-      label: "Integrity Index",
+      label: t("dash.integrityIndex"),
       v: gi !== null ? `${gi}` : "N/A",
-      sub: integrityLabel(gi),
+      sub: tIntegrity(integrityLabel(gi)),
       color: integrityColor(gi),
       gauge: gi,
     },
     {
-      label: "Inspection Compliance",
+      label: t("dash.inspectionCompliance"),
       v: compliance + "%",
-      sub: `${withInsp}/${total} inspected`,
+      sub: `${withInsp}/${total} ${t("dash.inspected")}`,
       color: compliance >= 80 ? DS.grn : compliance >= 60 ? DS.yel : DS.red,
     },
     {
-      label: "Schedule Compliance",
+      label: t("dash.scheduleCompliance"),
       v: schedC + "%",
-      sub: `${overdue} overdue / ${due30} due in 30d`,
+      sub: t("dash.overdueDue30", overdue, due30),
       color: schedC >= 90 ? DS.grn : schedC >= 70 ? DS.yel : DS.red,
     },
     {
-      label: "SECE OK",
+      label: t("dash.seceOk"),
       v:
         (seceItems.length
           ? Math.round((seceOK / seceItems.length) * 100)
@@ -159,12 +161,12 @@ export function Dashboard() {
       color: DS.red,
     },
     {
-      label: "Critical Items OK",
+      label: t("dash.criticalItemsOk"),
       v:
         (critItems.length
           ? Math.round((critOK / critItems.length) * 100)
           : 100) + "%",
-      sub: `${critOK}/${critItems.length} critical`,
+      sub: `${critOK}/${critItems.length} ${t("priority.Critical").toLowerCase()}`,
       color: DS.ora,
     },
   ];
@@ -230,9 +232,9 @@ export function Dashboard() {
             marginBottom: 12,
           }}
         >
-          Integrity Index by Zone{" "}
+          {t("dash.byZone")}{" "}
           <span style={{ fontSize: 9, fontWeight: 400 }}>
-            weighted: priority x SECE
+            {t("dash.weightedNote")}
           </span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -292,11 +294,11 @@ export function Dashboard() {
                   >
                     {sc !== null ? sc : "-"}
                   </span>
-                  <Badge text={integrityLabel(sc)} color={c} sm />
+                  <Badge text={tIntegrity(integrityLabel(sc))} color={c} sm />
                   <span
                     style={{ fontSize: 10, color: DS.text3, flexShrink: 0 }}
                   >
-                    {items.length + (items.length !== 1 ? " items" : " item")}
+                    {items.length} {items.length !== 1 ? t("dash.items") : t("dash.item")}
                     {items.length < 2 ? " *" : ""}
                   </span>
                 </div>
@@ -324,7 +326,7 @@ export function Dashboard() {
           })}
         </div>
         <div style={{ fontSize: 9, color: DS.bord2, marginTop: 10 }}>
-          * needs 2+ items to calculate index
+          * {t("dash.needsTwo")}
         </div>
       </div>
 
@@ -350,7 +352,7 @@ export function Dashboard() {
                       marginBottom: 2,
                     }}
                   >
-                    {p}
+                    {tPriority(p)}
                   </div>
                   <div
                     style={{
@@ -369,7 +371,7 @@ export function Dashboard() {
                         marginLeft: 4,
                       }}
                     >
-                      items
+                      {t("dash.items")}
                     </span>
                   </div>
                   <div style={{ fontSize: 10, color: DS.text3 }}>

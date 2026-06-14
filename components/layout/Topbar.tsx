@@ -5,6 +5,7 @@ import { fmtShort, today, isOverdue } from "@/lib/utils/format";
 import { SYSTEMS } from "@/lib/utils/constants";
 import { useShell } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
+import { useLang } from "@/lib/context/LangContext";
 
 // Subtle band tones for the two-tone header.
 const TOP_BAND = DS.sbBg; // #2c3e52
@@ -14,6 +15,7 @@ export function Topbar() {
   const { toggleSidebar, sidebarCollapsed, sysFilter, setSysFilter } =
     useShell();
   const { allItems } = useData();
+  const { t, tDept, lang, setLang } = useLang();
 
   const overdue = allItems.filter((i) => isOverdue(i.next_insp));
   const degraded = overdue.some((i) => i.sece);
@@ -28,10 +30,10 @@ export function Topbar() {
       ? DS.oraBord
       : DS.grnBord;
   const chipText = degraded
-    ? "DEGRADED"
+    ? t("status.degraded")
     : attention
-      ? "ATTENTION"
-      : "HEALTHY";
+      ? t("status.attention")
+      : t("status.healthy");
 
   return (
     <div
@@ -45,7 +47,7 @@ export function Topbar() {
     >
       {/* ── Top band: title block ─────────────────────────────────────────── */}
       <div className="tb-band-top" style={{ background: TOP_BAND }}>
-        {/* Row 1 — hamburger + title + status (never wraps; title truncates) */}
+        {/* Row 1 — hamburger + title + status */}
         <div className="tb-row1">
           <div className="tb-left">
             <button
@@ -77,56 +79,102 @@ export function Topbar() {
               className="tb-title"
               style={{ color: DS.sbTxt, fontFamily: DS.sans }}
             >
-              Corrosion Management Plan
+              {t("header.title")}
             </div>
           </div>
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 6,
-              background: chipBg,
-              border: "1px solid " + chipBord,
-              borderRadius: 8,
-              padding: "4px 10px",
+              gap: 8,
               flexShrink: 0,
             }}
           >
+            {/* Language toggle (EN | PT) */}
             <div
+              role="group"
+              aria-label="Language"
               style={{
-                width: 7,
-                height: 7,
-                borderRadius: "50%",
-                background: chipColor,
-                animation: "pulse-att 1.8s infinite",
-              }}
-            />
-            {!healthy && (
-              <span
-                className="tb-chip-extra"
-                aria-hidden
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1,
-                  color: chipColor,
-                  fontWeight: 800,
-                }}
-              >
-                ⚡
-              </span>
-            )}
-            <span
-              className="tb-chip-extra"
-              style={{
-                fontSize: 10,
-                fontWeight: 800,
-                fontFamily: DS.mono,
-                letterSpacing: 0.8,
-                color: chipColor,
+                display: "inline-flex",
+                background: "rgba(0,0,0,0.22)",
+                border: "1px solid " + DS.sbBord,
+                borderRadius: 6,
+                padding: 2,
+                gap: 0,
               }}
             >
-              {chipText}
-            </span>
+              {(["en", "pt"] as const).map((l) => {
+                const active = lang === l;
+                return (
+                  <button
+                    key={l}
+                    onClick={() => setLang(l)}
+                    aria-pressed={active}
+                    style={{
+                      background: active ? "#3b5570" : "transparent",
+                      color: active ? "#ffffff" : DS.sbTxt2,
+                      border: "none",
+                      borderRadius: 4,
+                      padding: "3px 8px",
+                      fontSize: 10,
+                      fontWeight: 700,
+                      fontFamily: DS.mono,
+                      letterSpacing: 0.6,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {l.toUpperCase()}
+                  </button>
+                );
+              })}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                background: chipBg,
+                border: "1px solid " + chipBord,
+                borderRadius: 8,
+                padding: "4px 10px",
+              }}
+            >
+              <div
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: "50%",
+                  background: chipColor,
+                  animation: "pulse-att 1.8s infinite",
+                }}
+              />
+              {!healthy && (
+                <span
+                  className="tb-chip-extra"
+                  aria-hidden
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 1,
+                    color: chipColor,
+                    fontWeight: 800,
+                  }}
+                >
+                  ⚡
+                </span>
+              )}
+              <span
+                className="tb-chip-extra"
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  fontFamily: DS.mono,
+                  letterSpacing: 0.8,
+                  color: chipColor,
+                }}
+              >
+                {chipText}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -172,7 +220,7 @@ export function Topbar() {
             flexShrink: 0,
           }}
         >
-          Departments:
+          {t("header.departments")}
         </span>
         <div
           role="group"
@@ -199,7 +247,7 @@ export function Topbar() {
                   transition: DS.transition,
                 }}
               >
-                {s}
+                {tDept(s)}
               </button>
             );
           })}

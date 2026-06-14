@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
+// useLang is consumed by descendants; AppShell itself only needs the
+// providers ready. Nothing direct to render here yet.
 import { Topbar } from "@/components/layout/Topbar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";

@@ -5,6 +5,7 @@ import { fmt, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate } from "@/lib/domain/calcRate";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
+import { useLang } from "@/lib/context/LangContext";
 
 interface Alert {
   t: "danger" | "warn";
@@ -14,6 +15,7 @@ interface Alert {
 export function AlertBar() {
   const { zones, itemsByZone } = useData();
   const { sysFilter } = useShell();
+  const { t } = useLang();
 
   const visibleZones =
     sysFilter === "All"
@@ -27,26 +29,26 @@ export function AlertBar() {
       if (isOverdue(it.next_insp)) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: inspection OVERDUE since ${fmt(it.next_insp)}`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.overdueSince")} ${fmt(it.next_insp)}`,
         });
       }
       const dd = daysUntil(it.next_insp);
       if (dd !== null && dd >= 0 && dd <= 30) {
         alerts.push({
           t: "warn",
-          msg: `${z.zid} | ${it.name}: inspection due in ${dd} days`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.dueIn")} ${dd} ${t("alert.days")}`,
         });
       }
       const rt = calcRate(it.readings);
       if (rt !== null && rt > 0.5) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: critical corrosion rate ${rt.toFixed(3)} mm/yr`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${rt.toFixed(3)} mm/yr`,
         });
       } else if (rt !== null && rt > 0.2) {
         alerts.push({
           t: "warn",
-          msg: `${z.zid} | ${it.name}: elevated corrosion rate ${rt.toFixed(3)} mm/yr`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${rt.toFixed(3)} mm/yr`,
         });
       }
     }
@@ -79,7 +81,7 @@ export function AlertBar() {
       >
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: DS.red }}>
-            Active Alerts
+            {t("alert.title")}
           </span>
           {danger > 0 && (
             <span
@@ -95,7 +97,7 @@ export function AlertBar() {
                 alignItems: "center",
               }}
             >
-              {danger} critical
+              {danger} {t("alert.critical")}
             </span>
           )}
           {warn > 0 && (
@@ -112,12 +114,12 @@ export function AlertBar() {
                 alignItems: "center",
               }}
             >
-              {warn} warning
+              {warn} {t("alert.warning")}
             </span>
           )}
         </div>
         <span style={{ fontSize: 11, color: DS.text3 }}>
-          {alerts.length} total
+          {alerts.length} {t("alert.total")}
         </span>
       </div>
       <div style={{ maxHeight: 200, overflowY: "auto" }}>
