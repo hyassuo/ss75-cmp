@@ -85,9 +85,10 @@ export async function POST(request: Request) {
     try {
       return NextResponse.json(JSON.parse(clean));
     } catch {
-      console.error("[ai/analyze-photo] parse failed:", clean.slice(0, 500));
+      console.error("[ai/analyze-photo] parse failed:", clean.slice(0, 1000));
+      const preview = clean.slice(0, 300) || "(empty response)";
       return NextResponse.json(
-        { error: "Could not parse AI response." },
+        { error: `Could not parse AI response. Raw: ${preview}` },
         { status: 502 }
       );
     }

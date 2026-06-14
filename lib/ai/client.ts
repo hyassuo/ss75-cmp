@@ -49,6 +49,10 @@ export async function aiGenerate(req: AiRequest): Promise<string> {
     generationConfig: {
       maxOutputTokens: req.maxTokens,
       temperature: 0,
+      // 2.5-flash enables "thinking" by default and burns the token budget
+      // on reasoning before emitting output — for our structured triage we
+      // just want the JSON, so disable it.
+      thinkingConfig: { thinkingBudget: 0 },
       ...(req.json ? { responseMimeType: "application/json" } : {}),
     },
   };
