@@ -207,10 +207,11 @@ export function ExportTab() {
     setBusy(null);
   }
 
-  const btn = (label: string, onClick: () => void, key: string) => (
+  const btn = (longLabel: string, shortLabel: string, onClick: () => void, key: string) => (
     <button
       onClick={onClick}
       disabled={busy !== null || !flat.length}
+      className="exp-btn"
       style={{
         background: DS.blu,
         color: "#fff",
@@ -221,9 +222,17 @@ export function ExportTab() {
         cursor: busy || !flat.length ? "default" : "pointer",
         fontSize: 13,
         opacity: busy || !flat.length ? 0.6 : 1,
+        whiteSpace: "nowrap",
       }}
     >
-      {busy === key ? t("common.generating") : label}
+      {busy === key ? (
+        t("common.generating")
+      ) : (
+        <>
+          <span className="exp-btn-long">{longLabel}</span>
+          <span className="exp-btn-short">{shortLabel}</span>
+        </>
+      )}
     </button>
   );
 
@@ -245,10 +254,10 @@ export function ExportTab() {
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 16 }}>
           {t("exp.format")}
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {btn(t("exp.csv"), exportCSV, "csv")}
-          {btn(t("exp.xlsx"), () => void exportXLSX(), "xlsx")}
-          {btn(t("exp.pdf"), () => void exportPDF(), "pdf")}
+        <div className="exp-btn-row">
+          {btn(t("exp.csv"), "CSV", exportCSV, "csv")}
+          {btn(t("exp.xlsx"), "XLSX", () => void exportXLSX(), "xlsx")}
+          {btn(t("exp.pdf"), "PDF", () => void exportPDF(), "pdf")}
         </div>
         <label
           style={{

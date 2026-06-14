@@ -5,7 +5,8 @@ import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
-import { PROB_LABELS, CONS_LABELS, PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
+import type { DictKey } from "@/lib/i18n/dict";
+import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
 function cellClr(p: number, c: number): string {
@@ -58,8 +59,114 @@ export function RiskMatrix() {
             marginBottom: 4,
           }}
         >{t("risk.title")}</div>
-        <div style={{ fontSize: 12, color: DS.text3, marginBottom: 20 }}>
-          {t("risk.assessedOf", withRisk.length, allItems.length)}
+        <div
+          style={{
+            fontSize: 12,
+            color: DS.text3,
+            marginBottom: 12,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span>{t("risk.assessedOf", withRisk.length, allItems.length)}</span>
+          <details style={{ fontSize: 11 }}>
+            <summary
+              style={{
+                cursor: "pointer",
+                color: DS.blu,
+                listStyle: "none",
+                userSelect: "none",
+              }}
+            >
+              ⓘ {t("risk.legend")}
+            </summary>
+            <div
+              style={{
+                marginTop: 8,
+                padding: 12,
+                background: DS.sur2,
+                border: "1px solid " + DS.bord,
+                borderRadius: 8,
+                minWidth: 260,
+                maxWidth: 360,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: DS.text3,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  marginBottom: 6,
+                }}
+              >
+                {t("f.probability")}
+              </div>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div
+                  key={`p${n}`}
+                  style={{
+                    fontSize: 11,
+                    color: DS.text2,
+                    marginBottom: 3,
+                    display: "flex",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontWeight: 800,
+                      minWidth: 14,
+                    }}
+                  >
+                    {n}
+                  </span>
+                  <span>{t(`prob.${n}` as DictKey)}</span>
+                </div>
+              ))}
+              <div
+                style={{
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: DS.text3,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  marginTop: 10,
+                  marginBottom: 6,
+                }}
+              >
+                {t("f.consequence")}
+              </div>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div
+                  key={`c${n}`}
+                  style={{
+                    fontSize: 11,
+                    color: DS.text2,
+                    marginBottom: 3,
+                    display: "flex",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontWeight: 800,
+                      minWidth: 14,
+                    }}
+                  >
+                    {n}
+                  </span>
+                  <span>{t(`cons.${n}` as DictKey)}</span>
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table
@@ -82,7 +189,7 @@ export function RiskMatrix() {
                 >
                   Prob / Cons
                 </th>
-                {CONS_LABELS.map((l, i) => (
+                {[1, 2, 3, 4, 5].map((i) => (
                   <th
                     key={i}
                     style={{
@@ -100,9 +207,8 @@ export function RiskMatrix() {
                         marginBottom: 2,
                       }}
                     >
-                      {i + 1}
+                      {i}
                     </div>
-                    <div style={{ fontWeight: 400, fontSize: 9 }}>{l}</div>
                   </th>
                 ))}
               </tr>
@@ -124,7 +230,6 @@ export function RiskMatrix() {
                     >
                       {p}
                     </div>
-                    <div style={{ fontSize: 8 }}>{PROB_LABELS[p - 1]}</div>
                   </td>
                   {[1, 2, 3, 4, 5].map((c) => {
                     const clr = cellClr(p, c);

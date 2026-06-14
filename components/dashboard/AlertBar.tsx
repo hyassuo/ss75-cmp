@@ -74,6 +74,8 @@ export function AlertBar() {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          gap: 12,
+          flexWrap: "wrap",
           padding: "10px 14px",
           background: DS.redBg,
           borderBottom: "1px solid " + DS.redBord,
@@ -118,7 +120,7 @@ export function AlertBar() {
             </span>
           )}
         </div>
-        <span style={{ fontSize: 11, color: DS.text3 }}>
+        <span style={{ fontSize: 11, color: DS.text3, marginLeft: 8 }}>
           {alerts.length} {t("alert.total")}
         </span>
       </div>

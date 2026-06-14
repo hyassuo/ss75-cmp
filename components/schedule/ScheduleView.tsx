@@ -69,7 +69,7 @@ export function ScheduleView() {
             minWidth: 80,
           }}
         >
-          {isOd ? `${t("statusItem.Overdue").toUpperCase()} ${-dd}d` : `${dd}d`}
+          {isOd ? `-${-dd}d` : `${dd}d`}
         </div>
         <div
           style={{

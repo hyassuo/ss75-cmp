@@ -176,6 +176,12 @@ const en = {
   "prob.3": "Has occurred in the Company",
   "prob.4": "Multiple occurrences per year in the Company",
   "prob.5": "Multiple occurrences per year at the Facility",
+  "cons.1": "Insignificant",
+  "cons.2": "Minor",
+  "cons.3": "Moderate",
+  "cons.4": "Serious",
+  "cons.5": "Critical",
+  "risk.legend": "Legend",
 
   // SECE display
   "sece.yes": "YES",
@@ -377,6 +383,12 @@ const pt: Translations = {
   "prob.3": "Já ocorreu na Empresa",
   "prob.4": "Múltiplas ocorrências por ano na Empresa",
   "prob.5": "Múltiplas ocorrências por ano na Unidade",
+  "cons.1": "Insignificante",
+  "cons.2": "Menor",
+  "cons.3": "Moderada",
+  "cons.4": "Séria",
+  "cons.5": "Crítica",
+  "risk.legend": "Legenda",
 
   // SECE
   "sece.yes": "SIM",
