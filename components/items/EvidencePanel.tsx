@@ -200,6 +200,7 @@ export function EvidencePanel({
                 cursor: "pointer",
                 textAlign: "left",
                 flex: 1,
+                minWidth: 0,
                 fontWeight: file ? 600 : 400,
                 fontSize: 12,
                 overflow: "hidden",
@@ -208,6 +209,34 @@ export function EvidencePanel({
               }}
             >
               {file ? file.name : t("f.choose")}
+            </button>
+            <button
+              onClick={() => void runAI()}
+              disabled={!b64 || aiLoading}
+              title={t("f.analyse")}
+              style={{
+                background: b64 && !aiLoading ? DS.vio : "transparent",
+                color: b64 && !aiLoading ? "#fff" : DS.text3,
+                border:
+                  "1px solid " + (b64 && !aiLoading ? DS.vio : DS.bord),
+                borderRadius: 7,
+                padding: "9px 14px",
+                fontWeight: 700,
+                cursor: b64 && !aiLoading ? "pointer" : "default",
+                fontSize: 13,
+                fontFamily: DS.sans,
+                transition: DS.transition,
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              {aiLoading ? <Spinner size={12} /> : <span>🔍</span>}
+              <span className="ai-btn-label">
+                {aiLoading ? t("f.analysing") : "AI"}
+              </span>
             </button>
             <button
               onClick={() => void add()}
@@ -229,39 +258,13 @@ export function EvidencePanel({
               {uploading ? t("common.saving") : t("common.add")}
             </button>
           </div>
-          <div style={{ marginTop: 8 }}>
-            <button
-              onClick={() => void runAI()}
-              disabled={!b64 || aiLoading}
-              style={{
-                background: b64 && !aiLoading ? DS.vio : "transparent",
-                color: b64 && !aiLoading ? "#fff" : DS.text3,
-                border:
-                  "1px solid " + (b64 && !aiLoading ? DS.vio : DS.bord),
-                borderRadius: 7,
-                padding: "7px 16px",
-                fontWeight: 700,
-                cursor: b64 && !aiLoading ? "pointer" : "default",
-                fontSize: 12,
-                fontFamily: DS.sans,
-                transition: DS.transition,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              {aiLoading && <Spinner size={12} />}
-              {aiLoading ? t("f.analysing") : t("f.analyse")}
-            </button>
-            {compressInfo && (
-              <div style={{ fontSize: 10, color: DS.grn, marginTop: 4 }}>
-                {compressInfo}
-              </div>
-            )}
-            <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
-              {b64
-                ? t("f.imageReady") : t("f.uploadFirst")}
+          {compressInfo && (
+            <div style={{ fontSize: 10, color: DS.grn, marginTop: 6 }}>
+              {compressInfo}
             </div>
+          )}
+          <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
+            {b64 ? t("f.imageReady") : t("f.uploadFirst")}
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
