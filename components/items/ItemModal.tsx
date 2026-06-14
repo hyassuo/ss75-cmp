@@ -546,41 +546,40 @@ function ItemModalInner({
         </div>
         <div>
           <Label>SECE (Safety &amp; Environmental Critical Element)</Label>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={() => recalcPriority({ sece: true })}
+          {/* Auto-populated from the IFS Equipment Register. Not editable —
+              select an IFS Object above and the flag flows from there. */}
+          <div
+            style={{
+              background: f.sece ? DS.redBg : DS.sur2,
+              border:
+                "1px solid " + (f.sece ? DS.redBord : DS.bord),
+              color: f.sece ? DS.red : DS.text3,
+              borderRadius: 6,
+              padding: "9px 12px",
+              fontSize: 12,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <span>
+              {f.ifs_obj_id
+                ? f.sece
+                  ? "YES"
+                  : "NO"
+                : "—"}
+            </span>
+            <span
               style={{
-                flex: 1,
-                background: f.sece ? DS.redBg : DS.sur2,
-                color: f.sece ? DS.red : DS.text3,
-                border:
-                  "1px solid " + (f.sece ? DS.redBord : DS.bord),
-                borderRadius: 6,
-                padding: "7px 0",
-                fontSize: 12,
-                cursor: "pointer",
-                fontWeight: 700,
+                fontSize: 10,
+                fontWeight: 500,
+                color: DS.text3,
               }}
             >
-              YES
-            </button>
-            <button
-              onClick={() => recalcPriority({ sece: false })}
-              style={{
-                flex: 1,
-                background: !f.sece ? DS.grnBg : DS.sur2,
-                color: !f.sece ? DS.grn : DS.text3,
-                border:
-                  "1px solid " + (!f.sece ? DS.grnBord : DS.bord),
-                borderRadius: 6,
-                padding: "7px 0",
-                fontSize: 12,
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >
-              NO
-            </button>
+              {f.ifs_obj_id ? "from IFS" : "select an IFS Object"}
+            </span>
           </div>
         </div>
       </Section>

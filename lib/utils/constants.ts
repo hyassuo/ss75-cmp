@@ -21,16 +21,16 @@ export const STATUS_COLOR: Record<EffectiveStatus, string> = {
 };
 
 export const MECHANISMS: string[] = [
-  "Galvanic Corrosion",
+  "Atmospheric Corrosion",
   "CO2 Corrosion (Sweet)",
+  "Corrosion Fatigue",
+  "Crevice Corrosion",
+  "Erosion-Corrosion",
+  "Galvanic Corrosion",
   "H2S Corrosion (Sour Service)",
   "MIC (Microbiologically Influenced)",
-  "Erosion-Corrosion",
-  "Crevice Corrosion",
-  "Corrosion Fatigue",
-  "Atmospheric Corrosion",
-  "Uniform Corrosion",
   "Pitting Corrosion",
+  "Uniform Corrosion",
 ];
 
 export const PROTECTIONS: string[] = [
@@ -61,12 +61,14 @@ export const INSPECTION_METHODS: string[] = [
   "Other",
 ];
 
+// Per the SS-75 Risk Matrix (MSC_2123.0_A) — probability of an event of this
+// severity occurring at the facility / company / industry level.
 export const PROB_LABELS = [
-  "Improbable",
-  "Remote",
-  "Occasional",
-  "Probable",
-  "Frequent",
+  "Never occurred in the Industry",
+  "Has occurred in the Industry",
+  "Has occurred in the Company",
+  "Multiple occurrences per year in the Company",
+  "Multiple occurrences per year at the Facility",
 ];
 
 export const CONS_LABELS = [
