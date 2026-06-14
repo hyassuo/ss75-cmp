@@ -24,6 +24,7 @@ function download(blob: Blob, filename: string) {
 export function ExportTab() {
   const { zones, itemsByZone } = useData();
   const [busy, setBusy] = useState<string | null>(null);
+  const [includePhotos, setIncludePhotos] = useState(false);
 
   const flat = zones.flatMap((z) =>
     itemsByZone(z.zid).map((i) => ({
@@ -170,9 +171,11 @@ export function ExportTab() {
         total: flat.length,
         sece: flat.filter((i) => i.sece).length,
         critical: flat.filter((i) => i.priority === "Critical").length,
+        includePhotos,
         items: flat.map((it) => {
           const rt = calcRate(it.readings);
           return {
+            id: it.id,
             zid: it.zid,
             zname: it.zname,
             name: it.name,
@@ -246,6 +249,27 @@ export function ExportTab() {
           {btn("Export XLSX", () => void exportXLSX(), "xlsx")}
           {btn("Export PDF", () => void exportPDF(), "pdf")}
         </div>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 12,
+            fontSize: 12,
+            color: DS.text2,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={includePhotos}
+            onChange={(e) => setIncludePhotos(e.target.checked)}
+            disabled={busy !== null}
+            style={{ cursor: "pointer" }}
+          />
+          Include evidence photos in PDF (up to 4 per item — larger file,
+          slower to generate)
+        </label>
       </div>
 
       <div style={S.card}>
