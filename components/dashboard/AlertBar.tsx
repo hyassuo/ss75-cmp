@@ -75,13 +75,25 @@ export function AlertBar() {
           justifyContent: "space-between",
           alignItems: "center",
           gap: 12,
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
           padding: "10px 14px",
           background: DS.redBg,
           borderBottom: "1px solid " + DS.redBord,
         }}
       >
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        {/* Left: title + count pills. Inner wrap allows the pills to drop
+            to a second line on narrow screens without pushing "X total" off
+            of the top line. min-width:0 lets this flex item shrink. */}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+            minWidth: 0,
+            flex: 1,
+          }}
+        >
           <span style={{ fontSize: 13, fontWeight: 700, color: DS.red }}>
             {t("alert.title")}
           </span>
@@ -120,7 +132,16 @@ export function AlertBar() {
             </span>
           )}
         </div>
-        <span style={{ fontSize: 11, color: DS.text3, marginLeft: 8 }}>
+        <span
+          style={{
+            fontSize: 11,
+            color: DS.text3,
+            marginLeft: 8,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+            alignSelf: "flex-start",
+          }}
+        >
           {alerts.length} {t("alert.total")}
         </span>
       </div>

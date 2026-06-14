@@ -92,13 +92,20 @@ body {
   .modal-overlay {
     padding: 0;
     align-items: stretch;
+    /* Opaque on mobile so the underlying app doesn't peek through if the
+       modal card is shorter than the viewport. */
+    background: var(--ds-bg);
   }
   .modal-card {
     border-radius: 0;
     border: none;
     margin-bottom: 0;
     padding: 16px;
-    min-height: 100%;
+    /* Force the card to always cover at least the visible viewport so the
+       white surface continues even when the user scrolls past the form
+       end. 100dvh handles iOS browser-chrome variation. */
+    min-height: 100dvh;
+    box-sizing: border-box;
   }
 }
 
