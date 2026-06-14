@@ -1,15 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
-// useLang is consumed by descendants; AppShell itself only needs the
-// providers ready. Nothing direct to render here yet.
 import { Topbar } from "@/components/layout/Topbar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { AlertBar } from "@/components/dashboard/AlertBar";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
+import { IdleLogout, DeployLogout } from "@/components/layout/SessionGuards";
 import { NewItemProvider } from "@/lib/context/NewItemContext";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
@@ -18,6 +17,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { loading, error } = useData();
   const { tab } = useShell();
   const pathname = usePathname();
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Reset the content scroll to the top whenever the user changes tab or
+  // route. Otherwise jumping from a long scrolled Zones view to Dashboard
+  // would leave them mid-page.
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [tab, pathname]);
 
   // The alert bar is only relevant in the operational tabs. Suppress it on
   // admin/reporting surfaces so it doesn't follow the user into Users,
@@ -28,6 +35,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <NewItemProvider>
+      <IdleLogout />
+      <DeployLogout />
       <div
         style={{
           // position:fixed/inset:0 anchors to the *visible* viewport on iOS
@@ -54,6 +63,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Sidebar />
           <div
+            ref={scrollRef}
             style={{
               flex: 1,
               overflowY: "auto",

@@ -179,19 +179,36 @@ export function EvidencePanel({
         <div style={{ marginBottom: 10 }}>
           <Label>{t("f.photoEv")}</Label>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+            {/* Native file input is hidden — the styled button below opens
+                it. Browsers render <input type="file"> inconsistently and
+                we want a single button-shaped target that matches the rest
+                of the design system. */}
             <input
               ref={fileRef}
               type="file"
               accept="image/*,.pdf"
               onChange={handleFile}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
               style={{
                 ...S.inp,
-                padding: "6px 10px",
-                fontSize: 11,
-                color: DS.text3,
+                background: DS.sur,
+                color: file ? DS.text : DS.text3,
+                cursor: "pointer",
+                textAlign: "left",
                 flex: 1,
+                fontWeight: file ? 600 : 400,
+                fontSize: 12,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
               }}
-            />
+            >
+              {file ? file.name : t("f.choose")}
+            </button>
             <button
               onClick={() => void add()}
               disabled={uploading}

@@ -5,7 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 
 const MAX_QUERY_LENGTH = 80;
-const RESULT_LIMIT = 20;
+const RESULT_LIMIT = 25;
+// Fetch a wider candidate set, then rank by relevance and trim to
+// RESULT_LIMIT so the most likely matches always surface first.
+const CANDIDATE_LIMIT = 200;
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {
@@ -38,8 +41,7 @@ export async function POST(request: Request) {
     .from("ifs_objects")
     .select("id, description, sece")
     .or(`id.ilike.${pattern},description.ilike.${pattern}`)
-    .order("id")
-    .limit(RESULT_LIMIT);
+    .limit(CANDIDATE_LIMIT);
 
   if (error) {
     return NextResponse.json(
@@ -48,8 +50,31 @@ export async function POST(request: Request) {
     );
   }
 
-  // Shape the response to what the autocomplete component expects.
-  const results = (data ?? []).map((r) => ({
+  // Rank: exact id match > id startsWith > description startsWith >
+  // description contains (with shorter descriptions favoured as more
+  // specific). Without this, ORDER BY id alone buries obvious hits.
+  const lcTerm = escaped.toLowerCase();
+  const score = (row: { id: string; description: string }) => {
+    const id = row.id.toLowerCase();
+    const desc = row.description.toLowerCase();
+    if (id === lcTerm) return 0;
+    if (id.startsWith(lcTerm)) return 1;
+    if (desc.startsWith(lcTerm)) return 2;
+    if (id.includes(lcTerm)) return 3;
+    return 4;
+  };
+  const ranked = (data ?? [])
+    .map((r) => ({ r, s: score(r) }))
+    .sort(
+      (a, b) =>
+        a.s - b.s ||
+        a.r.description.length - b.r.description.length ||
+        a.r.id.localeCompare(b.r.id)
+    )
+    .slice(0, RESULT_LIMIT)
+    .map((x) => x.r);
+
+  const results = ranked.map((r) => ({
     id: r.id,
     desc: r.description,
     sece: r.sece,

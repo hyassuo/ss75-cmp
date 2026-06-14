@@ -286,6 +286,7 @@ const en = {
   "tbl.inspector": "Inspector",
   "f.aiAnalysing": "AI is analysing the photo...",
   "f.optimised": "Optimised",
+  "f.choose": "Choose file…",
 } satisfies DictMap;
 
 type Key = keyof typeof en;
@@ -550,6 +551,7 @@ const pt: Translations = {
   "tbl.inspector": "Inspetor",
   "f.aiAnalysing": "IA analisando a foto...",
   "f.optimised": "Otimizada",
+  "f.choose": "Escolher arquivo…",
 };
 
 const dicts: Record<Lang, Translations> = { en, pt };
