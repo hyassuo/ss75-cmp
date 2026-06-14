@@ -54,20 +54,29 @@ export function IdleLogout() {
 }
 
 /**
- * Compares the build version stored in localStorage against the current
- * package.json version (which is bumped on every commit/release). When
- * they differ — i.e. a new build is live — the session is invalidated so
- * users come back through /login with the fresh app shell.
+ * Forces a re-login when the app's MAJOR.MINOR version changes.
  *
- * Skips on the very first visit (no previous value), since logging out a
- * user who just signed in would be hostile.
+ * Patch bumps (1.2.2 → 1.2.3) are silent — daily polish / bug-fix
+ * deploys shouldn't bounce users to /login mid-session and produce the
+ * "flash of dashboard then redirect" effect they were seeing.
+ *
+ * Minor or major bumps (1.2.x → 1.3.0, or 1.x → 2.0.0) do force a
+ * fresh login, because those tend to ship schema/contract changes or
+ * meaningful UI shifts where starting clean is the safe default.
+ *
+ * First-ever visit is exempt so newly-signed-in users aren't bounced.
  */
+function majorMinor(v: string): string {
+  const parts = v.split(".");
+  return `${parts[0] ?? "0"}.${parts[1] ?? "0"}`;
+}
+
 export function DeployLogout() {
   useEffect(() => {
     try {
       const last = window.localStorage.getItem(VERSION_KEY);
       window.localStorage.setItem(VERSION_KEY, APP_VERSION);
-      if (last && last !== APP_VERSION) {
+      if (last && majorMinor(last) !== majorMinor(APP_VERSION)) {
         void forceSignOut(true);
       }
     } catch {
