@@ -54,6 +54,20 @@ export function AIResultCard({ result: r, onApply }: Props) {
       >
         AI Corrosion Analysis Result
       </div>
+      {r.componentName && (
+        <div
+          style={{
+            fontSize: 13,
+            color: DS.text,
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ color: DS.text3, fontSize: 10, marginRight: 6 }}>
+            COMPONENT
+          </span>
+          <span style={{ fontWeight: 700 }}>{r.componentName}</span>
+        </div>
+      )}
       <div
         style={{
           display: "grid",

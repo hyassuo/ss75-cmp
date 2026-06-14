@@ -175,6 +175,15 @@ function ItemModalInner({
       if (r.corrosionType && mechMap[r.corrosionType]) {
         next.mechanism = mechMap[r.corrosionType];
       }
+      // Only fill the name when the user hasn't typed one — don't overwrite
+      // a manual entry. "Unknown" from the AI is ignored.
+      if (
+        !next.name.trim() &&
+        r.componentName &&
+        r.componentName.toLowerCase() !== "unknown"
+      ) {
+        next.name = r.componentName;
+      }
       // Set the inputs to the risk matrix and let calcPriority derive the
       // priority — the AI never chooses the priority directly.
       if (r.probability >= 1 && r.probability <= 5) next.prob = r.probability;
