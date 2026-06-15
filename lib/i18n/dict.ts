@@ -134,6 +134,7 @@ const en = {
 
   // Modal field labels
   "f.itemName": "Item Name / Tag",
+  "f.zone": "Zone",
   "f.mechanism": "Corrosion Mechanism",
   "f.protection": "Applied Protection",
   "f.objectId": "Object ID / Description (IFS)",
@@ -413,6 +414,7 @@ const pt: Translations = {
 
   // Modal fields
   "f.itemName": "Nome / Tag do Item",
+  "f.zone": "Zona",
   "f.mechanism": "Mecanismo de Corrosão",
   "f.protection": "Proteção Aplicada",
   "f.objectId": "ID / Descrição do Objeto (IFS)",

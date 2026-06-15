@@ -46,6 +46,7 @@ interface Props {
 
 type Form = {
   name: string;
+  zone_id: string;
   mechanism: string;
   protection: string;
   ifs_obj_id: string;
@@ -82,6 +83,7 @@ function ItemModalInner({
 }: Props & { item: ItemWithRelations }) {
   const {
     profile,
+    zones,
     updateItem,
     deleteItem,
     addReading,
@@ -99,6 +101,7 @@ function ItemModalInner({
       item.name && item.name !== "Untitled" && item.name !== "Sem nome"
         ? item.name
         : "",
+    zone_id: item.zone_id,
     mechanism: item.mechanism ?? "",
     protection: item.protection ?? "",
     ifs_obj_id: item.ifs_obj_id ?? "",
@@ -223,6 +226,7 @@ function ItemModalInner({
     setSaving(true);
     const patch: Partial<Item> = {
       name: f.name || t("modal.untitled"),
+      zone_id: f.zone_id,
       mechanism: f.mechanism || null,
       protection: f.protection || null,
       ifs_obj_id: f.ifs_obj_id || null,
@@ -275,6 +279,9 @@ function ItemModalInner({
     : null;
 
   const blank = t("select.placeholder");
+  const zoneOpts = [...zones]
+    .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
+    .map((z) => ({ v: z.zid, l: `${z.zid} — ${z.name}` }));
   const mechOpts = [{ v: "", l: blank }].concat(
     MECHANISMS.map((m) => ({ v: m, l: t(`mech.${m}` as DictKey) || m }))
   );
@@ -329,7 +336,7 @@ function ItemModalInner({
             }}
           >
             {isNew ? t("modal.newItem") + " " : t("modal.editItem") + " "}
-            {zoneName}
+            {zones.find((z) => z.zid === f.zone_id)?.name ?? zoneName}
           </div>
           <div style={{ fontSize: 17, fontWeight: 800, color: DS.text }}>
             {f.name || f.ifs_obj_desc || t("modal.untitled")}
@@ -404,12 +411,18 @@ function ItemModalInner({
             placeholder="ex: Anode Row 3 Port, FR-22"
           />
           <Select
-            label={t("f.mechanism")}
-            value={f.mechanism}
-            onChange={(v) => set("mechanism", v)}
-            options={mechOpts}
+            label={t("f.zone")}
+            value={f.zone_id}
+            onChange={(v) => set("zone_id", v)}
+            options={zoneOpts}
           />
         </div>
+        <Select
+          label={t("f.mechanism")}
+          value={f.mechanism}
+          onChange={(v) => set("mechanism", v)}
+          options={mechOpts}
+        />
         <Select
           label={t("f.protection")}
           value={f.protection}
