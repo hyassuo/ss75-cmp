@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { fmt, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate } from "@/lib/domain/calcRate";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
+
+const COLLAPSE_KEY = "ss75.alerts.collapsed";
 
 interface Alert {
   t: "danger" | "warn";
@@ -16,6 +19,22 @@ export function AlertBar() {
   const { zones, itemsByZone } = useData();
   const { sysFilter } = useShell();
   const { t } = useLang();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
+  }, []);
+
+  function toggle() {
+    setCollapsed((c) => {
+      const next = !c;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      }
+      return next;
+    });
+  }
 
   const visibleZones =
     sysFilter === "All"
@@ -70,6 +89,9 @@ export function AlertBar() {
       }}
     >
       <div
+        onClick={toggle}
+        role="button"
+        aria-expanded={!collapsed}
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -78,7 +100,9 @@ export function AlertBar() {
           flexWrap: "nowrap",
           padding: "10px 14px",
           background: DS.redBg,
-          borderBottom: "1px solid " + DS.redBord,
+          borderBottom: collapsed ? "none" : "1px solid " + DS.redBord,
+          cursor: "pointer",
+          userSelect: "none",
         }}
       >
         {/* Left: title + count pills. Pills are now stacked (number above
@@ -141,19 +165,40 @@ export function AlertBar() {
             </span>
           )}
         </div>
-        <span
+        <div
           style={{
-            fontSize: 11,
-            color: DS.text3,
-            marginLeft: 8,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
             flexShrink: 0,
-            whiteSpace: "nowrap",
-            alignSelf: "flex-start",
           }}
         >
-          {alerts.length} {t("alert.total")}
-        </span>
+          <span
+            style={{
+              fontSize: 11,
+              color: DS.text3,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {alerts.length} {t("alert.total")}
+          </span>
+          <span
+            aria-hidden
+            style={{
+              fontSize: 13,
+              color: DS.red,
+              fontWeight: 800,
+              width: 18,
+              textAlign: "center",
+              transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
+              transition: "transform 0.15s ease",
+            }}
+          >
+            ▾
+          </span>
+        </div>
       </div>
+      {!collapsed && (
       <div style={{ maxHeight: 200, overflowY: "auto" }}>
         {alerts.map((a, i) => {
           const isDanger = a.t === "danger";
@@ -203,6 +248,7 @@ export function AlertBar() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
