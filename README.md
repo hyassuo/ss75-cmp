@@ -34,6 +34,7 @@ idempotent — safe to re-run.
 | `supabase-security-fixes.sql` | Round-1 hardening: SECURITY DEFINER on the audit trigger, column grants on `profiles`, scoped INSERTs, authorship trigger, storage SELECT by unit. |
 | `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
 | `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
+| `supabase-hardening-4.sql` | Round-4 hardening: per-unit scoping for admins — profiles RLS, admin DELETE on items/readings/evidences/storage, and the `units` policy no longer reach other units via direct PostgREST; the shared `zones` catalog becomes read-only at runtime. |
 | `supabase-ifs-schema.sql` | IFS Equipment Register table (id, description, sece) with pg_trgm indexes for fast autocomplete. |
 | `supabase-ifs-data.sql` | TRUNCATE + INSERT of the 11,312-row IFS register. Refresh by re-running. |
 | `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. |
