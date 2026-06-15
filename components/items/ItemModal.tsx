@@ -308,7 +308,7 @@ function ItemModalInner({
   const prClr = (f.priority && PRIORITY_COLOR[f.priority]) || DS.text3;
 
   return (
-    <Modal onClose={cancel}>
+    <Modal>
       <div
         style={{
           display: "flex",
@@ -378,10 +378,6 @@ function ItemModalInner({
         }}
       >
       <Section title={t("sec.evidence")} accent={DS.vio}>
-        <div style={{ fontSize: 12, color: DS.text3, marginBottom: 10 }}>
-          Start by adding a photo. AI analysis will auto-populate corrosion
-          type, severity and suggested priority.
-        </div>
         <EvidencePanel
           itemId={item.id}
           evidences={item.evidences}
