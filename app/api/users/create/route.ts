@@ -41,10 +41,15 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-  // Deliberate admin action -> activate the freshly created profile.
+  // Deliberate admin action -> activate the freshly created profile and bind
+  // it to the creating admin's unit (the handle_new_user trigger assigns a
+  // default unit; override it so an admin can only ever create users in
+  // their own unit).
+  const activation: { active: boolean; unit_id?: string } = { active: true };
+  if (guard.ctx.unitId) activation.unit_id = guard.ctx.unitId;
   const { error: actErr } = await admin
     .from("profiles")
-    .update({ active: true })
+    .update(activation)
     .eq("id", created.user.id);
   if (actErr) {
     return NextResponse.json({ error: actErr.message }, { status: 400 });

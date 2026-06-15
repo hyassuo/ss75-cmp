@@ -39,10 +39,15 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: target } = await admin
     .from("profiles")
-    .select("role, active")
+    .select("role, active, unit_id")
     .eq("id", id)
     .single();
   if (!target) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+  // An admin may only manage users in their own unit. The service client
+  // bypasses RLS, so this must be enforced here explicitly.
+  if (target.unit_id !== guard.ctx.unitId) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
@@ -50,11 +55,18 @@ export async function POST(request: Request) {
     target.role === "admin" &&
     ((role && role !== "admin") || active === false);
   if (losesAdmin) {
-    const { count } = await admin
+    // Count active admins within the same unit — don't let a unit lose its
+    // last admin (a global count would wrongly allow it when another unit
+    // still has admins).
+    let q = admin
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("role", "admin")
       .eq("active", true);
+    q = guard.ctx.unitId
+      ? q.eq("unit_id", guard.ctx.unitId)
+      : q.is("unit_id", null);
+    const { count } = await q;
     if ((count ?? 0) <= 1) {
       return NextResponse.json(
         { error: "Cannot remove the only active admin." },

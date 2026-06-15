@@ -5,6 +5,7 @@ export interface GuardContext {
   userId: string;
   email: string;
   role: UserRole;
+  unitId: string | null;
 }
 
 type GuardResult =
@@ -22,7 +23,7 @@ export async function requireUser(): Promise<GuardResult> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, active, email")
+    .select("role, active, email, unit_id")
     .eq("id", user.id)
     .single();
 
@@ -31,7 +32,12 @@ export async function requireUser(): Promise<GuardResult> {
   }
   return {
     ok: true,
-    ctx: { userId: user.id, email: profile.email, role: profile.role },
+    ctx: {
+      userId: user.id,
+      email: profile.email,
+      role: profile.role,
+      unitId: profile.unit_id,
+    },
   };
 }
 

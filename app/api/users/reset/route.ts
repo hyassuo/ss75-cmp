@@ -20,13 +20,14 @@ export async function POST(request: Request) {
 
   const admin = createServiceClient();
   // Only send resets to users that actually exist in this system — prevents
-  // using the endpoint to fire Supabase emails at arbitrary addresses.
+  // using the endpoint to fire Supabase emails at arbitrary addresses — and
+  // only to users in the requesting admin's own unit.
   const { data: target } = await admin
     .from("profiles")
-    .select("id")
+    .select("id, unit_id")
     .eq("email", email)
     .maybeSingle();
-  if (!target) {
+  if (!target || target.unit_id !== guard.ctx.unitId) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 

@@ -27,19 +27,28 @@ export async function POST(request: Request) {
   const admin = createServiceClient();
   const { data: target } = await admin
     .from("profiles")
-    .select("role, active")
+    .select("role, active, unit_id")
     .eq("id", id)
     .single();
   if (!target) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
+  // An admin may only delete users in their own unit. Service client bypasses
+  // RLS, so enforce it here. 404 (not 403) to avoid leaking other units.
+  if (target.unit_id !== guard.ctx.unitId) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
 
   if (target.role === "admin" && target.active) {
-    const { count } = await admin
+    let q = admin
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("role", "admin")
       .eq("active", true);
+    q = guard.ctx.unitId
+      ? q.eq("unit_id", guard.ctx.unitId)
+      : q.is("unit_id", null);
+    const { count } = await q;
     if ((count ?? 0) <= 1) {
       return NextResponse.json(
         { error: "Cannot delete the only active admin." },
