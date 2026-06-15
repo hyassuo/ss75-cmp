@@ -142,6 +142,8 @@ export function AlertBar() {
                 alignItems: "center",
                 textAlign: "center",
                 flexShrink: 0,
+                minWidth: 56,
+                boxSizing: "border-box",
               }}
             >
               <span style={{ fontSize: 12 }}>{danger}</span>
@@ -164,6 +166,8 @@ export function AlertBar() {
                 alignItems: "center",
                 textAlign: "center",
                 flexShrink: 0,
+                minWidth: 56,
+                boxSizing: "border-box",
               }}
             >
               <span style={{ fontSize: 12 }}>{warn}</span>
@@ -186,6 +190,8 @@ export function AlertBar() {
               textAlign: "center",
               flexShrink: 0,
               border: "1px solid " + DS.bord,
+              minWidth: 56,
+              boxSizing: "border-box",
             }}
           >
             <span style={{ fontSize: 12 }}>{alerts.length}</span>
