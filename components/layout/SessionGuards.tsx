@@ -54,21 +54,22 @@ export function IdleLogout() {
 }
 
 /**
- * Forces a re-login when the app's MAJOR.MINOR version changes.
+ * Forces a re-login only when the app's MAJOR version changes.
  *
- * Patch bumps (1.2.2 → 1.2.3) are silent — daily polish / bug-fix
- * deploys shouldn't bounce users to /login mid-session and produce the
- * "flash of dashboard then redirect" effect they were seeing.
+ * Patch and minor bumps (1.3.11 → 1.4.0) are silent. Routine feature and
+ * fix deploys must not bounce a user who just signed in — that produced the
+ * "log in, flash the dashboard, get kicked back to login" effect, because
+ * DeployLogout mounts right after login and would see the stored version
+ * differ from the freshly deployed one.
  *
- * Minor or major bumps (1.2.x → 1.3.0, or 1.x → 2.0.0) do force a
- * fresh login, because those tend to ship schema/contract changes or
- * meaningful UI shifts where starting clean is the safe default.
+ * Only a MAJOR bump (1.x → 2.0.0) forces a fresh login, reserved for
+ * genuinely breaking releases (schema/contract changes) where starting
+ * clean is the safe default.
  *
  * First-ever visit is exempt so newly-signed-in users aren't bounced.
  */
-function majorMinor(v: string): string {
-  const parts = v.split(".");
-  return `${parts[0] ?? "0"}.${parts[1] ?? "0"}`;
+function major(v: string): string {
+  return v.split(".")[0] ?? "0";
 }
 
 export function DeployLogout() {
@@ -76,7 +77,7 @@ export function DeployLogout() {
     try {
       const last = window.localStorage.getItem(VERSION_KEY);
       window.localStorage.setItem(VERSION_KEY, APP_VERSION);
-      if (last && majorMinor(last) !== majorMinor(APP_VERSION)) {
+      if (last && major(last) !== major(APP_VERSION)) {
         void forceSignOut(true);
       }
     } catch {
