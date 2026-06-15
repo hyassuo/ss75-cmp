@@ -92,12 +92,8 @@ export function AlertBar() {
         onClick={toggle}
         role="button"
         aria-expanded={!collapsed}
+        className="alert-header"
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-          flexWrap: "nowrap",
           padding: "10px 14px",
           background: DS.redBg,
           borderBottom: collapsed ? "none" : "1px solid " + DS.redBord,
@@ -107,27 +103,12 @@ export function AlertBar() {
       >
         {/* Left: just the title. Counts move to the right cluster so they
             sit next to the total and the expand/collapse button. */}
-        <div
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            minWidth: 0,
-            flex: 1,
-          }}
-        >
+        <div className="alert-header-title">
           <span style={{ fontSize: 13, fontWeight: 700, color: DS.red }}>
             {t("alert.title")}
           </span>
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexShrink: 0,
-          }}
-        >
+        <div className="alert-header-counts">
           {danger > 0 && (
             <span
               style={{

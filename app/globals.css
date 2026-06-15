@@ -65,6 +65,41 @@ body {
   }
 }
 
+/* ── AlertBar header (responsive) ─────────────────────────────────────────
+   Default wide layout: title on the left, count pills on the right of one
+   row. On narrow screens the cluster wraps below the title so 4 pills
+   can't overlap a two-line wrap of "Active Alerts". */
+.alert-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.alert-header-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.alert-header-counts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+@media (max-width: 520px) {
+  .alert-header-title {
+    flex: 1 1 100%;
+  }
+  .alert-header-counts {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+}
+
 /* ── Modal (portal-rendered) ──────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
