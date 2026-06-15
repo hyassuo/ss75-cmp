@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import * as XLSX from "xlsx";
+import * as XLSX from "@e965/xlsx";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
