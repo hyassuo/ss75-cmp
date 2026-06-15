@@ -72,6 +72,9 @@ export interface AIAnalysis {
   affectedAreaPct: number;
   pitDepthEstMM: number;
   immediateAction: string;
+  // Suggested inspection cadence; one of the InspectionFrequency labels.
+  // Validated against FREQUENCIES before being applied to the item.
+  inspectionFrequency: string;
   findings: string;
   recommendation: string;
 }

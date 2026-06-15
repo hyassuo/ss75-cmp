@@ -167,6 +167,12 @@ export function AIResultCard({ result: r, onApply }: Props) {
       <div style={{ fontSize: 12, color: DS.blu, fontWeight: 600 }}>
         {r.recommendation}
       </div>
+      {r.inspectionFrequency && (
+        <div style={{ fontSize: 11, color: DS.text3, marginTop: 6 }}>
+          <span style={{ fontWeight: 700 }}>Suggested frequency:</span>{" "}
+          {r.inspectionFrequency}
+        </div>
+      )}
       <button
         onClick={onApply}
         style={{

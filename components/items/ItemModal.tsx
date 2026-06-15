@@ -187,6 +187,17 @@ function ItemModalInner({
       ) {
         next.name = r.componentName;
       }
+      // Suggested inspection frequency — only accept an exact matrix value.
+      // Setting it recomputes the next inspection date (when a last date is
+      // present), which in turn feeds the priority calc below.
+      if (
+        r.inspectionFrequency &&
+        FREQUENCIES.includes(r.inspectionFrequency as InspectionFrequency)
+      ) {
+        next.freq_insp = r.inspectionFrequency as InspectionFrequency;
+        const ni = calcNextInspection(next.last_insp, next.freq_insp);
+        if (ni) next.next_insp = ni;
+      }
       // Set the inputs to the risk matrix and let calcPriority derive the
       // priority — the AI never chooses the priority directly.
       if (r.probability >= 1 && r.probability <= 5) next.prob = r.probability;
@@ -308,7 +319,9 @@ function ItemModalInner({
     FREQUENCIES.map((fr) => ({ v: fr, l: t(`freq.${fr}` as DictKey) }))
   );
   const obsSourceOpts = [{ v: "", l: blank }].concat(
-    OBS_SOURCES.map((s) => ({ v: s, l: t(`obsSrc.${s}` as DictKey) }))
+    OBS_SOURCES.map((s) => ({ v: s, l: t(`obsSrc.${s}` as DictKey) })).sort(
+      (a, b) => a.l.localeCompare(b.l)
+    )
   );
 
   const rpn = f.prob && f.cons ? f.prob * f.cons : null;
