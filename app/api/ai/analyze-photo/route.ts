@@ -108,21 +108,19 @@ export async function POST(request: Request) {
     try {
       return NextResponse.json(JSON.parse(clean));
     } catch {
+      // Full raw output to server logs only; clients get a generic message.
       console.error("[ai/analyze-photo] parse failed:", clean.slice(0, 1000));
-      const preview = clean.slice(0, 300) || "(empty response)";
       return NextResponse.json(
-        { error: `Could not parse AI response. Raw: ${preview}` },
+        { error: "Could not parse AI response. Please try again." },
         { status: 502 }
       );
     }
   } catch (e) {
-    // Surface the upstream reason so the user can act on it (quota, model
-    // name, key invalid, timeout). Route is auth-gated + rate-limited, so the
-    // message isn't sensitive. Also log full error to Vercel for diagnostics.
-    const reason = e instanceof Error ? e.message : "Unknown error";
+    // Log the full upstream reason (quota, model, key) to Vercel for
+    // diagnostics, but don't echo provider internals back to the client.
     console.error("[ai/analyze-photo] upstream failed:", e);
     return NextResponse.json(
-      { error: `AI analysis failed: ${reason}` },
+      { error: "AI analysis is temporarily unavailable. Please try again." },
       { status: 502 }
     );
   }

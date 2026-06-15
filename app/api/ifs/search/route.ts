@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,11 @@ const RESULT_LIMIT = 25;
 // word AND filters the candidate count drops naturally, so 500 keeps even
 // a single-word "pump" query from being clipped before ranking.
 const CANDIDATE_LIMIT = 500;
+// Each query is an ILIKE scan over ~11k rows; the UI debounces to ~1 req per
+// keystroke pause, so a real user stays well under this. The cap only bites
+// a scripted client hammering the endpoint.
+const RATE_LIMIT = 40;
+const RATE_WINDOW_MS = 60_000;
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {
@@ -18,6 +24,14 @@ export async function POST(request: Request) {
   const guard = await requireUser();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
+
+  const rl = rateLimit(`ifs:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
   }
 
   const { query } = (await request.json()) as { query?: string };
