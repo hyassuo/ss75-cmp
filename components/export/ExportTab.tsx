@@ -198,12 +198,22 @@ export function ExportTab() {
         body: JSON.stringify(payload),
       });
       if (!r.ok) {
-        alert(t("exp.pdfFail"));
+        // Surface the server-side reason instead of a generic alert — used
+        // to be silent, which made post-deploy regressions invisible.
+        let detail = `HTTP ${r.status}`;
+        try {
+          const j = await r.json();
+          if (j?.error) detail = j.error;
+        } catch {
+          // body wasn't JSON; keep status code
+        }
+        alert(`${t("exp.pdfFail")}\n\n${detail}`);
       } else {
         download(await r.blob(), `ss75-cmp_${today()}.pdf`);
       }
-    } catch {
-      alert(t("exp.pdfFail"));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "network error";
+      alert(`${t("exp.pdfFail")}\n\n${msg}`);
     }
     setBusy(null);
   }
