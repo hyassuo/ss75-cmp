@@ -88,9 +88,40 @@ export function DataProvider({
       return;
     }
     setZones((zoneRes.data as Zone[]) ?? []);
-    setAllItems((itemRes.data as unknown as ItemWithRelations[]) ?? []);
+    const raw = (itemRes.data as unknown as ItemWithRelations[]) ?? [];
+
+    // Drop abandoned drafts. createItem inserts a stub row immediately so the
+    // modal has an id for photo uploads; that row stays in the DB if the
+    // user gets kicked by IdleLogout or closes the tab without clicking
+    // Cancel. We treat a row owned by this user, never touched (Untitled +
+    // Pending + no other content) and older than 30 minutes as abandoned.
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    const isDraft = (i: ItemWithRelations) =>
+      i.name === "Untitled" &&
+      i.status === "Pending" &&
+      !i.mechanism &&
+      !i.protection &&
+      !i.ifs_obj_id &&
+      i.prob == null &&
+      i.cons == null &&
+      !i.freq_insp &&
+      !i.last_insp &&
+      !i.notes &&
+      i.readings.length === 0 &&
+      i.evidences.length === 0 &&
+      i.created_by === profile.id &&
+      new Date(i.created_at).getTime() < cutoff;
+    const drafts = raw.filter(isDraft);
+    if (drafts.length) {
+      void supabase
+        .from("items")
+        .delete()
+        .in("id", drafts.map((d) => d.id));
+    }
+    const draftIds = new Set(drafts.map((d) => d.id));
+    setAllItems(raw.filter((i) => !draftIds.has(i.id)));
     setLoading(false);
-  }, []);
+  }, [profile.id]);
 
   useEffect(() => {
     void load();
