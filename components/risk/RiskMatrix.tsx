@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
@@ -8,6 +9,12 @@ import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
+import { ItemModal } from "@/components/items/ItemModal";
+
+interface Open {
+  itemId: string;
+  zoneName: string;
+}
 
 function cellClr(p: number, c: number): string {
   const v = p * c;
@@ -17,6 +24,7 @@ function cellClr(p: number, c: number): string {
 export function RiskMatrix() {
   const { zones, itemsByZone } = useData();
   const { t, tPriority, tStatus } = useLang();
+  const [open, setOpen] = useState<Open | null>(null);
   const allItems: Array<ItemWithRelations & { zoneName: string }> = zones.flatMap(
     (z) => itemsByZone(z.zid).map((i) => ({ ...i, zoneName: z.name }))
   );
@@ -180,20 +188,21 @@ export function RiskMatrix() {
               <tr>
                 <th
                   style={{
-                    width: "12%",
+                    width: "4%",
                     padding: "6px 4px",
-                    fontSize: 10,
+                    fontSize: 9,
                     color: DS.text3,
-                    textAlign: "left",
+                    textAlign: "center",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  Prob / Cons
+                  P↓ C→
                 </th>
                 {[1, 2, 3, 4, 5].map((i) => (
                   <th
                     key={i}
                     style={{
-                      width: "17.6%",
+                      width: "19.2%",
                       padding: "6px 4px",
                       fontSize: 10,
                       color: DS.text3,
@@ -222,7 +231,8 @@ export function RiskMatrix() {
                       fontSize: 10,
                       color: DS.text3,
                       verticalAlign: "middle",
-                      width: "12%",
+                      width: "4%",
+                      textAlign: "center",
                     }}
                   >
                     <div
@@ -242,7 +252,7 @@ export function RiskMatrix() {
                         style={{
                           padding: 3,
                           verticalAlign: "top",
-                          width: "17.6%",
+                          width: "19.2%",
                         }}
                       >
                         <div
@@ -270,6 +280,12 @@ export function RiskMatrix() {
                             <div
                               key={it.id}
                               title={it.name}
+                              onClick={() =>
+                                setOpen({
+                                  itemId: it.id,
+                                  zoneName: it.zoneName,
+                                })
+                              }
                               style={{
                                 fontSize: 9,
                                 color: DS.text,
@@ -280,6 +296,7 @@ export function RiskMatrix() {
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
+                                cursor: "pointer",
                               }}
                             >
                               {it.sece ? "[S] " : ""}
@@ -328,6 +345,15 @@ export function RiskMatrix() {
         </div>
       </div>
 
+      {open && (
+        <ItemModal
+          itemId={open.itemId}
+          zoneName={open.zoneName}
+          isNew={false}
+          onClose={() => setOpen(null)}
+        />
+      )}
+
       {highRisk.length > 0 && (
         <div style={S.card}>
           <div
@@ -346,6 +372,9 @@ export function RiskMatrix() {
             return (
               <div
                 key={it.id}
+                onClick={() =>
+                  setOpen({ itemId: it.id, zoneName: it.zoneName })
+                }
                 style={{
                   background: DS.sur2,
                   borderRadius: 8,
@@ -355,6 +384,7 @@ export function RiskMatrix() {
                   alignItems: "center",
                   flexWrap: "wrap",
                   marginBottom: 7,
+                  cursor: "pointer",
                 }}
               >
                 <div

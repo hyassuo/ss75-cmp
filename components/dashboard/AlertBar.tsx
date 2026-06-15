@@ -174,12 +174,24 @@ export function AlertBar() {
           )}
           <span
             style={{
-              fontSize: 11,
-              color: DS.text3,
-              whiteSpace: "nowrap",
+              background: DS.sur2,
+              color: DS.text2,
+              borderRadius: 8,
+              padding: "3px 8px",
+              fontWeight: 700,
+              lineHeight: 1.05,
+              display: "inline-flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              flexShrink: 0,
+              border: "1px solid " + DS.bord,
             }}
           >
-            {alerts.length} {t("alert.total")}
+            <span style={{ fontSize: 12 }}>{alerts.length}</span>
+            <span style={{ fontSize: 8, opacity: 0.9, marginTop: 1 }}>
+              {t("alert.total")}
+            </span>
           </span>
           <span
             aria-hidden
