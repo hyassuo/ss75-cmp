@@ -105,9 +105,8 @@ export function AlertBar() {
           userSelect: "none",
         }}
       >
-        {/* Left: title + count pills. Pills are now stacked (number above
-            label) so they stay narrow and the whole header — title, both
-            pills, total — fits on one line on phones. */}
+        {/* Left: just the title. Counts move to the right cluster so they
+            sit next to the total and the expand/collapse button. */}
         <div
           style={{
             display: "flex",
@@ -120,6 +119,15 @@ export function AlertBar() {
           <span style={{ fontSize: 13, fontWeight: 700, color: DS.red }}>
             {t("alert.title")}
           </span>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexShrink: 0,
+          }}
+        >
           {danger > 0 && (
             <span
               style={{
@@ -164,15 +172,6 @@ export function AlertBar() {
               </span>
             </span>
           )}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexShrink: 0,
-          }}
-        >
           <span
             style={{
               fontSize: 11,
@@ -185,11 +184,17 @@ export function AlertBar() {
           <span
             aria-hidden
             style={{
+              width: 26,
+              height: 26,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
               fontSize: 13,
               color: DS.red,
               fontWeight: 800,
-              width: 18,
-              textAlign: "center",
+              background: "#fff",
+              border: "1px solid " + DS.redBord,
+              borderRadius: 6,
               transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
               transition: "transform 0.15s ease",
             }}
