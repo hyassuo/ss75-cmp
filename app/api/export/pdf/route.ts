@@ -117,7 +117,7 @@ async function loadPhotos(itemIds: string[]): Promise<Map<string, PhotoRef[]>> {
   const result = new Map<string, PhotoRef[]>();
   if (itemIds.length === 0) return result;
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: evs } = await supabase
     .from("evidences")
     .select("item_id, evidence_date, file_path, file_type")

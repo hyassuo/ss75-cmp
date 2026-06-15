@@ -15,7 +15,7 @@ type GuardResult =
 // Any authenticated AND active user. Deactivated accounts keep a valid JWT
 // until it expires, so active must be re-checked on every API call.
 export async function requireUser(): Promise<GuardResult> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

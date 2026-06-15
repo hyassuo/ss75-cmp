@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     .map((t) => t.replace(/[%_\\]/g, (c) => "\\" + c));
   if (tokens.length === 0) return NextResponse.json([]);
 
-  const supabase = createClient();
+  const supabase = await createClient();
   let q = supabase.from("ifs_objects").select("id, description, sece");
   // Each .or() call AND-joins with the previous filters, so chaining one
   // per token produces (id ILIKE %A% OR desc ILIKE %A%) AND

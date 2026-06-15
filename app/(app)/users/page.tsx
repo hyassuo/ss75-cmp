@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { UserTable } from "@/components/users/UserTable";
 
 export default async function UsersPage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
