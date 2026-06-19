@@ -289,11 +289,23 @@ export async function POST(request: Request) {
     )
   );
 
-  const buffer = await renderToBuffer(doc);
-  return new NextResponse(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": 'attachment; filename="ss75-cmp.pdf"',
-    },
-  });
+  // Wrap the actual render in a try so a bundler/runtime failure surfaces
+  // as a clean JSON error the client can show, and the full reason ends up
+  // in the Vercel logs instead of a silent 500.
+  try {
+    const buffer = await renderToBuffer(doc);
+    return new NextResponse(new Uint8Array(buffer), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": 'attachment; filename="ss75-cmp.pdf"',
+      },
+    });
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : "unknown render error";
+    console.error("[export/pdf] renderToBuffer failed:", e);
+    return NextResponse.json(
+      { error: `PDF render failed: ${reason}` },
+      { status: 500 }
+    );
+  }
 }
