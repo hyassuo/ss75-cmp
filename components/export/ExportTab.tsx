@@ -87,82 +87,90 @@ export function ExportTab() {
 
   async function exportXLSX() {
     setBusy("xlsx");
-    const supabase = createClient();
-    const itemIds = flat.map((i) => i.id);
-    let history: HistoryEntry[] = [];
-    if (itemIds.length) {
-      const { data } = await supabase
-        .from("history")
-        .select("*")
-        .in("item_id", itemIds)
-        .order("event_date", { ascending: false });
-      history = (data as HistoryEntry[]) ?? [];
-    }
-    const nameById = new Map(flat.map((i) => [i.id, i]));
+    try {
+      const supabase = createClient();
+      const itemIds = flat.map((i) => i.id);
+      let history: HistoryEntry[] = [];
+      if (itemIds.length) {
+        const { data, error } = await supabase
+          .from("history")
+          .select("*")
+          .in("item_id", itemIds)
+          .order("event_date", { ascending: false });
+        if (error) throw new Error(`history fetch: ${error.message}`);
+        history = (data as HistoryEntry[]) ?? [];
+      }
+      const nameById = new Map(flat.map((i) => [i.id, i]));
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(itemRows()),
-      "Items"
-    );
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        flat.flatMap((it) =>
-          it.readings.map((r) => ({
-            Zone: it.zid,
-            Item: it.name,
-            Date: r.reading_date,
-            "Depth (mm)": r.depth_mm,
-            Location: r.location ?? "",
-            "Checked By": r.checked_by ?? "",
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(itemRows()),
+        "Items"
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(
+          flat.flatMap((it) =>
+            it.readings.map((r) => ({
+              Zone: it.zid,
+              Item: it.name,
+              Date: r.reading_date,
+              "Depth (mm)": r.depth_mm,
+              Location: r.location ?? "",
+              "Checked By": r.checked_by ?? "",
+            }))
+          )
+        ),
+        "Readings"
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(
+          flat.flatMap((it) =>
+            it.evidences.map((e) => ({
+              Zone: it.zid,
+              Item: it.name,
+              Date: e.evidence_date,
+              Description: e.description ?? "",
+              File: e.file_name ?? "",
+              "AI Type": e.ai_analysis?.corrosionType ?? "",
+              "AI Prob": e.ai_analysis?.probability ?? "",
+              "AI Cons": e.ai_analysis?.consequence ?? "",
+            }))
+          )
+        ),
+        "Evidences"
+      );
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(
+          history.map((h) => ({
+            Item: nameById.get(h.item_id)?.name ?? h.item_id,
+            Date: h.event_date,
+            Action: h.action,
+            Field: h.field_changed ?? "",
+            Previous: h.prev_value ?? "",
+            New: h.new_value ?? "",
+            Note: h.note ?? "",
+            User: h.by_user_email ?? "",
           }))
-        )
-      ),
-      "Readings"
-    );
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        flat.flatMap((it) =>
-          it.evidences.map((e) => ({
-            Zone: it.zid,
-            Item: it.name,
-            Date: e.evidence_date,
-            Description: e.description ?? "",
-            File: e.file_name ?? "",
-            "AI Type": e.ai_analysis?.corrosionType ?? "",
-            "AI Prob": e.ai_analysis?.probability ?? "",
-            "AI Cons": e.ai_analysis?.consequence ?? "",
-          }))
-        )
-      ),
-      "Evidences"
-    );
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        history.map((h) => ({
-          Item: nameById.get(h.item_id)?.name ?? h.item_id,
-          Date: h.event_date,
-          Action: h.action,
-          Field: h.field_changed ?? "",
-          Previous: h.prev_value ?? "",
-          New: h.new_value ?? "",
-          Note: h.note ?? "",
-          User: h.by_user_email ?? "",
-        }))
-      ),
-      "History"
-    );
-    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    download(
-      new Blob([out], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      `ss75-cmp_${today()}.xlsx`
-    );
+        ),
+        "History"
+      );
+      const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      download(
+        new Blob([out], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        `ss75-cmp_${today()}.xlsx`
+      );
+    } catch (e) {
+      // Surface the failure — was previously silent, so a thrown error left
+      // the button stuck in "Generating..." with no signal to the user.
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`XLSX export failed:\n\n${msg}`);
+    }
     setBusy(null);
   }
 

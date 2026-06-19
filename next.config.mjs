@@ -35,6 +35,13 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // @react-pdf/renderer pulls in yoga-layout (WASM) and fontkit, which the
+  // Next 15 bundler can mangle (the resulting bundle fails at runtime with
+  // a 500 inside /api/export/pdf). Marking them external tells Next to keep
+  // them as plain node_modules requires at runtime, which is what they
+  // expect. Without this the PDF route compiles but throws on
+  // renderToBuffer().
+  serverExternalPackages: ["@react-pdf/renderer"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
