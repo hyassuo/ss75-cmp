@@ -35,19 +35,6 @@ const securityHeaders = [
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Surgical externalisation for the PDF route. We DON'T externalise
-  // @react-pdf/* — keeping it bundled means it shares the same React
-  // instance as the route's createElement calls (mixing the two yields
-  // React error #31, "object with keys $$typeof…" — the classic two-copy
-  // problem).
-  //
-  // We DO externalise yoga-layout (which loads its WASM via top-level
-  // await inside its module init) and fontkit (ESM with native bindings).
-  // Those are pulled in transitively by @react-pdf/layout and
-  // @react-pdf/font; webpack respects the externals list so the bundled
-  // siblings end up doing a runtime `require()` for them, the way each
-  // library was designed to load. No effect on the client bundle.
-  serverExternalPackages: ["yoga-layout", "fontkit"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

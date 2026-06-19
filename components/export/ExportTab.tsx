@@ -12,6 +12,18 @@ import { createClient } from "@/lib/supabase/client";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
 import type { HistoryEntry } from "@/lib/types/domain";
+// PdfDocument + @react-pdf/renderer (~500 KB) are lazy-loaded inside
+// exportPDF so the dashboard chunk stays light for users who never export.
+import type { PdfItem, PdfPhoto } from "@/components/export/PdfDocument";
+
+// Cap per item to keep PDF size sane (~250 KB per JPEG => 1 MB max per item).
+const MAX_PHOTOS_PER_ITEM = 4;
+// Hard ceiling on how many items can carry photos in one PDF. Without this a
+// 5000-item export with photos would trigger 20 000 storage fetches and lock
+// the browser tab for minutes. Items beyond the cap still appear in the PDF
+// — they just render without thumbnails.
+const MAX_ITEMS_WITH_PHOTOS = 50;
+const PHOTO_SIGNED_URL_TTL = 60 * 10; // 10 min
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -174,53 +186,111 @@ export function ExportTab() {
     setBusy(null);
   }
 
+  async function loadPhotos(): Promise<Map<string, PdfPhoto[]>> {
+    const result = new Map<string, PdfPhoto[]>();
+    const itemIds = flat
+      .map((i) => i.id)
+      .filter(Boolean)
+      .slice(0, MAX_ITEMS_WITH_PHOTOS);
+    if (!itemIds.length) return result;
+
+    const supabase = createClient();
+    const { data: evs } = await supabase
+      .from("evidences")
+      .select("item_id, evidence_date, file_path, file_type")
+      .in("item_id", itemIds)
+      .like("file_type", "image/%")
+      .not("file_path", "is", null)
+      .order("evidence_date", { ascending: false });
+    if (!evs) return result;
+
+    type Row = {
+      item_id: string;
+      evidence_date: string;
+      file_path: string | null;
+      file_type: string | null;
+    };
+    const byItem = new Map<string, Row[]>();
+    for (const e of evs as Row[]) {
+      const arr = byItem.get(e.item_id) ?? [];
+      if (arr.length < MAX_PHOTOS_PER_ITEM) arr.push(e);
+      byItem.set(e.item_id, arr);
+    }
+    const allPaths: string[] = [];
+    byItem.forEach((arr) =>
+      arr.forEach((e) => e.file_path && allPaths.push(e.file_path))
+    );
+    if (!allPaths.length) return result;
+
+    const { data: signed } = await supabase.storage
+      .from("evidence-photos")
+      .createSignedUrls(allPaths, PHOTO_SIGNED_URL_TTL);
+    const urlByPath = new Map<string, string>();
+    (signed ?? []).forEach((row) => {
+      if (row.path && row.signedUrl) urlByPath.set(row.path, row.signedUrl);
+    });
+
+    await Promise.all(
+      Array.from(byItem.entries()).map(async ([itemId, arr]) => {
+        const photos: PdfPhoto[] = [];
+        for (const e of arr) {
+          if (!e.file_path) continue;
+          const url = urlByPath.get(e.file_path);
+          if (!url) continue;
+          try {
+            const r = await fetch(url);
+            if (!r.ok) continue;
+            const data = await r.blob();
+            photos.push({ evidence_date: e.evidence_date, data });
+          } catch {
+            // skip individual failures rather than abort the whole PDF
+          }
+        }
+        if (photos.length) result.set(itemId, photos);
+      })
+    );
+    return result;
+  }
+
   async function exportPDF() {
     setBusy("pdf");
     try {
-      const payload = {
-        generated: fmtCompact(today()),
-        total: flat.length,
-        sece: flat.filter((i) => i.sece).length,
-        critical: flat.filter((i) => i.priority === "Critical").length,
-        includePhotos,
-        items: flat.map((it) => {
-          const rt = calcRate(it.readings);
-          return {
-            id: it.id,
-            zid: it.zid,
-            zname: it.zname,
-            name: it.name,
-            ifs: it.ifs_obj_id ?? "",
-            priority: it.priority ?? "",
-            status: it.status,
-            sece: it.sece,
-            last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
-            next_insp: it.next_insp ? fmtCompact(it.next_insp) : "",
-            rate: rt !== null ? rt.toFixed(3) : "",
-          };
-        }),
-      };
-      const r = await fetch("/api/export/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const items: PdfItem[] = flat.map((it) => {
+        const rt = calcRate(it.readings);
+        return {
+          id: it.id,
+          zid: it.zid,
+          zname: it.zname,
+          name: it.name,
+          ifs: it.ifs_obj_id ?? "",
+          priority: it.priority ?? "",
+          status: it.status,
+          sece: it.sece,
+          last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
+          next_insp: it.next_insp ? fmtCompact(it.next_insp) : "",
+          rate: rt !== null ? rt.toFixed(3) : "",
+        };
       });
-      if (!r.ok) {
-        // Surface the server-side reason instead of a generic alert — used
-        // to be silent, which made post-deploy regressions invisible.
-        let detail = `HTTP ${r.status}`;
-        try {
-          const j = await r.json();
-          if (j?.error) detail = j.error;
-        } catch {
-          // body wasn't JSON; keep status code
-        }
-        alert(`${t("exp.pdfFail")}\n\n${detail}`);
-      } else {
-        download(await r.blob(), `ss75-cmp_${today()}.pdf`);
-      }
+      const photosByItem = includePhotos ? await loadPhotos() : undefined;
+      // Lazy-load the PDF chunk only when an export actually runs — keeps
+      // it out of the dashboard's first-load bundle.
+      const [{ pdf }, { PdfDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/export/PdfDocument"),
+      ]);
+      const blob = await pdf(
+        <PdfDocument
+          generated={fmtCompact(today())}
+          total={flat.length}
+          sece={flat.filter((i) => i.sece).length}
+          critical={flat.filter((i) => i.priority === "Critical").length}
+          items={items}
+          photosByItem={photosByItem}
+        />
+      ).toBlob();
+      download(blob, `ss75-cmp_${today()}.pdf`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "network error";
+      const msg = e instanceof Error ? e.message : String(e);
       alert(`${t("exp.pdfFail")}\n\n${msg}`);
     }
     setBusy(null);
