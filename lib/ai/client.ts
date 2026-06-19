@@ -7,11 +7,36 @@ export type AiMediaType =
   | "image/webp"
   | "image/gif";
 
+// Subset of OpenAPI 3.0 schema accepted by Gemini's responseSchema. Kept
+// loose so callers can pass whatever the API supports without us
+// reverse-engineering the full grammar here.
+export type AiJsonSchema = {
+  type:
+    | "object"
+    | "array"
+    | "string"
+    | "integer"
+    | "number"
+    | "boolean";
+  properties?: Record<string, AiJsonSchema>;
+  required?: string[];
+  enum?: Array<string | number>;
+  items?: AiJsonSchema;
+  minimum?: number;
+  maximum?: number;
+  description?: string;
+  propertyOrdering?: string[];
+};
+
 export interface AiRequest {
   system: string;
   userText: string;
   maxTokens: number;
   json?: boolean;
+  // When set with json:true, Gemini is required to emit JSON matching this
+  // schema — keys with required: [...] cannot be omitted, types are
+  // enforced. Massively reduces "the model ignored half the fields" bugs.
+  jsonSchema?: AiJsonSchema;
   image?: { base64: string; mediaType: AiMediaType };
 }
 
@@ -54,6 +79,7 @@ export async function aiGenerate(req: AiRequest): Promise<string> {
       // just want the JSON, so disable it.
       thinkingConfig: { thinkingBudget: 0 },
       ...(req.json ? { responseMimeType: "application/json" } : {}),
+      ...(req.jsonSchema ? { responseSchema: req.jsonSchema } : {}),
     },
   };
 

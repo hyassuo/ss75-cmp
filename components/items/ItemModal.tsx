@@ -117,7 +117,10 @@ function ItemModalInner({
     structural: item.structural ?? false,
     obs_source: item.obs_source ?? "",
     freq_insp: item.freq_insp ?? null,
-    last_insp: item.last_insp ?? null,
+    // New items default the last-inspection date to today (the registration
+    // date), which is the most common case for a freshly catalogued item.
+    // The user can still change it. Existing items keep whatever's stored.
+    last_insp: item.last_insp ?? (isNew ? today() : null),
     next_insp: item.next_insp ?? null,
     resolved_at: item.resolved_at ?? null,
     notes: item.notes ?? "",

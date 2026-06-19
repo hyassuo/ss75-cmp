@@ -1,7 +1,89 @@
 import { NextResponse } from "next/server";
 import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
 import { rateLimit } from "@/lib/utils/rateLimit";
-import { aiGenerate, aiConfigured, type AiMediaType } from "@/lib/ai/client";
+import {
+  aiGenerate,
+  aiConfigured,
+  type AiJsonSchema,
+  type AiMediaType,
+} from "@/lib/ai/client";
+
+// Forces Gemini to emit every field in the exact type/range we expect.
+// Without this, prob/cons/inspectionFrequency were occasionally omitted
+// and the UI showed empty pickers.
+const RESPONSE_SCHEMA: AiJsonSchema = {
+  type: "object",
+  required: [
+    "corrosionType",
+    "componentName",
+    "probability",
+    "consequence",
+    "affectedAreaPct",
+    "pitDepthEstMM",
+    "immediateAction",
+    "inspectionFrequency",
+    "findings",
+    "recommendation",
+  ],
+  propertyOrdering: [
+    "corrosionType",
+    "componentName",
+    "probability",
+    "consequence",
+    "affectedAreaPct",
+    "pitDepthEstMM",
+    "immediateAction",
+    "inspectionFrequency",
+    "findings",
+    "recommendation",
+  ],
+  properties: {
+    corrosionType: {
+      type: "string",
+      enum: [
+        "Galvanic",
+        "Atmospheric",
+        "Pitting",
+        "Crevice",
+        "MIC",
+        "Erosion-Corrosion",
+        "Uniform",
+        "Unknown",
+      ],
+    },
+    componentName: { type: "string" },
+    probability: { type: "integer", minimum: 1, maximum: 5 },
+    consequence: { type: "integer", minimum: 1, maximum: 5 },
+    affectedAreaPct: { type: "number", minimum: 0, maximum: 100 },
+    pitDepthEstMM: { type: "number", minimum: 0 },
+    immediateAction: {
+      type: "string",
+      enum: [
+        "Monitor",
+        "Inspect Closely",
+        "Treat Soon",
+        "Urgent Treatment Required",
+      ],
+    },
+    inspectionFrequency: {
+      type: "string",
+      enum: [
+        "Weekly",
+        "Monthly",
+        "Quarterly",
+        "Semi-annual",
+        "Annual",
+        "Every 2 years",
+        "Every 2.5 years",
+        "Every 5 years",
+        "Per operation",
+        "As required",
+      ],
+    },
+    findings: { type: "string" },
+    recommendation: { type: "string" },
+  },
+};
 
 export const runtime = "nodejs";
 
@@ -105,8 +187,9 @@ export async function POST(request: Request) {
       system: SYSTEM,
       userText:
         "Analyse this corrosion photo from an offshore semisubmersible drilling unit.",
-      maxTokens: 600,
+      maxTokens: 1200,
       json: true,
+      jsonSchema: RESPONSE_SCHEMA,
       image: { base64, mediaType: media },
     });
     const clean = text.replace(/```json|```/g, "").trim();
