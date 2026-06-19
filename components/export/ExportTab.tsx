@@ -34,6 +34,26 @@ function download(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// PDFs open inline in a new tab instead of triggering a download — the
+// browser's PDF viewer is the natural place to read/print/save the report,
+// and mobile browsers tend to ignore the `download` attribute anyway and
+// render the PDF on top of the current page. The blob URL is kept alive
+// for a minute so the new tab has time to load it before revoke.
+function openInNewTab(blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, "_blank", "noopener,noreferrer");
+  if (!w) {
+    // Popup blocker hit — fall back to a hidden link click in the same
+    // user gesture so the new tab still opens.
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export function ExportTab() {
   const { t, tPriority, tStatus } = useLang();
   const { zones, itemsByZone } = useData();
@@ -291,7 +311,7 @@ export function ExportTab() {
           photosByItem={photosByItem}
         />
       ).toBlob();
-      download(blob, `ss75-cmp_${today()}.pdf`);
+      openInNewTab(blob);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       alert(`${t("exp.pdfFail")}\n\n${msg}`);
