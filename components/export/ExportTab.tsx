@@ -38,7 +38,10 @@ export function ExportTab() {
   const { t, tPriority, tStatus } = useLang();
   const { zones, itemsByZone } = useData();
   const [busy, setBusy] = useState<string | null>(null);
-  const [includePhotos, setIncludePhotos] = useState(false);
+  // Default ON so a fresh user sees the expected, complete PDF (photos
+  // are the most useful evidence in a CMP audit). Power users who want a
+  // fast/light export can uncheck.
+  const [includePhotos, setIncludePhotos] = useState(true);
 
   const flat = zones.flatMap((z) =>
     itemsByZone(z.zid).map((i) => ({
