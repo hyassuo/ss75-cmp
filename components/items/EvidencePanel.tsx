@@ -119,10 +119,16 @@ export function EvidencePanel({
       if (!r.ok) {
         setAiErr(data.error || "AI analysis failed.");
       } else {
-        setAiResult(data as AIAnalysis);
-        if (!desc && data.findings) {
-          setDesc(`${data.findings} Action: ${data.immediateAction}.`);
+        const result = data as AIAnalysis;
+        setAiResult(result);
+        if (!desc && result.findings) {
+          setDesc(`${result.findings} Action: ${result.immediateAction}.`);
         }
+        // Auto-apply the analysis to the item form so the user doesn't have
+        // to hunt for a second "Apply" button. The card stays visible as a
+        // review surface; clicking Apply there re-applies (e.g. after the
+        // user edited a field by mistake).
+        onAIApply(result);
       }
     } catch {
       setAiErr("AI analysis request failed.");

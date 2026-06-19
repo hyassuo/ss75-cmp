@@ -190,21 +190,27 @@ function ItemModalInner({
       ) {
         next.name = r.componentName;
       }
-      // Suggested inspection frequency — only accept an exact matrix value.
-      // Setting it recomputes the next inspection date (when a last date is
-      // present), which in turn feeds the priority calc below.
-      if (
-        r.inspectionFrequency &&
-        FREQUENCIES.includes(r.inspectionFrequency as InspectionFrequency)
-      ) {
-        next.freq_insp = r.inspectionFrequency as InspectionFrequency;
+      // Suggested inspection frequency — accept an exact matrix value after
+      // trimming whitespace. The model occasionally adds trailing spaces or
+      // returns a near-match that strict === would reject.
+      const freq =
+        typeof r.inspectionFrequency === "string"
+          ? r.inspectionFrequency.trim()
+          : "";
+      if (FREQUENCIES.includes(freq as InspectionFrequency)) {
+        next.freq_insp = freq as InspectionFrequency;
         const ni = calcNextInspection(next.last_insp, next.freq_insp);
         if (ni) next.next_insp = ni;
       }
       // Set the inputs to the risk matrix and let calcPriority derive the
-      // priority — the AI never chooses the priority directly.
-      if (r.probability >= 1 && r.probability <= 5) next.prob = r.probability;
-      if (r.consequence >= 1 && r.consequence <= 5) next.cons = r.consequence;
+      // priority — the AI never chooses the priority directly. Coerce to
+      // number first: Gemini's JSON mode sometimes returns numerics as
+      // strings ("3") despite the integer schema, and the Select compares
+      // string vs string, so we'd end up with no selection rendered.
+      const prob = Number(r.probability);
+      const cons = Number(r.consequence);
+      if (Number.isFinite(prob) && prob >= 1 && prob <= 5) next.prob = prob;
+      if (Number.isFinite(cons) && cons >= 1 && cons <= 5) next.cons = cons;
       const p = calcPriority(
         next.prob,
         next.cons,
