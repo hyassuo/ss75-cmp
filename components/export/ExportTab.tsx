@@ -23,7 +23,6 @@ const MAX_PHOTOS_PER_ITEM = 4;
 // the browser tab for minutes. Items beyond the cap still appear in the PDF
 // — they just render without thumbnails.
 const MAX_ITEMS_WITH_PHOTOS = 50;
-const PHOTO_SIGNED_URL_TTL = 60 * 10; // 10 min
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -45,21 +44,21 @@ function blobToDataURL(blob: Blob): Promise<string> {
   });
 }
 
-// PDFs open inline in a new tab instead of triggering a download — the
-// browser's PDF viewer is the natural place to read/print/save the report,
-// and mobile browsers tend to ignore the `download` attribute anyway and
-// render the PDF on top of the current page. The blob URL is kept alive
-// for a minute so the new tab has time to load it before revoke.
-function openInNewTab(blob: Blob) {
+// Load the finished PDF into a tab that was opened synchronously during the
+// click (see exportPDF). window.open() after an await is treated as
+// programmatic and gets popup-blocked — which is why the first click
+// "did nothing". We open the tab up front, then point it at the blob URL
+// once generation finishes. The URL is revoked after a minute so the tab
+// has time to load it.
+function showPdfInTab(win: Window | null, blob: Blob) {
   const url = URL.createObjectURL(blob);
-  const w = window.open(url, "_blank", "noopener,noreferrer");
-  if (!w) {
-    // Popup blocker hit — fall back to a hidden link click in the same
-    // user gesture so the new tab still opens.
+  if (win && !win.closed) {
+    win.location.href = url;
+  } else {
+    // Tab was blocked/closed — fall back to a same-gesture download.
     const a = document.createElement("a");
     a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
+    a.download = `ss75-cmp_${today()}.pdf`;
     a.click();
   }
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -252,31 +251,21 @@ export function ExportTab() {
       if (arr.length < MAX_PHOTOS_PER_ITEM) arr.push(e);
       byItem.set(e.item_id, arr);
     }
-    const allPaths: string[] = [];
-    byItem.forEach((arr) =>
-      arr.forEach((e) => e.file_path && allPaths.push(e.file_path))
-    );
-    if (!allPaths.length) return result;
-
-    const { data: signed } = await supabase.storage
-      .from("evidence-photos")
-      .createSignedUrls(allPaths, PHOTO_SIGNED_URL_TTL);
-    const urlByPath = new Map<string, string>();
-    (signed ?? []).forEach((row) => {
-      if (row.path && row.signedUrl) urlByPath.set(row.path, row.signedUrl);
-    });
-
     await Promise.all(
       Array.from(byItem.entries()).map(async ([itemId, arr]) => {
         const photos: PdfPhoto[] = [];
         for (const e of arr) {
           if (!e.file_path) continue;
-          const url = urlByPath.get(e.file_path);
-          if (!url) continue;
           try {
-            const r = await fetch(url);
-            if (!r.ok) continue;
-            const blob = await r.blob();
+            // Use the SDK download() instead of signed-URL + fetch: the SDK
+            // call goes through the storage REST API (CORS configured for
+            // the app origin), so the bytes are always readable. A plain
+            // fetch() of a signed URL can be blocked by CORS and was
+            // silently dropping every photo.
+            const { data: blob, error } = await supabase.storage
+              .from("evidence-photos")
+              .download(e.file_path);
+            if (error || !blob) continue;
             const data = await blobToDataURL(blob);
             photos.push({ evidence_date: e.evidence_date, data });
           } catch {
@@ -291,6 +280,17 @@ export function ExportTab() {
 
   async function exportPDF() {
     setBusy("pdf");
+    // Open the tab NOW, inside the click gesture, so the popup blocker
+    // allows it. It shows a tiny placeholder while the PDF generates, then
+    // we redirect it to the blob URL.
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(
+        "<!doctype html><title>Generating PDF…</title>" +
+          "<body style='font-family:sans-serif;padding:24px;color:#445566'>" +
+          "Generating PDF…</body>"
+      );
+    }
     try {
       const items: PdfItem[] = flat.map((it) => {
         const rt = calcRate(it.readings);
@@ -325,8 +325,9 @@ export function ExportTab() {
           photosByItem={photosByItem}
         />
       ).toBlob();
-      openInNewTab(blob);
+      showPdfInTab(win, blob);
     } catch (e) {
+      if (win && !win.closed) win.close();
       const msg = e instanceof Error ? e.message : String(e);
       alert(`${t("exp.pdfFail")}\n\n${msg}`);
     }
