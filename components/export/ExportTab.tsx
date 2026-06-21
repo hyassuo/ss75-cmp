@@ -33,8 +33,7 @@ function download(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-// Read a fetched image Blob into a base64 data URL for @react-pdf's Image
-// src (a raw Blob src isn't rendered reliably in the browser build).
+// Read a Blob into a base64 data URL.
 function blobToDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -42,6 +41,42 @@ function blobToDataURL(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
+}
+
+// Re-encode any displayable image Blob to a JPEG data URL via canvas.
+// @react-pdf only renders JPEG/PNG — evidence stored as HEIC (iPhone) or
+// WebP would be silently dropped. Drawing through a canvas normalises the
+// format and downscales to a PDF-thumbnail-friendly size. Falls back to the
+// raw data URL if the browser can't decode the blob.
+async function blobToJpegDataURL(blob: Blob): Promise<string> {
+  const MAX = 700;
+  try {
+    const bitmap = await createImageBitmap(blob, {
+      imageOrientation: "from-image",
+    });
+    let { width, height } = bitmap;
+    if (width > MAX || height > MAX) {
+      if (width >= height) {
+        height = Math.round((height * MAX) / width);
+        width = MAX;
+      } else {
+        width = Math.round((width * MAX) / height);
+        height = MAX;
+      }
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+    return canvas.toDataURL("image/jpeg", 0.8);
+  } catch {
+    // Couldn't decode (e.g. HEIC on a browser without support) — try the
+    // raw bytes; @react-pdf will use them if it's already a JPEG/PNG.
+    return blobToDataURL(blob);
+  }
 }
 
 // Load the finished PDF into a tab that was opened synchronously during the
@@ -266,7 +301,7 @@ export function ExportTab() {
               .from("evidence-photos")
               .download(e.file_path);
             if (error || !blob) continue;
-            const data = await blobToDataURL(blob);
+            const data = await blobToJpegDataURL(blob);
             photos.push({ evidence_date: e.evidence_date, data });
           } catch {
             // skip individual failures rather than abort the whole PDF
@@ -309,6 +344,21 @@ export function ExportTab() {
         };
       });
       const photosByItem = includePhotos ? await loadPhotos() : undefined;
+      // If the user asked for photos but the dataset has image evidences
+      // that all failed to load, tell them rather than silently shipping a
+      // photo-less PDF — distinguishes a load/format problem from "there
+      // simply are no photos".
+      if (includePhotos && photosByItem && photosByItem.size === 0) {
+        const hasImageEvidence = flat.some((it) =>
+          it.evidences.some((e) => (e.file_type ?? "").startsWith("image/"))
+        );
+        if (hasImageEvidence) {
+          alert(
+            "Note: this report's photos could not be loaded, so the PDF is " +
+              "being generated without thumbnails."
+          );
+        }
+      }
       // Lazy-load the PDF chunk only when an export actually runs — keeps
       // it out of the dashboard's first-load bundle.
       const [{ pdf }, { PdfDocument }] = await Promise.all([
