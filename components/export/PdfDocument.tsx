@@ -72,7 +72,9 @@ export interface PdfItem {
 
 export interface PdfPhoto {
   evidence_date: string;
-  data: Blob;
+  // base64 data URL ("data:image/jpeg;base64,..."). @react-pdf reliably
+  // renders data URLs in the browser; a raw Blob src is not honoured.
+  data: string;
 }
 
 export interface PdfDocProps {

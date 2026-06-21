@@ -34,6 +34,17 @@ function download(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// Read a fetched image Blob into a base64 data URL for @react-pdf's Image
+// src (a raw Blob src isn't rendered reliably in the browser build).
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 // PDFs open inline in a new tab instead of triggering a download — the
 // browser's PDF viewer is the natural place to read/print/save the report,
 // and mobile browsers tend to ignore the `download` attribute anyway and
@@ -191,7 +202,9 @@ export function ExportTab() {
             User: h.by_user_email ?? "",
           }))
         ),
-        "History"
+        // SheetJS reserves the name "History" (Excel change-history sheet),
+        // so the audit log tab is named "Change Log".
+        "Change Log"
       );
       const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       download(
@@ -263,7 +276,8 @@ export function ExportTab() {
           try {
             const r = await fetch(url);
             if (!r.ok) continue;
-            const data = await r.blob();
+            const blob = await r.blob();
+            const data = await blobToDataURL(blob);
             photos.push({ evidence_date: e.evidence_date, data });
           } catch {
             // skip individual failures rather than abort the whole PDF
