@@ -43,17 +43,37 @@ function blobToDataURL(blob: Blob): Promise<string> {
   });
 }
 
+// Race a promise against a timeout. If the timeout wins, the original
+// promise's resolution is discarded (no cancel — just abandoned).
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
+}
+
 // Re-encode any displayable image Blob to a JPEG data URL via canvas.
 // @react-pdf only renders JPEG/PNG — evidence stored as HEIC (iPhone) or
 // WebP would be silently dropped. Drawing through a canvas normalises the
-// format and downscales to a PDF-thumbnail-friendly size. Falls back to the
-// raw data URL if the browser can't decode the blob.
+// format and downscales to a PDF-thumbnail-friendly size. Falls back to
+// the raw data URL if the browser can't decode the blob.
 async function blobToJpegDataURL(blob: Blob): Promise<string> {
   const MAX = 700;
   try {
-    const bitmap = await createImageBitmap(blob, {
-      imageOrientation: "from-image",
-    });
+    const bitmap = await withTimeout(
+      createImageBitmap(blob, { imageOrientation: "from-image" }),
+      8000,
+      "image decode"
+    );
     let { width, height } = bitmap;
     if (width > MAX || height > MAX) {
       if (width >= height) {
@@ -256,7 +276,9 @@ export function ExportTab() {
     setBusy(null);
   }
 
-  async function loadPhotos(): Promise<Map<string, PdfPhoto[]>> {
+  async function loadPhotos(
+    onProgress: (loaded: number, total: number) => void
+  ): Promise<Map<string, PdfPhoto[]>> {
     const result = new Map<string, PdfPhoto[]>();
     const itemIds = flat
       .map((i) => i.id)
@@ -286,29 +308,49 @@ export function ExportTab() {
       if (arr.length < MAX_PHOTOS_PER_ITEM) arr.push(e);
       byItem.set(e.item_id, arr);
     }
-    await Promise.all(
-      Array.from(byItem.entries()).map(async ([itemId, arr]) => {
-        const photos: PdfPhoto[] = [];
-        for (const e of arr) {
-          if (!e.file_path) continue;
-          try {
-            // Use the SDK download() instead of signed-URL + fetch: the SDK
-            // call goes through the storage REST API (CORS configured for
-            // the app origin), so the bytes are always readable. A plain
-            // fetch() of a signed URL can be blocked by CORS and was
-            // silently dropping every photo.
-            const { data: blob, error } = await supabase.storage
+
+    // Flatten so we can show absolute progress and cap concurrency.
+    type Job = { itemId: string; row: Row };
+    const jobs: Job[] = [];
+    byItem.forEach((arr, itemId) => {
+      for (const row of arr) if (row.file_path) jobs.push({ itemId, row });
+    });
+    const total = jobs.length;
+    let loaded = 0;
+    onProgress(0, total);
+
+    // Bounded concurrency — N parallel downloads. With per-job timeouts
+    // a single hung blob can no longer freeze the entire export.
+    const CONCURRENCY = 6;
+    const PER_PHOTO_TIMEOUT_MS = 12_000;
+    let next = 0;
+    async function worker() {
+      while (next < jobs.length) {
+        const job = jobs[next++];
+        try {
+          const { data: blob, error } = await withTimeout(
+            supabase.storage
               .from("evidence-photos")
-              .download(e.file_path);
-            if (error || !blob) continue;
+              .download(job.row.file_path!),
+            PER_PHOTO_TIMEOUT_MS,
+            "storage download"
+          );
+          if (!error && blob) {
             const data = await blobToJpegDataURL(blob);
-            photos.push({ evidence_date: e.evidence_date, data });
-          } catch {
-            // skip individual failures rather than abort the whole PDF
+            const arr = result.get(job.itemId) ?? [];
+            arr.push({ evidence_date: job.row.evidence_date, data });
+            result.set(job.itemId, arr);
           }
+        } catch {
+          // Skip individual failures (timeout, decode error) rather than
+          // abort the whole PDF.
         }
-        if (photos.length) result.set(itemId, photos);
-      })
+        loaded += 1;
+        onProgress(loaded, total);
+      }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, () => worker())
     );
     return result;
   }
@@ -316,15 +358,20 @@ export function ExportTab() {
   async function exportPDF() {
     setBusy("pdf");
     // Open the tab NOW, inside the click gesture, so the popup blocker
-    // allows it. It shows a tiny placeholder while the PDF generates, then
-    // we redirect it to the blob URL.
+    // allows it. It shows a live progress message while the PDF generates,
+    // then we redirect it to the blob URL.
     const win = window.open("", "_blank");
     if (win) {
       win.document.write(
         "<!doctype html><title>Generating PDF…</title>" +
           "<body style='font-family:sans-serif;padding:24px;color:#445566'>" +
-          "Generating PDF…</body>"
+          "<div id='cmp-status'>Preparing export…</div></body>"
       );
+    }
+    function status(msg: string) {
+      if (!win || win.closed) return;
+      const el = win.document.getElementById("cmp-status");
+      if (el) el.textContent = msg;
     }
     try {
       const items: PdfItem[] = flat.map((it) => {
@@ -343,7 +390,16 @@ export function ExportTab() {
           rate: rt !== null ? rt.toFixed(3) : "",
         };
       });
-      const photosByItem = includePhotos ? await loadPhotos() : undefined;
+      const photosByItem = includePhotos
+        ? await loadPhotos((loaded, total) =>
+            status(
+              total
+                ? `Loading photos… ${loaded} of ${total}`
+                : "No photos to load"
+            )
+          )
+        : undefined;
+      status("Rendering PDF…");
       // If the user asked for photos but the dataset has image evidences
       // that all failed to load, tell them rather than silently shipping a
       // photo-less PDF — distinguishes a load/format problem from "there
