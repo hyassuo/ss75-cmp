@@ -280,63 +280,40 @@ export function ExportTab() {
     onProgress: (loaded: number, total: number) => void
   ): Promise<Map<string, PdfPhoto[]>> {
     const result = new Map<string, PdfPhoto[]>();
-    const itemIds = flat
-      .map((i) => i.id)
-      .filter(Boolean)
-      .slice(0, MAX_ITEMS_WITH_PHOTOS);
-    if (!itemIds.length) return result;
-
-    const supabase = createClient();
-    // Cap the evidence query itself — a stalled Supabase request (session
-    // refresh, transient network) would otherwise freeze the export at the
-    // very first await. On timeout, skip photo loading entirely and let
-    // the user know.
-    type EvRow = {
-      item_id: string;
+    // Evidence metadata is already in memory — DataContext loads items with
+    // their evidences in one go. Re-querying via supabase.from('evidences')
+    // proved fragile (a single stalled request would freeze the export with
+    // no recovery), so build the photo job list straight from `flat`. We
+    // still hit storage for the actual bytes per photo.
+    type Job = {
+      itemId: string;
       evidence_date: string;
-      file_path: string | null;
-      file_type: string | null;
+      file_path: string;
     };
-    let evs: EvRow[] | null = null;
-    try {
-      // The Supabase query builder is a Thenable, not a real Promise; wrap
-      // it so withTimeout's generic Promise typing accepts it.
-      const queryPromise = Promise.resolve(
-        supabase
-          .from("evidences")
-          .select("item_id, evidence_date, file_path, file_type")
-          .in("item_id", itemIds)
-          .like("file_type", "image/%")
-          .not("file_path", "is", null)
-          .order("evidence_date", { ascending: false })
-      );
-      const res = await withTimeout(queryPromise, 15_000, "evidence query");
-      evs = (res.data as EvRow[] | null) ?? null;
-    } catch {
-      // Timed out / failed — return empty so the PDF still renders, just
-      // without thumbnails. The caller's "no photos loaded" warning will
-      // alert the user.
-      return result;
-    }
-    if (!evs) return result;
-
-    const byItem = new Map<string, EvRow[]>();
-    for (const e of evs) {
-      const arr = byItem.get(e.item_id) ?? [];
-      if (arr.length < MAX_PHOTOS_PER_ITEM) arr.push(e);
-      byItem.set(e.item_id, arr);
-    }
-
-    // Flatten so we can show absolute progress and cap concurrency.
-    type Job = { itemId: string; row: EvRow };
     const jobs: Job[] = [];
-    byItem.forEach((arr, itemId) => {
-      for (const row of arr) if (row.file_path) jobs.push({ itemId, row });
-    });
+    const itemsConsidered = flat.slice(0, MAX_ITEMS_WITH_PHOTOS);
+    for (const it of itemsConsidered) {
+      const imageEvs = (it.evidences ?? [])
+        .filter(
+          (e) =>
+            !!e.file_path && (e.file_type ?? "").startsWith("image/")
+        )
+        .sort((a, b) => (a.evidence_date < b.evidence_date ? 1 : -1))
+        .slice(0, MAX_PHOTOS_PER_ITEM);
+      for (const e of imageEvs) {
+        jobs.push({
+          itemId: it.id,
+          evidence_date: e.evidence_date,
+          file_path: e.file_path as string,
+        });
+      }
+    }
     const total = jobs.length;
     let loaded = 0;
     onProgress(0, total);
+    if (!total) return result;
 
+    const supabase = createClient();
     // Bounded concurrency — N parallel downloads. With per-job timeouts
     // a single hung blob can no longer freeze the entire export.
     const CONCURRENCY = 6;
@@ -346,17 +323,18 @@ export function ExportTab() {
       while (next < jobs.length) {
         const job = jobs[next++];
         try {
+          const dl = Promise.resolve(
+            supabase.storage.from("evidence-photos").download(job.file_path)
+          );
           const { data: blob, error } = await withTimeout(
-            supabase.storage
-              .from("evidence-photos")
-              .download(job.row.file_path!),
+            dl,
             PER_PHOTO_TIMEOUT_MS,
             "storage download"
           );
           if (!error && blob) {
             const data = await blobToJpegDataURL(blob);
             const arr = result.get(job.itemId) ?? [];
-            arr.push({ evidence_date: job.row.evidence_date, data });
+            arr.push({ evidence_date: job.evidence_date, data });
             result.set(job.itemId, arr);
           }
         } catch {
