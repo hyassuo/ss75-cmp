@@ -287,30 +287,48 @@ export function ExportTab() {
     if (!itemIds.length) return result;
 
     const supabase = createClient();
-    const { data: evs } = await supabase
-      .from("evidences")
-      .select("item_id, evidence_date, file_path, file_type")
-      .in("item_id", itemIds)
-      .like("file_type", "image/%")
-      .not("file_path", "is", null)
-      .order("evidence_date", { ascending: false });
-    if (!evs) return result;
-
-    type Row = {
+    // Cap the evidence query itself — a stalled Supabase request (session
+    // refresh, transient network) would otherwise freeze the export at the
+    // very first await. On timeout, skip photo loading entirely and let
+    // the user know.
+    type EvRow = {
       item_id: string;
       evidence_date: string;
       file_path: string | null;
       file_type: string | null;
     };
-    const byItem = new Map<string, Row[]>();
-    for (const e of evs as Row[]) {
+    let evs: EvRow[] | null = null;
+    try {
+      // The Supabase query builder is a Thenable, not a real Promise; wrap
+      // it so withTimeout's generic Promise typing accepts it.
+      const queryPromise = Promise.resolve(
+        supabase
+          .from("evidences")
+          .select("item_id, evidence_date, file_path, file_type")
+          .in("item_id", itemIds)
+          .like("file_type", "image/%")
+          .not("file_path", "is", null)
+          .order("evidence_date", { ascending: false })
+      );
+      const res = await withTimeout(queryPromise, 15_000, "evidence query");
+      evs = (res.data as EvRow[] | null) ?? null;
+    } catch {
+      // Timed out / failed — return empty so the PDF still renders, just
+      // without thumbnails. The caller's "no photos loaded" warning will
+      // alert the user.
+      return result;
+    }
+    if (!evs) return result;
+
+    const byItem = new Map<string, EvRow[]>();
+    for (const e of evs) {
       const arr = byItem.get(e.item_id) ?? [];
       if (arr.length < MAX_PHOTOS_PER_ITEM) arr.push(e);
       byItem.set(e.item_id, arr);
     }
 
     // Flatten so we can show absolute progress and cap concurrency.
-    type Job = { itemId: string; row: Row };
+    type Job = { itemId: string; row: EvRow };
     const jobs: Job[] = [];
     byItem.forEach((arr, itemId) => {
       for (const row of arr) if (row.file_path) jobs.push({ itemId, row });
@@ -390,15 +408,17 @@ export function ExportTab() {
           rate: rt !== null ? rt.toFixed(3) : "",
         };
       });
-      const photosByItem = includePhotos
-        ? await loadPhotos((loaded, total) =>
-            status(
-              total
-                ? `Loading photos… ${loaded} of ${total}`
-                : "No photos to load"
-            )
+      let photosByItem: Map<string, PdfPhoto[]> | undefined;
+      if (includePhotos) {
+        status("Looking up photos…");
+        photosByItem = await loadPhotos((loaded, total) =>
+          status(
+            total
+              ? `Loading photos… ${loaded} of ${total}`
+              : "No photos to load"
           )
-        : undefined;
+        );
+      }
       status("Rendering PDF…");
       // If the user asked for photos but the dataset has image evidences
       // that all failed to load, tell them rather than silently shipping a
