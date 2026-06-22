@@ -358,10 +358,19 @@ export function ExportTab() {
     // then we redirect it to the blob URL.
     const win = window.open("", "_blank");
     if (win) {
+      // Force a light background + readable text — browsers tinted the
+      // default about:blank black in dark mode, which made the placeholder
+      // text invisible and looked like "the new tab is just black".
       win.document.write(
-        "<!doctype html><title>Generating PDF…</title>" +
-          "<body style='font-family:sans-serif;padding:24px;color:#445566'>" +
-          "<div id='cmp-status'>Preparing export…</div></body>"
+        "<!doctype html><html><head>" +
+          "<meta name='color-scheme' content='light'>" +
+          "<title>Generating PDF…</title></head>" +
+          "<body style='margin:0;background:#ffffff;color:#1e2d3d;" +
+          "font-family:system-ui,sans-serif;padding:32px;font-size:16px'>" +
+          "<div style='font-weight:700;margin-bottom:8px'>" +
+          "SS-75 CMP — PDF export</div>" +
+          "<div id='cmp-status' style='color:#445566'>Preparing export…</div>" +
+          "</body></html>"
       );
     }
     function status(msg: string) {
@@ -419,6 +428,12 @@ export function ExportTab() {
         import("@react-pdf/renderer"),
         import("@/components/export/PdfDocument"),
       ]);
+      const photoCount = photosByItem
+        ? Array.from(photosByItem.values()).reduce((n, a) => n + a.length, 0)
+        : 0;
+      console.info(
+        `[pdf] rendering ${items.length} items, ${photoCount} photos`
+      );
       const blob = await pdf(
         <PdfDocument
           generated={fmtCompact(today())}
@@ -429,6 +444,13 @@ export function ExportTab() {
           photosByItem={photosByItem}
         />
       ).toBlob();
+      console.info(`[pdf] rendered blob: ${blob.size} bytes`);
+      if (blob.size < 500) {
+        throw new Error(`PDF render produced an empty file (${blob.size} B)`);
+      }
+      status(
+        `PDF ready (${(blob.size / 1024).toFixed(0)} KB, ${photoCount} photos) — opening…`
+      );
       showPdfInTab(win, blob);
     } catch (e) {
       if (win && !win.closed) win.close();
