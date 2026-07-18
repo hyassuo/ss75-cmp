@@ -84,6 +84,9 @@ export interface PdfDocProps {
   critical: number;
   items: PdfItem[];
   photosByItem?: Map<string, PdfPhoto[]>;
+  // Photo coverage note ("N embedded · M failed · cap reached") — rendered
+  // in the header so the report documents its own omissions.
+  note?: string;
 }
 
 export function PdfDocument({
@@ -93,6 +96,7 @@ export function PdfDocument({
   critical,
   items,
   photosByItem,
+  note,
 }: PdfDocProps) {
   const zones = Array.from(new Set(items.map((i) => i.zid))).sort();
 
@@ -107,6 +111,7 @@ export function PdfDocument({
           Total {total} · SECE {sece} · Critical {critical} · NORSOK M-001 /
           DNV-RP-G101 / ISO 21457 / NACE MR0175
         </Text>
+        {note ? <Text style={s.sub}>{note}</Text> : null}
         {zones.map((zid) => {
           const zoneItems = items.filter((i) => i.zid === zid);
           const zname = zoneItems[0]?.zname ?? "";
@@ -140,17 +145,23 @@ export function PdfDocument({
             }
           });
           return (
-            <View key={zid} wrap={false}>
-              <Text style={s.zone}>
-                {zid} — {zname}
-              </Text>
-              <View style={s.h}>
-                <Text style={[s.cName, s.hc]}>Item</Text>
-                <Text style={[s.cIfs, s.hc]}>IFS</Text>
-                <Text style={[s.cPri, s.hc]}>Priority</Text>
-                <Text style={[s.cSta, s.hc]}>Status</Text>
-                <Text style={[s.cLast, s.hc]}>Last</Text>
-                <Text style={[s.cNext, s.hc]}>Next</Text>
+            // The zone container must be allowed to wrap: with wrap={false}
+            // a zone taller than one A4 page had its overflow rows silently
+            // clipped from the report. The header group below keeps the
+            // zone title glued to its first rows across page breaks.
+            <View key={zid}>
+              <View wrap={false} minPresenceAhead={40}>
+                <Text style={s.zone}>
+                  {zid} — {zname}
+                </Text>
+                <View style={s.h}>
+                  <Text style={[s.cName, s.hc]}>Item</Text>
+                  <Text style={[s.cIfs, s.hc]}>IFS</Text>
+                  <Text style={[s.cPri, s.hc]}>Priority</Text>
+                  <Text style={[s.cSta, s.hc]}>Status</Text>
+                  <Text style={[s.cLast, s.hc]}>Last</Text>
+                  <Text style={[s.cNext, s.hc]}>Next</Text>
+                </View>
               </View>
               {rows}
             </View>
