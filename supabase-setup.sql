@@ -308,6 +308,10 @@ CREATE TRIGGER trg_evidences_author
 -- SECTION 5 — AUTH HOOK: auto-create profile on signup
 -- =============================================================================
 
+-- NOTE: 'hyassuo@gmail.com' is the bootstrap admin (auto-active on first
+-- sign-in so the very first login works). After the first admin exists,
+-- this special case can be removed by re-running this function definition
+-- without the email checks.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -338,7 +342,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -374,25 +378,51 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 DROP POLICY IF EXISTS "units_select_authenticated" ON public.units;
 CREATE POLICY "units_select_authenticated" ON public.units
   FOR SELECT TO authenticated USING (true);
+-- Admins may touch only their own unit row (hardening round 4): a global
+-- admin policy would let any admin rename/delete other units via direct
+-- PostgREST, and a unit delete cascades to that unit's data.
 DROP POLICY IF EXISTS "units_admin_all" ON public.units;
 CREATE POLICY "units_admin_all" ON public.units
-  FOR ALL TO authenticated USING (public.current_user_role() = 'admin');
+  FOR ALL TO authenticated
+  USING (
+    public.current_user_role() = 'admin'
+    AND id = public.current_user_unit()
+  )
+  WITH CHECK (
+    public.current_user_role() = 'admin'
+    AND id = public.current_user_unit()
+  );
 
 -- profiles
 DROP POLICY IF EXISTS "profiles_select_authenticated" ON public.profiles;
 -- Visibility limited to self OR admins. Avoids leaking emails/names of other
 -- users to viewers/inspectors via direct PostgREST calls.
+-- Admin visibility/management scoped to the admin's own unit (hardening
+-- round 4) — a global admin branch let any admin reach every unit's
+-- profiles via direct PostgREST.
 DROP POLICY IF EXISTS "profiles_select_self_or_admin" ON public.profiles;
 CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
   FOR SELECT TO authenticated USING (
-    id = auth.uid() OR public.current_user_role() = 'admin'
+    id = auth.uid()
+    OR (
+      public.current_user_role() = 'admin'
+      AND unit_id = public.current_user_unit()
+    )
   );
 DROP POLICY IF EXISTS "profiles_update_self" ON public.profiles;
 CREATE POLICY "profiles_update_self" ON public.profiles
   FOR UPDATE TO authenticated USING (id = auth.uid());
 DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
 CREATE POLICY "profiles_admin_all" ON public.profiles
-  FOR ALL TO authenticated USING (public.current_user_role() = 'admin');
+  FOR ALL TO authenticated
+  USING (
+    public.current_user_role() = 'admin'
+    AND unit_id = public.current_user_unit()
+  )
+  WITH CHECK (
+    public.current_user_role() = 'admin'
+    AND unit_id = public.current_user_unit()
+  );
 
 -- Column-level guard: without this, profiles_update_self would let any user
 -- set their own role/active (privilege escalation). role/active/unit_id are
@@ -404,9 +434,11 @@ GRANT UPDATE (full_name, dept) ON public.profiles TO authenticated;
 DROP POLICY IF EXISTS "zones_select_authenticated" ON public.zones;
 CREATE POLICY "zones_select_authenticated" ON public.zones
   FOR SELECT TO authenticated USING (true);
+-- The zone catalog (Z01..Z14) is SHARED, read-only reference data
+-- (hardening round 4). Dropping the admin policy leaves only zones_select,
+-- so RLS denies INSERT/UPDATE/DELETE to all authenticated users. Manage
+-- zones via the service role / SQL editor.
 DROP POLICY IF EXISTS "zones_admin_all" ON public.zones;
-CREATE POLICY "zones_admin_all" ON public.zones
-  FOR ALL TO authenticated USING (public.current_user_role() = 'admin');
 
 -- items
 DROP POLICY IF EXISTS "items_select_unit" ON public.items;
@@ -434,7 +466,10 @@ CREATE POLICY "items_update_inspector_admin" ON public.items
   );
 DROP POLICY IF EXISTS "items_delete_admin" ON public.items;
 CREATE POLICY "items_delete_admin" ON public.items
-  FOR DELETE TO authenticated USING (public.current_user_role() = 'admin');
+  FOR DELETE TO authenticated USING (
+    public.current_user_role() = 'admin'
+    AND unit_id = public.current_user_unit()
+  );
 -- Creators may delete their own items (needed for discarding new-item drafts).
 DROP POLICY IF EXISTS "items_delete_creator" ON public.items;
 CREATE POLICY "items_delete_creator" ON public.items
@@ -462,7 +497,14 @@ CREATE POLICY "readings_insert_inspector_admin" ON public.readings
   );
 DROP POLICY IF EXISTS "readings_delete_admin" ON public.readings;
 CREATE POLICY "readings_delete_admin" ON public.readings
-  FOR DELETE TO authenticated USING (public.current_user_role() = 'admin');
+  FOR DELETE TO authenticated USING (
+    public.current_user_role() = 'admin'
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id = readings.item_id
+        AND items.unit_id = public.current_user_unit()
+    )
+  );
 
 -- evidences
 DROP POLICY IF EXISTS "evidences_select_unit" ON public.evidences;
@@ -482,7 +524,14 @@ CREATE POLICY "evidences_insert_inspector_admin" ON public.evidences
   );
 DROP POLICY IF EXISTS "evidences_delete_admin" ON public.evidences;
 CREATE POLICY "evidences_delete_admin" ON public.evidences
-  FOR DELETE TO authenticated USING (public.current_user_role() = 'admin');
+  FOR DELETE TO authenticated USING (
+    public.current_user_role() = 'admin'
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id = evidences.item_id
+        AND items.unit_id = public.current_user_unit()
+    )
+  );
 
 -- history (read-only audit; written only by trigger)
 DROP POLICY IF EXISTS "history_select_unit" ON public.history;
@@ -536,7 +585,13 @@ CREATE POLICY "evidence_insert_inspector_admin" ON storage.objects
 DROP POLICY IF EXISTS "evidence_delete_admin" ON storage.objects;
 CREATE POLICY "evidence_delete_admin" ON storage.objects
   FOR DELETE TO authenticated USING (
-    bucket_id = 'evidence-photos' AND public.current_user_role() = 'admin'
+    bucket_id = 'evidence-photos'
+    AND public.current_user_role() = 'admin'
+    AND EXISTS (
+      SELECT 1 FROM public.items
+      WHERE items.id::text = (storage.foldername(name))[1]
+        AND items.unit_id = public.current_user_unit()
+    )
   );
 
 

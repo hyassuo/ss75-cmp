@@ -50,6 +50,16 @@ export async function requireAdmin(): Promise<GuardResult> {
   return result;
 }
 
+// Parse a JSON request body; null on malformed/empty input so the caller
+// can 400 instead of throwing into a generic 500.
+export async function readJson<T>(request: Request): Promise<T | null> {
+  try {
+    return (await request.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 // CSRF defense-in-depth: reject cross-site mutations. Cookies are SameSite=Lax
 // (so cross-site POSTs already drop the session), this is a second layer.
 // Allows same-origin requests and server-to-server calls with no Origin header.

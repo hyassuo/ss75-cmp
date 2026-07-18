@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
+import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -13,10 +14,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  const { email, password } = (await request.json()) as {
-    email?: string;
-    password?: string;
-  };
+  // Shared budget across the create/delete/update admin mutations.
+  const rl = rateLimit(`users:${guard.ctx.userId}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
+  const body = await readJson<{ email?: string; password?: string }>(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const { email, password } = body;
   if (!email || !/.+@.+\..+/.test(email)) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
@@ -36,10 +47,10 @@ export async function POST(request: Request) {
     email_confirm: true,
   });
   if (error || !created.user) {
-    return NextResponse.json(
-      { error: error?.message ?? "Could not create user" },
-      { status: 400 }
-    );
+    // Log the real GoTrue reason server-side only — raw auth/DB strings are
+    // internal detail, not client copy.
+    console.error("[users/create]", error);
+    return NextResponse.json({ error: "Could not create user" }, { status: 400 });
   }
   // Deliberate admin action -> activate the freshly created profile and bind
   // it to the creating admin's unit (the handle_new_user trigger assigns a
@@ -52,7 +63,11 @@ export async function POST(request: Request) {
     .update(activation)
     .eq("id", created.user.id);
   if (actErr) {
-    return NextResponse.json({ error: actErr.message }, { status: 400 });
+    console.error("[users/create] activation", actErr);
+    return NextResponse.json(
+      { error: "User created but could not be activated" },
+      { status: 500 }
+    );
   }
   return NextResponse.json({ ok: true });
 }

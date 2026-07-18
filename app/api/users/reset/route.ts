@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
+import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  const { email } = (await request.json()) as { email?: string };
+  // Tighter than the other admin routes — each call sends an email.
+  const rl = rateLimit(`users-reset:${guard.ctx.userId}`, 5, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
+  const body = await readJson<{ email?: string }>(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const { email } = body;
   if (!email) {
     return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
@@ -37,7 +51,11 @@ export async function POST(request: Request) {
     redirectTo,
   });
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error("[users/reset]", error);
+    return NextResponse.json(
+      { error: "Could not send reset email" },
+      { status: 400 }
+    );
   }
   return NextResponse.json({ ok: true });
 }
