@@ -131,6 +131,13 @@ const en = {
   "modal.resolved": "Resolved",
   "modal.createItem": "Create Item",
   "modal.untitled": "Untitled",
+  "modal.pendingAiReading":
+    "AI pit-depth estimate — saved as a reading when you save the item:",
+  "modal.unsavedEvidence":
+    "There is an unsaved evidence entry (photo/description). OK = continue and discard it. Cancel = go back and save it first.",
+  "modal.nameRequired": "Item name is required.",
+  "modal.archive": "Archive",
+  "modal.unarchive": "Unarchive",
 
   // Modal field labels
   "f.itemName": "Item Name / Tag",
@@ -296,6 +303,7 @@ const en = {
   "f.aiAnalysing": "AI is analysing the photo...",
   "f.optimised": "Optimised",
   "f.choose": "Choose file…",
+  "f.uploadFailed": "Photo upload failed:",
 } satisfies DictMap;
 
 type Key = keyof typeof en;
@@ -411,6 +419,13 @@ const pt: Translations = {
   "modal.resolved": "Resolvido",
   "modal.createItem": "Criar Item",
   "modal.untitled": "Sem nome",
+  "modal.pendingAiReading":
+    "Estimativa de profundidade (IA) — será salva como leitura ao salvar o item:",
+  "modal.unsavedEvidence":
+    "Há uma evidência não salva (foto/descrição). OK = continuar e descartar. Cancelar = voltar e salvá-la primeiro.",
+  "modal.nameRequired": "O nome do item é obrigatório.",
+  "modal.archive": "Arquivar",
+  "modal.unarchive": "Desarquivar",
 
   // Modal fields
   "f.itemName": "Nome / Tag do Item",
@@ -572,6 +587,7 @@ const pt: Translations = {
   "f.aiAnalysing": "IA analisando a foto...",
   "f.optimised": "Otimizada",
   "f.choose": "Escolher arquivo…",
+  "f.uploadFailed": "Falha no envio da foto:",
 };
 
 const dicts: Record<Lang, Translations> = { en, pt };

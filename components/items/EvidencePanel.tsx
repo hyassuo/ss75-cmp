@@ -30,7 +30,12 @@ interface Props {
   onRemove: (id: string) => void;
   isAdmin: boolean;
   canEdit?: boolean;
-  onAIApply: (r: AIAnalysis) => void;
+  // force=false: fill-only-empty (auto-apply). force=true: overwrite
+  // (the explicit Apply button on the result card).
+  onAIApply: (r: AIAnalysis, force?: boolean) => void;
+  // Reports whether the entry form holds an unsaved photo/description, so
+  // the modal can warn before Save/Cancel discards it.
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function EvidencePanel({
@@ -41,6 +46,7 @@ export function EvidencePanel({
   isAdmin,
   canEdit = true,
   onAIApply,
+  onDirtyChange,
 }: Props) {
   const { t } = useLang();
   const [date, setDate] = useState(today());
@@ -53,8 +59,13 @@ export function EvidencePanel({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState<AIAnalysis | null>(null);
   const [aiErr, setAiErr] = useState("");
+  const [saveErr, setSaveErr] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    onDirtyChange?.(!!file || !!desc.trim());
+  }, [file, desc, onDirtyChange]);
 
   useEffect(() => {
     let active = true;
@@ -124,11 +135,10 @@ export function EvidencePanel({
         if (!desc && result.findings) {
           setDesc(`${result.findings} Action: ${result.immediateAction}.`);
         }
-        // Auto-apply the analysis to the item form so the user doesn't have
-        // to hunt for a second "Apply" button. The card stays visible as a
-        // review surface; clicking Apply there re-applies (e.g. after the
-        // user edited a field by mistake).
-        onAIApply(result);
+        // Auto-apply fills only fields the user hasn't set (force=false).
+        // The card stays visible as a review surface; its Apply button
+        // force-applies for deliberate overwrites.
+        onAIApply(result, false);
       }
     } catch {
       setAiErr("AI analysis request failed.");
@@ -139,6 +149,7 @@ export function EvidencePanel({
   async function add() {
     if (!desc.trim()) return;
     setUploading(true);
+    setSaveErr("");
     let filePath: string | null = null;
     if (file) {
       const supabase = createClient();
@@ -147,7 +158,14 @@ export function EvidencePanel({
       const { error } = await supabase.storage
         .from(BUCKET)
         .upload(path, file, { contentType: file.type });
-      if (!error) filePath = path;
+      if (error) {
+        // Abort instead of silently saving an evidence row with no file —
+        // the form keeps its state so the user can retry.
+        setSaveErr(t("f.uploadFailed") + " " + error.message);
+        setUploading(false);
+        return;
+      }
+      filePath = path;
     }
     await onAdd({
       evidence_date: date,
@@ -300,6 +318,21 @@ export function EvidencePanel({
         >
           {uploading ? t("common.saving") : t("f.saveEvidence")}
         </button>
+        {saveErr && (
+          <div
+            style={{
+              background: DS.redBg,
+              border: "1px solid " + DS.redBord,
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginTop: 10,
+              fontSize: 12,
+              color: DS.red,
+            }}
+          >
+            {saveErr}
+          </div>
+        )}
       </div>
       )}
 
@@ -341,7 +374,7 @@ export function EvidencePanel({
         <AIResultCard
           result={aiResult}
           onApply={() => {
-            onAIApply(aiResult);
+            onAIApply(aiResult, true);
             setAiResult(null);
           }}
         />
