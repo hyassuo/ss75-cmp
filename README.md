@@ -68,6 +68,21 @@ photos never leak across units. Files are displayed in the modal via
 short-lived signed URLs. The PDF export currently embeds only the
 inspection metadata, not the images themselves.
 
+## PWA
+
+The app is installable (Add to Home Screen / Install app):
+
+- `app/manifest.ts` → served at `/manifest.webmanifest` (icons in
+  `public/icons/`, generated from `app/icon.svg`).
+- `public/sw.js` — minimal service worker: network-first navigations with
+  a branded offline page (`public/offline.html`); cache-first only for
+  content-hashed build assets. **No page or API data is ever cached** —
+  auth'd content stays fresh and private. Bump `VERSION` inside `sw.js`
+  to force-invalidate the asset cache on a deploy.
+- Registered by `components/layout/PwaRegister.tsx` (production only).
+- The middleware matcher excludes `sw.js`, `manifest.webmanifest` and
+  `offline.html` — they must load without a session.
+
 ## Deploy
 
 Connected to Vercel via GitHub. The `main` branch is the production
