@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
+import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/utils/rateLimit";
 import type { UserRole } from "@/lib/types/domain";
 
 export const runtime = "nodejs";
@@ -14,11 +15,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  const { id, role, active } = (await request.json()) as {
+  const rl = rateLimit(`users:${guard.ctx.userId}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
+  const body = await readJson<{
     id?: string;
     role?: UserRole;
     active?: boolean;
-  };
+  }>(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const { id, role, active } = body;
   if (!id) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
   }
@@ -84,7 +97,8 @@ export async function POST(request: Request) {
 
   const { error } = await admin.from("profiles").update(patch).eq("id", id);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error("[users/update]", error);
+    return NextResponse.json({ error: "Could not update user" }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
 }

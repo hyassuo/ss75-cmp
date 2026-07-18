@@ -26,7 +26,10 @@ export function RiskMatrix() {
   const { t, tPriority, tStatus } = useLang();
   const [open, setOpen] = useState<Open | null>(null);
   const allItems: Array<ItemWithRelations & { zoneName: string }> = zones.flatMap(
-    (z) => itemsByZone(z.zid).map((i) => ({ ...i, zoneName: z.name }))
+    (z) =>
+      itemsByZone(z.zid)
+        .filter((i) => !i.archived)
+        .map((i) => ({ ...i, zoneName: z.name }))
   );
   const withRisk = allItems.filter((i) => i.prob && i.cons);
 

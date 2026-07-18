@@ -1,5 +1,10 @@
 import type { Reading } from "@/lib/types/domain";
 
+// Corrosion-rate severity thresholds (mm/yr) — shared by rateColor,
+// AlertBar and itemScore so the bands can never drift apart.
+export const RATE_CRITICAL_MM_YR = 0.5;
+export const RATE_ELEVATED_MM_YR = 0.2;
+
 // Corrosion / pit growth rate in mm/year from readings (handoff 6.6).
 export function calcRate(readings: Reading[] | null | undefined): number | null {
   if (!readings || readings.length < 2) return null;
@@ -19,8 +24,8 @@ export function calcRate(readings: Reading[] | null | undefined): number | null 
 
 export function rateColor(r: number | null): string {
   if (r === null) return "#7a95b0";
-  if (r > 0.5) return "#c0392b";
-  if (r > 0.2) return "#c0591b";
+  if (r > RATE_CRITICAL_MM_YR) return "#c0392b";
+  if (r > RATE_ELEVATED_MM_YR) return "#c0591b";
   if (r > 0) return "#a07c10";
   return "#1e7e45";
 }

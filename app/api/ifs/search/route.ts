@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
+import { readJson, requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/utils/rateLimit";
 
@@ -34,7 +34,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const { query } = (await request.json()) as { query?: string };
+  const body = await readJson<{ query?: string }>(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const { query } = body;
   if (!query || typeof query !== "string" || query.length < 2) {
     return NextResponse.json([]);
   }

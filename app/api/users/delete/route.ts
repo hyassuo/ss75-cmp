@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
+import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  const { id } = (await request.json()) as { id?: string };
+  const rl = rateLimit(`users:${guard.ctx.userId}`, 30, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
+  const body = await readJson<{ id?: string }>(request);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  const { id } = body;
   if (!id) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
   }
@@ -60,7 +73,8 @@ export async function POST(request: Request) {
   // Deleting the auth user cascades to public.profiles (ON DELETE CASCADE).
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error("[users/delete]", error);
+    return NextResponse.json({ error: "Could not delete user" }, { status: 400 });
   }
   return NextResponse.json({ ok: true });
 }

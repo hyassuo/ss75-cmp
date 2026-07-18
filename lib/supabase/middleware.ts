@@ -8,13 +8,20 @@ export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   // Prefetch requests are background hovers/viewport hints — skip the
-  // Supabase auth round-trip so section switching stays snappy. The real
-  // navigation (no prefetch header) still runs the full auth check.
+  // Supabase auth round-trip so section switching stays snappy for
+  // signed-in users. The prefetch headers are client-controlled (trivially
+  // forged with curl), so the shortcut applies only when a Supabase session
+  // cookie is present; unauthenticated requests always take the full
+  // check + redirect. (Real auth lives in the server layouts and RLS —
+  // this gate is defense-in-depth.)
   const isPrefetch =
     request.headers.get("next-router-prefetch") === "1" ||
     request.headers.get("purpose") === "prefetch" ||
     (request.headers.get("sec-purpose") ?? "").includes("prefetch");
-  if (isPrefetch) {
+  const hasSupabaseCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-"));
+  if (isPrefetch && hasSupabaseCookie) {
     return supabaseResponse;
   }
 

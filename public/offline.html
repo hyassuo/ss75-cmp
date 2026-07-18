@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Offline — SS-75 CMP</title>
+  <style>
+    /* Colors mirror lib/design/tokens.ts (bg, sur, bord, text, sbBg, blu). */
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: #f0f4f8;
+      color: #1e2d3d;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      box-sizing: border-box;
+      min-height: 100vh;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #dde4ed;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+      padding: 32px 28px;
+      max-width: 380px;
+      text-align: center;
+    }
+    .logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: #2c3e52;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+    h1 { font-size: 17px; margin: 0 0 10px; }
+    p { font-size: 13px; color: #445566; line-height: 1.6; margin: 0 0 6px; }
+    p.en { color: #7a95b0; margin-bottom: 20px; }
+    button {
+      background: #1a5cb5;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">CMP</div>
+    <h1>Sem conexão</h1>
+    <p>O SS-75 CMP precisa de conexão com a internet. Verifique a rede e tente novamente.</p>
+    <p class="en">SS-75 CMP needs an internet connection. Check your network and try again.</p>
+    <button onclick="location.reload()">Tentar novamente / Retry</button>
+  </div>
+</body>
+</html>

@@ -9,6 +9,7 @@ import { useData } from "@/lib/context/DataContext";
 import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
+import { download } from "@/lib/utils/download";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
 import type { HistoryEntry } from "@/lib/types/domain";
@@ -23,15 +24,6 @@ const MAX_PHOTOS_PER_ITEM = 4;
 // the browser tab for minutes. Items beyond the cap still appear in the PDF
 // — they just render without thumbnails.
 const MAX_ITEMS_WITH_PHOTOS = 50;
-
-function download(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 // Read a Blob into a base64 data URL.
 function blobToDataURL(blob: Blob): Promise<string> {
@@ -93,9 +85,13 @@ async function blobToJpegDataURL(blob: Blob): Promise<string> {
     bitmap.close?.();
     return canvas.toDataURL("image/jpeg", 0.8);
   } catch {
-    // Couldn't decode (e.g. HEIC on a browser without support) — try the
-    // raw bytes; @react-pdf will use them if it's already a JPEG/PNG.
-    return blobToDataURL(blob);
+    // Couldn't decode (e.g. HEIC on a browser without support). Only
+    // JPEG/PNG can be embedded raw; anything else would be SILENTLY
+    // dropped by @react-pdf — throw so the caller counts it as failed.
+    if (blob.type === "image/jpeg" || blob.type === "image/png") {
+      return blobToDataURL(blob);
+    }
+    throw new Error(`undecodable image format: ${blob.type || "unknown"}`);
   }
 }
 
@@ -136,6 +132,10 @@ export function ExportTab() {
       zsys: z.system,
     }))
   );
+  // Archived policy: CSV/XLSX are the system-of-record dump and keep
+  // archived rows (flagged via the Archived column); the PDF report and the
+  // on-screen summary show only active items.
+  const activeFlat = flat.filter((i) => !i.archived);
 
   function itemRows() {
     return flat.map((it) => {
@@ -162,6 +162,7 @@ export function ExportTab() {
         "Next Inspection": it.next_insp ?? "",
         "Corrosion Rate (mm/yr)": rt !== null ? rt.toFixed(3) : "",
         Notes: it.notes ?? "",
+        Archived: it.archived ? "YES" : "NO",
       };
     });
   }
@@ -192,11 +193,20 @@ export function ExportTab() {
       const itemIds = flat.map((i) => i.id);
       let history: HistoryEntry[] = [];
       if (itemIds.length) {
-        const { data, error } = await supabase
-          .from("history")
-          .select("*")
-          .in("item_id", itemIds)
-          .order("event_date", { ascending: false });
+        // The only export query with a network dependency — time it out so
+        // a stalled request errors visibly instead of hanging the button
+        // on "Generating…" forever.
+        const { data, error } = await withTimeout(
+          Promise.resolve(
+            supabase
+              .from("history")
+              .select("*")
+              .in("item_id", itemIds)
+              .order("event_date", { ascending: false })
+          ),
+          15_000,
+          "history fetch"
+        );
         if (error) throw new Error(`history fetch: ${error.message}`);
         history = (data as HistoryEntry[]) ?? [];
       }
@@ -276,22 +286,37 @@ export function ExportTab() {
     setBusy(null);
   }
 
+  type PhotoLoad = {
+    photos: Map<string, PdfPhoto[]>;
+    failed: number; // photos that errored / timed out / were undecodable
+    skippedItems: number; // items WITH photos beyond MAX_ITEMS_WITH_PHOTOS
+  };
+
   async function loadPhotos(
     onProgress: (loaded: number, total: number) => void
-  ): Promise<Map<string, PdfPhoto[]>> {
+  ): Promise<PhotoLoad> {
     const result = new Map<string, PdfPhoto[]>();
     // Evidence metadata is already in memory — DataContext loads items with
     // their evidences in one go. Re-querying via supabase.from('evidences')
     // proved fragile (a single stalled request would freeze the export with
-    // no recovery), so build the photo job list straight from `flat`. We
+    // no recovery), so build the photo job list straight from memory. We
     // still hit storage for the actual bytes per photo.
     type Job = {
       itemId: string;
       evidence_date: string;
       file_path: string;
     };
+    const hasImage = (it: (typeof flat)[number]) =>
+      (it.evidences ?? []).some(
+        (e) => !!e.file_path && (e.file_type ?? "").startsWith("image/")
+      );
+    // Spend the photo budget only on items that actually carry photos —
+    // slicing `flat` blind meant items in later zones lost their photos
+    // even when earlier items had none.
+    const withImages = activeFlat.filter(hasImage);
+    const itemsConsidered = withImages.slice(0, MAX_ITEMS_WITH_PHOTOS);
+    const skippedItems = withImages.length - itemsConsidered.length;
     const jobs: Job[] = [];
-    const itemsConsidered = flat.slice(0, MAX_ITEMS_WITH_PHOTOS);
     for (const it of itemsConsidered) {
       const imageEvs = (it.evidences ?? [])
         .filter(
@@ -310,8 +335,9 @@ export function ExportTab() {
     }
     const total = jobs.length;
     let loaded = 0;
+    let failed = 0;
     onProgress(0, total);
-    if (!total) return result;
+    if (!total) return { photos: result, failed, skippedItems };
 
     const supabase = createClient();
     // Bounded concurrency — N parallel downloads. With per-job timeouts
@@ -336,10 +362,13 @@ export function ExportTab() {
             const arr = result.get(job.itemId) ?? [];
             arr.push({ evidence_date: job.evidence_date, data });
             result.set(job.itemId, arr);
+          } else {
+            failed += 1;
           }
         } catch {
-          // Skip individual failures (timeout, decode error) rather than
-          // abort the whole PDF.
+          // Count individual failures (timeout, decode error) instead of
+          // aborting the whole PDF — surfaced in the report note.
+          failed += 1;
         }
         loaded += 1;
         onProgress(loaded, total);
@@ -348,7 +377,7 @@ export function ExportTab() {
     await Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, () => worker())
     );
-    return result;
+    return { photos: result, failed, skippedItems };
   }
 
   async function exportPDF() {
@@ -379,7 +408,7 @@ export function ExportTab() {
       if (el) el.textContent = msg;
     }
     try {
-      const items: PdfItem[] = flat.map((it) => {
+      const items: PdfItem[] = activeFlat.map((it) => {
         const rt = calcRate(it.readings);
         return {
           id: it.id,
@@ -395,10 +424,10 @@ export function ExportTab() {
           rate: rt !== null ? rt.toFixed(3) : "",
         };
       });
-      let photosByItem: Map<string, PdfPhoto[]> | undefined;
+      let photoLoad: PhotoLoad | undefined;
       if (includePhotos) {
         status("Looking up photos…");
-        photosByItem = await loadPhotos((loaded, total) =>
+        photoLoad = await loadPhotos((loaded, total) =>
           status(
             total
               ? `Loading photos… ${loaded} of ${total}`
@@ -406,21 +435,22 @@ export function ExportTab() {
           )
         );
       }
+      const photosByItem = photoLoad?.photos;
       status("Rendering PDF…");
-      // If the user asked for photos but the dataset has image evidences
-      // that all failed to load, tell them rather than silently shipping a
-      // photo-less PDF — distinguishes a load/format problem from "there
-      // simply are no photos".
-      if (includePhotos && photosByItem && photosByItem.size === 0) {
-        const hasImageEvidence = flat.some((it) =>
-          it.evidences.some((e) => (e.file_type ?? "").startsWith("image/"))
+      // If the user asked for photos and image evidence exists but nothing
+      // loaded, say so rather than silently shipping a photo-less PDF —
+      // distinguishes a load/format problem from "there simply are no
+      // photos". (failed > 0 implies image evidence existed.)
+      if (
+        includePhotos &&
+        photoLoad &&
+        photoLoad.photos.size === 0 &&
+        photoLoad.failed > 0
+      ) {
+        alert(
+          "Note: this report's photos could not be loaded, so the PDF is " +
+            "being generated without thumbnails."
         );
-        if (hasImageEvidence) {
-          alert(
-            "Note: this report's photos could not be loaded, so the PDF is " +
-              "being generated without thumbnails."
-          );
-        }
       }
       // Lazy-load the PDF chunk only when an export actually runs — keeps
       // it out of the dashboard's first-load bundle.
@@ -431,17 +461,35 @@ export function ExportTab() {
       const photoCount = photosByItem
         ? Array.from(photosByItem.values()).reduce((n, a) => n + a.length, 0)
         : 0;
+      // Self-describing report: state in the PDF itself when photos were
+      // dropped (load failures or the per-report cap) — silent omission is
+      // the one failure mode a compliance document can't afford.
+      let note = "";
+      if (includePhotos && photoLoad) {
+        const parts = [`${photoCount} photos embedded`];
+        if (photoLoad.failed > 0) {
+          parts.push(`${photoLoad.failed} failed to load`);
+        }
+        if (photoLoad.skippedItems > 0) {
+          parts.push(
+            `capped at ${MAX_ITEMS_WITH_PHOTOS} items with photos — ` +
+              `${photoLoad.skippedItems} more items have photos not shown`
+          );
+        }
+        note = "Photos: " + parts.join(" · ");
+      }
       console.info(
         `[pdf] rendering ${items.length} items, ${photoCount} photos`
       );
       const blob = await pdf(
         <PdfDocument
           generated={fmtCompact(today())}
-          total={flat.length}
-          sece={flat.filter((i) => i.sece).length}
-          critical={flat.filter((i) => i.priority === "Critical").length}
+          total={activeFlat.length}
+          sece={activeFlat.filter((i) => i.sece).length}
+          critical={activeFlat.filter((i) => i.priority === "Critical").length}
           items={items}
           photosByItem={photosByItem}
+          note={note || undefined}
         />
       ).toBlob();
       console.info(`[pdf] rendered blob: ${blob.size} bytes`);
@@ -449,7 +497,9 @@ export function ExportTab() {
         throw new Error(`PDF render produced an empty file (${blob.size} B)`);
       }
       status(
-        `PDF ready (${(blob.size / 1024).toFixed(0)} KB, ${photoCount} photos) — opening…`
+        `PDF ready (${(blob.size / 1024).toFixed(0)} KB, ${photoCount} photos` +
+          (photoLoad?.failed ? `, ${photoLoad.failed} failed` : "") +
+          ") — opening…"
       );
       showPdfInTab(win, blob);
     } catch (e) {
@@ -502,7 +552,7 @@ export function ExportTab() {
             marginBottom: 4,
           }}
         >
-          {t("exp.title")} — {flat.length} {t("exp.itemsSuffix")}
+          {t("exp.title")} — {activeFlat.length} {t("exp.itemsSuffix")}
         </div>
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 16 }}>
           {t("exp.format")}
@@ -584,7 +634,7 @@ export function ExportTab() {
               </tr>
             </thead>
             <tbody>
-              {flat.map((it) => {
+              {activeFlat.map((it) => {
                 const rt = calcRate(it.readings);
                 const dd = daysUntil(it.next_insp);
                 const nextClr = isOverdue(it.next_insp)

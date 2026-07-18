@@ -126,6 +126,12 @@ function ItemModalInner({
     notes: item.notes ?? "",
   }));
   const [saving, setSaving] = useState(false);
+  const [nameError, setNameError] = useState(false);
+  // AI pit-depth estimate staged in the form — persisted only on Save, so
+  // cancelling the modal never leaves an orphan reading in the DB.
+  const [pendingAiReading, setPendingAiReading] = useState<number | null>(null);
+  // True while the evidence entry form holds an unsaved photo/description.
+  const [evidenceDirty, setEvidenceDirty] = useState(false);
 
   const isReadOnly = profile.role === "viewer";
   const isAdmin = profile.role === "admin";
@@ -166,7 +172,10 @@ function ItemModalInner({
     });
   }
 
-  function applyAI(r: AIAnalysis) {
+  // force=false (auto-apply after analysis): fill only fields the user
+  // hasn't set — never clobber manual input. force=true (the explicit
+  // "Apply to Item Fields" button): overwrite, that click IS user intent.
+  function applyAI(r: AIAnalysis, force = false) {
     setF((x) => {
       const next = { ...x };
       const mechMap: Record<string, string> = {
@@ -178,11 +187,15 @@ function ItemModalInner({
         "Erosion-Corrosion": "Erosion-Corrosion",
         Uniform: "Uniform Corrosion",
       };
-      if (r.corrosionType && mechMap[r.corrosionType]) {
+      if (
+        (force || !next.mechanism) &&
+        r.corrosionType &&
+        mechMap[r.corrosionType]
+      ) {
         next.mechanism = mechMap[r.corrosionType];
       }
       // Only fill the name when the user hasn't typed one — don't overwrite
-      // a manual entry. "Unknown" from the AI is ignored.
+      // a manual entry (even on force). "Unknown" from the AI is ignored.
       if (
         !next.name.trim() &&
         r.componentName &&
@@ -197,7 +210,10 @@ function ItemModalInner({
         typeof r.inspectionFrequency === "string"
           ? r.inspectionFrequency.trim()
           : "";
-      if (FREQUENCIES.includes(freq as InspectionFrequency)) {
+      if (
+        (force || !next.freq_insp) &&
+        FREQUENCIES.includes(freq as InspectionFrequency)
+      ) {
         next.freq_insp = freq as InspectionFrequency;
         const ni = calcNextInspection(next.last_insp, next.freq_insp);
         if (ni) next.next_insp = ni;
@@ -209,8 +225,22 @@ function ItemModalInner({
       // string vs string, so we'd end up with no selection rendered.
       const prob = Number(r.probability);
       const cons = Number(r.consequence);
-      if (Number.isFinite(prob) && prob >= 1 && prob <= 5) next.prob = prob;
-      if (Number.isFinite(cons) && cons >= 1 && cons <= 5) next.cons = cons;
+      if (
+        (force || next.prob == null) &&
+        Number.isFinite(prob) &&
+        prob >= 1 &&
+        prob <= 5
+      ) {
+        next.prob = prob;
+      }
+      if (
+        (force || next.cons == null) &&
+        Number.isFinite(cons) &&
+        cons >= 1 &&
+        cons <= 5
+      ) {
+        next.cons = cons;
+      }
       const p = calcPriority(
         next.prob,
         next.cons,
@@ -221,31 +251,46 @@ function ItemModalInner({
       );
       if (p) next.priority = p;
       // Status maps from the AI's recommended action: urgent → Critical,
-      // anything else nudging us to act → Attention.
-      if (r.immediateAction === "Urgent Treatment Required") {
-        next.status = "Critical";
-      } else if (
-        r.immediateAction === "Treat Soon" ||
-        r.immediateAction === "Inspect Closely"
-      ) {
-        next.status = "Attention";
+      // anything else nudging us to act → Attention. Auto-apply only
+      // escalates from the untouched default (Pending) — x.status is the
+      // value BEFORE this apply.
+      if (force || x.status === "Pending") {
+        if (r.immediateAction === "Urgent Treatment Required") {
+          next.status = "Critical";
+        } else if (
+          r.immediateAction === "Treat Soon" ||
+          r.immediateAction === "Inspect Closely"
+        ) {
+          next.status = "Attention";
+        }
       }
       return next;
     });
     if (r.pitDepthEstMM > 0 && item.readings.length === 0) {
-      void addReading(item.id, {
-        reading_date: today(),
-        depth_mm: r.pitDepthEstMM,
-        location: "AI estimate",
-        checked_by: "AI Vision",
-      });
+      setPendingAiReading(r.pitDepthEstMM);
     }
   }
 
   async function save() {
+    if (evidenceDirty && !confirm(t("modal.unsavedEvidence"))) return;
+    const trimmedName = f.name.trim();
+    if (!trimmedName) {
+      setNameError(true);
+      return;
+    }
     setSaving(true);
+    // Persist the staged AI pit-depth estimate first (re-check that no
+    // manual reading appeared since the AI apply).
+    if (pendingAiReading !== null && item.readings.length === 0) {
+      await addReading(item.id, {
+        reading_date: today(),
+        depth_mm: pendingAiReading,
+        location: "AI estimate",
+        checked_by: "AI Vision",
+      });
+    }
     const patch: Partial<Item> = {
-      name: f.name || t("modal.untitled"),
+      name: trimmedName,
       zone_id: f.zone_id,
       mechanism: f.mechanism || null,
       protection: f.protection || null,
@@ -279,6 +324,7 @@ function ItemModalInner({
   }
 
   async function cancel() {
+    if (evidenceDirty && !confirm(t("modal.unsavedEvidence"))) return;
     if (isNew) {
       // Discard the freshly-created draft row.
       await deleteItem(item.id);
@@ -415,6 +461,7 @@ function ItemModalInner({
           onAdd={(e) => addEvidence(item.id, e)}
           onRemove={(id) => void deleteEvidence(id, item.id)}
           onAIApply={applyAI}
+          onDirtyChange={setEvidenceDirty}
         />
       </Section>
 
@@ -426,12 +473,29 @@ function ItemModalInner({
             gap: 10,
           }}
         >
-          <Input
-            label={t("f.itemName")}
-            value={f.name}
-            onChange={(v) => set("name", v)}
-            placeholder="ex: Anode Row 3 Port, FR-22"
-          />
+          <div>
+            <Input
+              label={t("f.itemName")}
+              value={f.name}
+              onChange={(v) => {
+                set("name", v);
+                if (nameError && v.trim()) setNameError(false);
+              }}
+              placeholder="ex: Anode Row 3 Port, FR-22"
+            />
+            {nameError && (
+              <div
+                style={{
+                  color: DS.red,
+                  fontSize: 11,
+                  marginTop: -6,
+                  marginBottom: 8,
+                }}
+              >
+                {t("modal.nameRequired")}
+              </div>
+            )}
+          </div>
           <Select
             label={t("f.zone")}
             value={f.zone_id}
@@ -463,12 +527,15 @@ function ItemModalInner({
         <IfsObjectSearch
           value={ifsValue}
           onSelect={(o) =>
-            setF((x) => ({
-              ...x,
-              ifs_obj_id: o?.id ?? "",
-              ifs_obj_desc: o?.desc ?? "",
-              sece: o ? o.sece : x.sece,
-            }))
+            // recalcPriority so a SECE flip (×1.5 weight) updates the
+            // priority immediately. Two literals — passing `sece:
+            // undefined` through the {...x, ...next} merge would clobber
+            // the current value with undefined.
+            recalcPriority(
+              o
+                ? { ifs_obj_id: o.id, ifs_obj_desc: o.desc, sece: o.sece }
+                : { ifs_obj_id: "", ifs_obj_desc: "" }
+            )
           }
         />
         {f.ifs_obj_id && (
@@ -813,6 +880,42 @@ function ItemModalInner({
       </Section>
 
       <Section title={t("sec.pit")} accent={DS.ora}>
+        {pendingAiReading !== null && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              background: DS.bluBg,
+              border: "1px solid " + DS.bluBord,
+              borderRadius: 8,
+              padding: "8px 12px",
+              marginBottom: 10,
+              fontSize: 12,
+              color: DS.blu,
+            }}
+          >
+            <span>
+              {t("modal.pendingAiReading")} {pendingAiReading} mm
+            </span>
+            <button
+              type="button"
+              onClick={() => setPendingAiReading(null)}
+              aria-label="Discard AI reading"
+              style={{
+                background: "none",
+                border: "none",
+                color: DS.blu,
+                cursor: "pointer",
+                fontSize: 14,
+                padding: "0 2px",
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <ReadingsPanel
           readings={item.readings}
           onAdd={(r) => void addReading(item.id, r)}
@@ -848,7 +951,28 @@ function ItemModalInner({
           flexWrap: "wrap",
         }}
       >
-        <div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!isNew && isAdmin && (
+            <button
+              onClick={() => {
+                void updateItem(item.id, { archived: !item.archived }).then(
+                  () => onClose()
+                );
+              }}
+              style={{
+                background: DS.sur2,
+                color: DS.text3,
+                border: "1px solid " + DS.bord,
+                borderRadius: 8,
+                padding: "9px 18px",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {item.archived ? t("modal.unarchive") : t("modal.archive")}
+            </button>
+          )}
           {!isReadOnly && (
             <button
               onClick={toggleResolved}

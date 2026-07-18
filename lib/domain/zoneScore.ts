@@ -1,6 +1,22 @@
 import { itemScore } from "@/lib/domain/itemScore";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
+// Priority × SECE weight. Shared with the Dashboard's global integrity
+// index so the two can never drift apart.
+export function priorityWeight(
+  it: Pick<ItemWithRelations, "priority" | "sece">
+): number {
+  const pw =
+    it.priority === "Critical"
+      ? 1.4
+      : it.priority === "High"
+        ? 1.2
+        : it.priority === "Medium"
+          ? 1.0
+          : 0.8;
+  return pw * (it.sece ? 1.5 : 1.0);
+}
+
 // Weighted average of itemScore by priority × SECE.
 // Returns null only for empty zones. A zone with a single item shows that
 // item's effective score — surfacing a 1-of-1 CRITICAL is more useful than
@@ -12,16 +28,7 @@ export function zoneScore(items: ItemWithRelations[]): number | null {
   let totalWeight = 0;
   let weightedSum = 0;
   for (const it of items) {
-    const pw =
-      it.priority === "Critical"
-        ? 1.4
-        : it.priority === "High"
-          ? 1.2
-          : it.priority === "Medium"
-            ? 1.0
-            : 0.8;
-    const sw = it.sece ? 1.5 : 1.0;
-    const w = pw * sw;
+    const w = priorityWeight(it);
     weightedSum += itemScore(it) * w;
     totalWeight += w;
   }

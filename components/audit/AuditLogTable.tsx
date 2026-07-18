@@ -5,18 +5,10 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
+import { download } from "@/lib/utils/download";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
-
-function download(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 export function AuditLogTable() {
   const [rows, setRows] = useState<Row[]>([]);
