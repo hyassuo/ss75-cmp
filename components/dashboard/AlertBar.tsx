@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { fmt, isOverdue, daysUntil } from "@/lib/utils/format";
-import { calcRate } from "@/lib/domain/calcRate";
+import {
+  calcRate,
+  RATE_CRITICAL_MM_YR,
+  RATE_ELEVATED_MM_YR,
+} from "@/lib/domain/calcRate";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -59,12 +63,12 @@ export function AlertBar() {
         });
       }
       const rt = calcRate(it.readings);
-      if (rt !== null && rt > 0.5) {
+      if (rt !== null && rt > RATE_CRITICAL_MM_YR) {
         alerts.push({
           t: "danger",
           msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${rt.toFixed(3)} mm/yr`,
         });
-      } else if (rt !== null && rt > 0.2) {
+      } else if (rt !== null && rt > RATE_ELEVATED_MM_YR) {
         alerts.push({
           t: "warn",
           msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${rt.toFixed(3)} mm/yr`,

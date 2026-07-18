@@ -19,7 +19,9 @@ export function ScheduleView() {
   const [horizon, setHorizon] = useState(90);
 
   const allItems: Row[] = zones.flatMap((z) =>
-    itemsByZone(z.zid).map((i) => ({ ...i, zid: z.zid, zname: z.name }))
+    itemsByZone(z.zid)
+      .filter((i) => !i.archived)
+      .map((i) => ({ ...i, zid: z.zid, zname: z.name }))
   );
 
   const cutoff = new Date(today());

@@ -9,26 +9,10 @@ import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
 import { isOverdue, daysUntil } from "@/lib/utils/format";
-import {
-  itemScore,
-  integrityColor,
-  integrityLabel,
-} from "@/lib/domain/itemScore";
+import { integrityColor, integrityLabel } from "@/lib/domain/itemScore";
 import { zoneScore } from "@/lib/domain/zoneScore";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
-import type { ItemPriority, ItemWithRelations } from "@/lib/types/domain";
-
-function priorityWeight(it: ItemWithRelations): number {
-  const pw =
-    it.priority === "Critical"
-      ? 1.4
-      : it.priority === "High"
-        ? 1.2
-        : it.priority === "Medium"
-          ? 1.0
-          : 0.8;
-  return pw * (it.sece ? 1.5 : 1.0);
-}
+import type { ItemPriority } from "@/lib/types/domain";
 
 export function Dashboard() {
   const { zones, itemsByZone } = useData();
@@ -37,7 +21,11 @@ export function Dashboard() {
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
-  const allItems = visibleZones.flatMap((z) => itemsByZone(z.zid));
+  // Archived items are excluded from every KPI — same rule as AlertBar and
+  // the Zones tab, so all surfaces agree.
+  const allItems = visibleZones
+    .flatMap((z) => itemsByZone(z.zid))
+    .filter((i) => !i.archived);
   const total = allItems.length;
 
   if (!total) {
@@ -111,16 +99,9 @@ export function Dashboard() {
     withSched > 0 ? Math.round(((withSched - overdue) / withSched) * 100) : 100;
   const compliance = Math.round((withInsp / total) * 100);
 
-  const tw = allItems.reduce((a, it) => a + priorityWeight(it), 0);
-  const gi =
-    tw > 0
-      ? Math.round(
-          allItems.reduce(
-            (a, it) => a + itemScore(it) * priorityWeight(it),
-            0
-          ) / tw
-        )
-      : null;
+  // Global integrity index = the same weighted mean zoneScore uses, over
+  // every visible item (previously a hand-copied duplicate of that math).
+  const gi = zoneScore(allItems);
 
   const seceOK = seceItems.filter((i) => i.status === "OK").length;
   const critOK = critItems.filter((i) => i.status === "OK").length;
@@ -239,7 +220,7 @@ export function Dashboard() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {visibleZones.map((z) => {
-            const items = itemsByZone(z.zid);
+            const items = itemsByZone(z.zid).filter((i) => !i.archived);
             const sc = zoneScore(items);
             const c = integrityColor(sc);
             const pct = sc || 0;

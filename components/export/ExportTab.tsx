@@ -136,6 +136,10 @@ export function ExportTab() {
       zsys: z.system,
     }))
   );
+  // Archived policy: CSV/XLSX are the system-of-record dump and keep
+  // archived rows (flagged via the Archived column); the PDF report and the
+  // on-screen summary show only active items.
+  const activeFlat = flat.filter((i) => !i.archived);
 
   function itemRows() {
     return flat.map((it) => {
@@ -162,6 +166,7 @@ export function ExportTab() {
         "Next Inspection": it.next_insp ?? "",
         "Corrosion Rate (mm/yr)": rt !== null ? rt.toFixed(3) : "",
         Notes: it.notes ?? "",
+        Archived: it.archived ? "YES" : "NO",
       };
     });
   }
@@ -291,7 +296,7 @@ export function ExportTab() {
       file_path: string;
     };
     const jobs: Job[] = [];
-    const itemsConsidered = flat.slice(0, MAX_ITEMS_WITH_PHOTOS);
+    const itemsConsidered = activeFlat.slice(0, MAX_ITEMS_WITH_PHOTOS);
     for (const it of itemsConsidered) {
       const imageEvs = (it.evidences ?? [])
         .filter(
@@ -379,7 +384,7 @@ export function ExportTab() {
       if (el) el.textContent = msg;
     }
     try {
-      const items: PdfItem[] = flat.map((it) => {
+      const items: PdfItem[] = activeFlat.map((it) => {
         const rt = calcRate(it.readings);
         return {
           id: it.id,
@@ -412,7 +417,7 @@ export function ExportTab() {
       // photo-less PDF — distinguishes a load/format problem from "there
       // simply are no photos".
       if (includePhotos && photosByItem && photosByItem.size === 0) {
-        const hasImageEvidence = flat.some((it) =>
+        const hasImageEvidence = activeFlat.some((it) =>
           it.evidences.some((e) => (e.file_type ?? "").startsWith("image/"))
         );
         if (hasImageEvidence) {
@@ -437,9 +442,9 @@ export function ExportTab() {
       const blob = await pdf(
         <PdfDocument
           generated={fmtCompact(today())}
-          total={flat.length}
-          sece={flat.filter((i) => i.sece).length}
-          critical={flat.filter((i) => i.priority === "Critical").length}
+          total={activeFlat.length}
+          sece={activeFlat.filter((i) => i.sece).length}
+          critical={activeFlat.filter((i) => i.priority === "Critical").length}
           items={items}
           photosByItem={photosByItem}
         />
@@ -502,7 +507,7 @@ export function ExportTab() {
             marginBottom: 4,
           }}
         >
-          {t("exp.title")} — {flat.length} {t("exp.itemsSuffix")}
+          {t("exp.title")} — {activeFlat.length} {t("exp.itemsSuffix")}
         </div>
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 16 }}>
           {t("exp.format")}
@@ -584,7 +589,7 @@ export function ExportTab() {
               </tr>
             </thead>
             <tbody>
-              {flat.map((it) => {
+              {activeFlat.map((it) => {
                 const rt = calcRate(it.readings);
                 const dd = daysUntil(it.next_insp);
                 const nextClr = isOverdue(it.next_insp)

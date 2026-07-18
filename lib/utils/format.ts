@@ -26,8 +26,16 @@ export function fmtCompact(d: string | null | undefined): string {
   return `${dd}-${MONTHS_EN_SHORT[parseInt(m, 10) - 1]}-${y}`;
 }
 
+// Local calendar date. toISOString() would give the UTC date, which rolls
+// to "tomorrow" at 21:00 for a UTC-3 crew and flagged items overdue hours
+// early. isOverdue/daysUntil compare plain YYYY-MM-DD values, so the local
+// date keeps every schedule comparison on the user's calendar day.
 export function today(): string {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 // "DD/MM/YYYY" short form for header chrome where the long Portuguese

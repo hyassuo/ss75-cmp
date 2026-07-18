@@ -29,11 +29,22 @@ describe("itemScore", () => {
   });
 
   it("an overdue item scores lower than the same item on schedule", () => {
-    // Invariant only — the exact overdue penalty is being rebalanced
-    // (see PLAN-domain-correctness: the penalty is currently double-counted).
     expect(itemScore(makeItem({ next_insp: "2000-01-01" }))).toBeLessThan(
       itemScore(makeItem())
     );
+  });
+
+  it("overdue is a single flat -40 on top of the status penalty", () => {
+    expect(itemScore(makeItem({ status: "OK", next_insp: "2000-01-01" }))).toBe(60);
+    expect(
+      itemScore(makeItem({ status: "Attention", next_insp: "2000-01-01" }))
+    ).toBe(35);
+    expect(
+      itemScore(makeItem({ status: "Pending", next_insp: "2000-01-01" }))
+    ).toBe(45);
+    expect(
+      itemScore(makeItem({ status: "Critical", next_insp: "2000-01-01" }))
+    ).toBe(10);
   });
 
   it("never goes below 0", () => {

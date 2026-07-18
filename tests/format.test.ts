@@ -28,8 +28,11 @@ describe("date formatters", () => {
 });
 
 describe("today / isOverdue / daysUntil", () => {
-  it("today() is a YYYY-MM-DD string", () => {
+  it("today() is the LOCAL calendar date", () => {
     expect(today()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const d = new Date();
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    expect(today()).toBe(local);
   });
 
   it("isOverdue is strict-past and null-safe", () => {

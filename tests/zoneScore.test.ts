@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { zoneScore } from "@/lib/domain/zoneScore";
+import { zoneScore, priorityWeight } from "@/lib/domain/zoneScore";
 import { itemScore } from "@/lib/domain/itemScore";
 import { makeItem } from "./helpers";
 
@@ -19,6 +19,15 @@ describe("zoneScore", () => {
     const b = makeItem({ id: "item-2", priority: "Low", sece: false });
     expect(itemScore(a)).toBe(itemScore(b)); // both healthy → 100
     expect(zoneScore([a, b])).toBe(100);
+  });
+
+  it("priorityWeight maps priorities and multiplies SECE by 1.5", () => {
+    expect(priorityWeight({ priority: "Critical", sece: false })).toBeCloseTo(1.4);
+    expect(priorityWeight({ priority: "High", sece: false })).toBeCloseTo(1.2);
+    expect(priorityWeight({ priority: "Medium", sece: false })).toBeCloseTo(1.0);
+    expect(priorityWeight({ priority: "Low", sece: false })).toBeCloseTo(0.8);
+    expect(priorityWeight({ priority: null, sece: false })).toBeCloseTo(0.8);
+    expect(priorityWeight({ priority: "Critical", sece: true })).toBeCloseTo(2.1);
   });
 
   it("higher-priority items pull the average harder", () => {
