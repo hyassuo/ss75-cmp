@@ -1,9 +1,14 @@
 // Hand-authored from supabase-setup.sql. Mirrors the provisioned schema.
 import type {
+  AccessoryType,
+  ActionStatus,
+  ActionType,
   AIAnalysis,
+  CorrExtentBand,
   InspectionFrequency,
   ItemPriority,
   ItemStatus,
+  MaterialLossBand,
   UserRole,
 } from "./domain";
 
@@ -86,6 +91,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["zones"]["Insert"]>;
         Relationships: [];
       };
+      subareas: {
+        Row: {
+          id: string;
+          unit_id: string;
+          zone_id: string;
+          name: string;
+          display_order: number | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          unit_id: string;
+          zone_id: string;
+          name: string;
+          display_order?: number | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["subareas"]["Insert"]>;
+        Relationships: [];
+      };
       items: {
         Row: {
           id: string;
@@ -111,6 +138,15 @@ export interface Database {
           next_insp: string | null;
           resolved_at: string | null;
           archived: boolean;
+          subarea_id: string | null;
+          action_type: ActionType | null;
+          action_due: string | null;
+          action_status: ActionStatus | null;
+          action_note: string | null;
+          corr_extent_band: CorrExtentBand | null;
+          material_loss_band: MaterialLossBand | null;
+          is_accessory: boolean;
+          accessory_type: AccessoryType | null;
           notes: string | null;
           created_by: string | null;
           updated_by: string | null;
@@ -141,6 +177,15 @@ export interface Database {
           next_insp?: string | null;
           resolved_at?: string | null;
           archived?: boolean;
+          subarea_id?: string | null;
+          action_type?: ActionType | null;
+          action_due?: string | null;
+          action_status?: ActionStatus | null;
+          action_note?: string | null;
+          corr_extent_band?: CorrExtentBand | null;
+          material_loss_band?: MaterialLossBand | null;
+          is_accessory?: boolean;
+          accessory_type?: AccessoryType | null;
           notes?: string | null;
           created_by?: string | null;
           updated_by?: string | null;

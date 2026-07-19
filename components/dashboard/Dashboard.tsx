@@ -8,9 +8,10 @@ import { Gauge } from "@/components/ui/Gauge";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
-import { isOverdue, daysUntil } from "@/lib/utils/format";
+import { isOverdue, daysUntil, today } from "@/lib/utils/format";
 import { integrityColor, integrityLabel } from "@/lib/domain/itemScore";
 import { zoneScore } from "@/lib/domain/zoneScore";
+import { isActionOpen, isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import type { ItemPriority } from "@/lib/types/domain";
 
@@ -105,6 +106,10 @@ export function Dashboard() {
 
   const seceOK = seceItems.filter((i) => i.status === "OK").length;
   const critOK = critItems.filter((i) => i.status === "OK").length;
+  const openActions = allItems.filter(isActionOpen).length;
+  const overdueActions = allItems.filter((i) =>
+    isActionOverdue(i, today())
+  ).length;
 
   const kpis: Array<{
     label: string;
@@ -149,6 +154,12 @@ export function Dashboard() {
           : 100) + "%",
       sub: `${critOK}/${critItems.length} ${t("priority.Critical").toLowerCase()}`,
       color: DS.ora,
+    },
+    {
+      label: t("dash.openActions"),
+      v: String(openActions),
+      sub: t("dash.openActionsSub", overdueActions),
+      color: overdueActions > 0 ? DS.red : DS.blu,
     },
   ];
 

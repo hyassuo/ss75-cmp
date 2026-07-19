@@ -139,6 +139,54 @@ const en = {
   "modal.archive": "Archive",
   "modal.unarchive": "Unarchive",
 
+  // Sub-áreas (compartments inside a zone)
+  "f.subarea": "Sub-area",
+  "subarea.none": "No sub-area",
+  "subarea.add": "+ new sub-area",
+  "subarea.namePlaceholder": "Sub-area name (e.g. Shaker Room)",
+
+  // Tratativa (corrective-action cycle)
+  "sec.action": "CORRECTIVE ACTION (TRATATIVA)",
+  "f.actionType": "Action type",
+  "f.actionStatus": "Action status",
+  "f.actionDue": "Target date",
+  "f.actionDueSuggested": "suggested from priority — editable",
+  "f.actionNote": "Action notes",
+  "f.actionDoneHint":
+    "Done ≠ resolved: confirm the item's condition on re-inspection before marking it resolved.",
+  "actionType.Monitorar": "Monitor",
+  "actionType.Tratamento mecânico e pintura": "Mechanical treatment + painting",
+  "actionType.Caldeiraria + tratamento e pintura":
+    "Boilermaking + treatment + painting",
+  "actionType.Reparo compósito": "Composite repair",
+  "actionType.Substituição": "Replacement",
+  "actionType.Outro": "Other",
+  "actionStatus.Sem planejamento": "Not planned",
+  "actionStatus.Planejado": "Planned",
+  "actionStatus.Aguardando material": "Awaiting material",
+  "actionStatus.Em execução": "In progress",
+  "actionStatus.Executado": "Done",
+  "alert.actionOverdue": "action OVERDUE since",
+  "sched.actionsOverdue": "Overdue actions",
+  "dash.openActions": "Open actions",
+  "dash.openActionsSub": (od: number) => `${od} overdue`,
+  "badge.action": "Action",
+
+  // Assessment bands (informative only)
+  "f.corrExtent": "Corrosion extent (%)",
+  "f.materialLoss": "Material loss (%)",
+  "f.bandsInfo": "Informative only — does not affect priority.",
+
+  // Line accessory
+  "f.isAccessory": "Line accessory",
+  "f.isAccessoryHint":
+    "The IFS object identifies the parent LINE (piping); this item is an accessory installed on it.",
+  "f.accessoryType": "Accessory type",
+  "accType.Suporte": "Support",
+  "accType.Válvula": "Valve",
+  "accType.Flange": "Flange",
+  "accType.Outro": "Other",
+
   // Modal field labels
   "f.itemName": "Item Name / Tag",
   "f.zone": "Zone",
@@ -426,6 +474,54 @@ const pt: Translations = {
   "modal.nameRequired": "O nome do item é obrigatório.",
   "modal.archive": "Arquivar",
   "modal.unarchive": "Desarquivar",
+
+  // Sub-áreas
+  "f.subarea": "Sub-área",
+  "subarea.none": "Sem sub-área",
+  "subarea.add": "+ nova sub-área",
+  "subarea.namePlaceholder": "Nome da sub-área (ex: Sala de Peneiras)",
+
+  // Tratativa
+  "sec.action": "TRATATIVA",
+  "f.actionType": "Tipo de tratativa",
+  "f.actionStatus": "Status da tratativa",
+  "f.actionDue": "Prazo",
+  "f.actionDueSuggested": "sugerido pela prioridade — editável",
+  "f.actionNote": "Observações da tratativa",
+  "f.actionDoneHint":
+    "Executado ≠ resolvido: confirme a condição do item na reinspeção antes de marcá-lo como resolvido.",
+  "actionType.Monitorar": "Monitorar",
+  "actionType.Tratamento mecânico e pintura": "Tratamento mecânico e pintura",
+  "actionType.Caldeiraria + tratamento e pintura":
+    "Caldeiraria + tratamento e pintura",
+  "actionType.Reparo compósito": "Reparo compósito",
+  "actionType.Substituição": "Substituição",
+  "actionType.Outro": "Outro",
+  "actionStatus.Sem planejamento": "Sem planejamento",
+  "actionStatus.Planejado": "Planejado",
+  "actionStatus.Aguardando material": "Aguardando material",
+  "actionStatus.Em execução": "Em execução",
+  "actionStatus.Executado": "Executado",
+  "alert.actionOverdue": "tratativa VENCIDA desde",
+  "sched.actionsOverdue": "Tratativas vencidas",
+  "dash.openActions": "Tratativas abertas",
+  "dash.openActionsSub": (od: number) => `${od} vencidas`,
+  "badge.action": "Tratativa",
+
+  // Faixas informativas
+  "f.corrExtent": "% de corrosão (extensão)",
+  "f.materialLoss": "% de perda de material",
+  "f.bandsInfo": "Apenas informativo — não afeta a prioridade.",
+
+  // Acessório da linha
+  "f.isAccessory": "Acessório da linha",
+  "f.isAccessoryHint":
+    "O objeto IFS identifica a LINHA (tubulação); este item é um acessório instalado nela.",
+  "f.accessoryType": "Tipo de acessório",
+  "accType.Suporte": "Suporte",
+  "accType.Válvula": "Válvula",
+  "accType.Flange": "Flange",
+  "accType.Outro": "Outro",
 
   // Modal fields
   "f.itemName": "Nome / Tag do Item",

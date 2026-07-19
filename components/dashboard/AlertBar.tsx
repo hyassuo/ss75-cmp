@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
-import { fmt, isOverdue, daysUntil } from "@/lib/utils/format";
+import { fmt, isOverdue, daysUntil, today } from "@/lib/utils/format";
 import {
   calcRate,
   RATE_CRITICAL_MM_YR,
   RATE_ELEVATED_MM_YR,
 } from "@/lib/domain/calcRate";
+import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -60,6 +61,12 @@ export function AlertBar() {
         alerts.push({
           t: "warn",
           msg: `${z.zid} | ${it.name}: ${t("alert.dueIn")} ${dd} ${t("alert.days")}`,
+        });
+      }
+      if (isActionOverdue(it, today())) {
+        alerts.push({
+          t: "danger",
+          msg: `${z.zid} | ${it.name}: ${t("alert.actionOverdue")} ${fmt(it.action_due)} (${it.action_type})`,
         });
       }
       const rt = calcRate(it.readings);

@@ -4,7 +4,7 @@
 -- Project:    ss75-cmp
 -- Author:     Helcio Yassuo
 -- Database:   PostgreSQL 15+ (Supabase managed)
--- Tables:     7 (units, profiles, zones, items, readings, evidences, history)
+-- Tables:     8 (units, profiles, zones, subareas, items, readings, evidences, history)
 -- Storage:    1 bucket (evidence-photos)
 -- Seed:       Structural only (1 unit, 14 DROPS zones). No sample data.
 --
@@ -92,11 +92,27 @@ CREATE TABLE IF NOT EXISTS public.zones (
 );
 CREATE INDEX IF NOT EXISTS idx_zones_system ON public.zones(system);
 
+-- subareas: managed compartments inside a DROPS zone (v1.4.0). Admin-curated
+-- so names stay consistent (free text degrades: "SALA DE BOMBA/BOMBAS").
+CREATE TABLE IF NOT EXISTS public.subareas (
+  id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  unit_id       uuid NOT NULL REFERENCES public.units(id),
+  zone_id       text NOT NULL REFERENCES public.zones(zid),
+  name          text NOT NULL,
+  display_order int,
+  created_by    uuid REFERENCES public.profiles(id),
+  created_at    timestamptz DEFAULT now(),
+  UNIQUE (unit_id, zone_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_subareas_unit_zone ON public.subareas(unit_id, zone_id);
+
 -- items: corrosion inspection points (core entity)
 CREATE TABLE IF NOT EXISTS public.items (
   id              uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   unit_id         uuid NOT NULL REFERENCES public.units(id),
   zone_id         text NOT NULL REFERENCES public.zones(zid),
+  -- ON DELETE SET NULL: removing a catalog entry never orphans items.
+  subarea_id      uuid REFERENCES public.subareas(id) ON DELETE SET NULL,
   name            text NOT NULL,
   mechanism       text,
   protection      text,
@@ -109,11 +125,26 @@ CREATE TABLE IF NOT EXISTS public.items (
   priority        item_priority,
   status          item_status DEFAULT 'Pending',
   sece            boolean DEFAULT false,
+  drops_risk      boolean NOT NULL DEFAULT false,
+  structural      boolean NOT NULL DEFAULT false,
+  obs_source      text,
   freq_insp       inspection_frequency,
   last_insp       date,
   next_insp       date,
   resolved_at     date,
   archived        boolean DEFAULT false,
+  -- Tratativa (corrective-action cycle, v1.4.0). Canonical values are
+  -- Portuguese (FM-116-OFF reference method); UI dict provides EN labels.
+  action_type     text,
+  action_due      date,
+  action_status   text,
+  action_note     text,
+  -- Informative assessment bands (v1.4.0) — do NOT affect priority.
+  corr_extent_band   text,
+  material_loss_band text,
+  -- Line accessory (v1.4.0): IFS object = parent LINE; item = accessory on it.
+  is_accessory    boolean NOT NULL DEFAULT false,
+  accessory_type  text,
   notes           text,
   created_by      uuid REFERENCES public.profiles(id),
   updated_by      uuid REFERENCES public.profiles(id),
@@ -127,6 +158,9 @@ CREATE INDEX IF NOT EXISTS idx_items_priority ON public.items(priority);
 CREATE INDEX IF NOT EXISTS idx_items_next_insp ON public.items(next_insp);
 CREATE INDEX IF NOT EXISTS idx_items_archived ON public.items(archived);
 CREATE INDEX IF NOT EXISTS idx_items_sece ON public.items(sece);
+CREATE INDEX IF NOT EXISTS idx_items_subarea ON public.items(subarea_id);
+CREATE INDEX IF NOT EXISTS idx_items_action_due
+  ON public.items(action_due) WHERE action_due IS NOT NULL;
 
 -- readings: pit depth measurements
 CREATE TABLE IF NOT EXISTS public.readings (
@@ -232,6 +266,18 @@ BEGIN
       INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
       VALUES (NEW.id, 'sece_changed', 'sece', OLD.sece::text, NEW.sece::text, NEW.updated_by, user_email);
     END IF;
+    IF OLD.drops_risk IS DISTINCT FROM NEW.drops_risk THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'drops_risk_changed', 'drops_risk', OLD.drops_risk::text, NEW.drops_risk::text, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.structural IS DISTINCT FROM NEW.structural THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'structural_changed', 'structural', OLD.structural::text, NEW.structural::text, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.obs_source IS DISTINCT FROM NEW.obs_source THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'obs_source_changed', 'obs_source', OLD.obs_source, NEW.obs_source, NEW.updated_by, user_email);
+    END IF;
     IF OLD.next_insp IS DISTINCT FROM NEW.next_insp THEN
       INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
       VALUES (NEW.id, 'next_inspection_changed', 'next_insp', OLD.next_insp::text, NEW.next_insp::text, NEW.updated_by, user_email);
@@ -260,11 +306,73 @@ BEGIN
               NEW.updated_by, user_email,
               CASE WHEN NEW.archived THEN 'Item archived' ELSE 'Item unarchived' END);
     END IF;
+    -- v1.4.0 fields (action_note deliberately NOT audited — same precedent
+    -- as `notes`: free-text churn would flood the History panel).
+    IF OLD.subarea_id IS DISTINCT FROM NEW.subarea_id THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'subarea_changed', 'subarea_id',
+              COALESCE((SELECT name FROM public.subareas WHERE id = OLD.subarea_id), OLD.subarea_id::text),
+              COALESCE((SELECT name FROM public.subareas WHERE id = NEW.subarea_id), NEW.subarea_id::text),
+              NEW.updated_by, user_email);
+    END IF;
+    IF OLD.action_type IS DISTINCT FROM NEW.action_type THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'action_type_changed', 'action_type', OLD.action_type, NEW.action_type, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.action_due IS DISTINCT FROM NEW.action_due THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'action_due_changed', 'action_due', OLD.action_due::text, NEW.action_due::text, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.action_status IS DISTINCT FROM NEW.action_status THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'action_status_changed', 'action_status', OLD.action_status, NEW.action_status, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.corr_extent_band IS DISTINCT FROM NEW.corr_extent_band THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'corr_extent_changed', 'corr_extent_band', OLD.corr_extent_band, NEW.corr_extent_band, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.material_loss_band IS DISTINCT FROM NEW.material_loss_band THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'material_loss_changed', 'material_loss_band', OLD.material_loss_band, NEW.material_loss_band, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.is_accessory IS DISTINCT FROM NEW.is_accessory THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'accessory_changed', 'is_accessory', OLD.is_accessory::text, NEW.is_accessory::text, NEW.updated_by, user_email);
+    END IF;
+    IF OLD.accessory_type IS DISTINCT FROM NEW.accessory_type THEN
+      INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+      VALUES (NEW.id, 'accessory_type_changed', 'accessory_type', OLD.accessory_type, NEW.accessory_type, NEW.updated_by, user_email);
+    END IF;
     RETURN NEW;
   END IF;
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+-- Subarea integrity guard (v1.4.0): the FK alone would accept another
+-- unit's/zone's subarea via a crafted direct PostgREST call.
+CREATE OR REPLACE FUNCTION public.validate_item_subarea()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.subarea_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.subareas s
+      WHERE s.id = NEW.subarea_id
+        AND s.unit_id = NEW.unit_id
+        AND s.zone_id = NEW.zone_id
+    ) THEN
+      RAISE EXCEPTION 'subarea % does not belong to the item''s unit/zone',
+        NEW.subarea_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_items_validate_subarea ON public.items;
+CREATE TRIGGER trg_items_validate_subarea
+  BEFORE INSERT OR UPDATE ON public.items
+  FOR EACH ROW EXECUTE FUNCTION public.validate_item_subarea();
 
 DROP TRIGGER IF EXISTS trg_audit_items ON public.items;
 CREATE TRIGGER trg_audit_items
@@ -301,6 +409,11 @@ CREATE TRIGGER trg_readings_author
 DROP TRIGGER IF EXISTS trg_evidences_author ON public.evidences;
 CREATE TRIGGER trg_evidences_author
   BEFORE INSERT ON public.evidences
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_author();
+
+DROP TRIGGER IF EXISTS trg_subareas_author ON public.subareas;
+CREATE TRIGGER trg_subareas_author
+  BEFORE INSERT ON public.subareas
   FOR EACH ROW EXECUTE FUNCTION public.enforce_author();
 
 
@@ -357,6 +470,7 @@ CREATE TRIGGER on_auth_user_created
 ALTER TABLE public.units      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.zones      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.subareas   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.items      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.readings   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.evidences  ENABLE ROW LEVEL SECURITY;
@@ -439,6 +553,22 @@ CREATE POLICY "zones_select_authenticated" ON public.zones
 -- so RLS denies INSERT/UPDATE/DELETE to all authenticated users. Manage
 -- zones via the service role / SQL editor.
 DROP POLICY IF EXISTS "zones_admin_all" ON public.zones;
+
+-- subareas: everyone in the unit reads; only the unit's admins write.
+DROP POLICY IF EXISTS "subareas_select_unit" ON public.subareas;
+CREATE POLICY "subareas_select_unit" ON public.subareas
+  FOR SELECT TO authenticated USING (unit_id = public.current_user_unit());
+DROP POLICY IF EXISTS "subareas_admin_all" ON public.subareas;
+CREATE POLICY "subareas_admin_all" ON public.subareas
+  FOR ALL TO authenticated
+  USING (
+    public.current_user_role() = 'admin'
+    AND unit_id = public.current_user_unit()
+  )
+  WITH CHECK (
+    public.current_user_role() = 'admin'
+    AND unit_id = public.current_user_unit()
+  );
 
 -- items
 DROP POLICY IF EXISTS "items_select_unit" ON public.items;

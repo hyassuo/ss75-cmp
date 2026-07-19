@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
 import { fmt, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
+import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
 import type { ItemWithRelations } from "@/lib/types/domain";
@@ -38,6 +39,11 @@ export function ScheduleView() {
     )
     .sort((a, b) => (a.next_insp || "").localeCompare(b.next_insp || ""));
   const noSched = allItems.filter((i) => !i.next_insp);
+  // Overdue tratativas live in their own section — a corrective-action
+  // calendar, distinct from the inspection calendar the rows above track.
+  const overdueActions = allItems
+    .filter((i) => isActionOverdue(i, today()))
+    .sort((a, b) => (a.action_due || "").localeCompare(b.action_due || ""));
 
   function RowItem({ it, isOd }: { it: Row; isOd: boolean }) {
     const dd = daysUntil(it.next_insp) ?? 0;
@@ -185,6 +191,91 @@ export function ScheduleView() {
           {overdue.map((it) => (
             <RowItem key={it.id} it={it} isOd />
           ))}
+        </div>
+      )}
+
+      {overdueActions.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div
+            style={{
+              fontSize: 11,
+              color: DS.vio,
+              textTransform: "uppercase",
+              letterSpacing: 1.5,
+              fontWeight: 700,
+              marginBottom: 10,
+            }}
+          >
+            {t("sched.actionsOverdue")} ({overdueActions.length})
+          </div>
+          {overdueActions.map((it) => {
+            const dd = daysUntil(it.action_due) ?? 0;
+            return (
+              <div
+                key={it.id}
+                style={{
+                  background: DS.sur2,
+                  borderLeft: "3px solid " + DS.vio,
+                  borderRadius: 8,
+                  padding: "11px 14px",
+                  marginBottom: 7,
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    color: DS.red,
+                    fontWeight: 800,
+                    minWidth: 38,
+                  }}
+                >
+                  {dd}d
+                </span>
+                <span
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: 10,
+                    color: DS.blu,
+                  }}
+                >
+                  {it.zid}
+                </span>
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: DS.text,
+                    flex: 1,
+                    minWidth: 120,
+                  }}
+                >
+                  {it.name}
+                </span>
+                {it.action_type && (
+                  <Badge text={it.action_type} color={DS.vio} sm />
+                )}
+                {it.action_status && (
+                  <Badge text={it.action_status} color={DS.ora} sm />
+                )}
+                <span
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: 11,
+                    color: DS.text3,
+                    minWidth: 72,
+                    textAlign: "right",
+                  }}
+                >
+                  {fmt(it.action_due)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 

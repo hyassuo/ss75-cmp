@@ -4,10 +4,11 @@ import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useLang } from "@/lib/context/LangContext";
 import { Gauge } from "@/components/ui/Gauge";
-import { fmt, isOverdue, daysUntil } from "@/lib/utils/format";
+import { fmt, isOverdue, daysUntil, today } from "@/lib/utils/format";
 import { itemScore } from "@/lib/domain/itemScore";
 import { effectiveStatus } from "@/lib/domain/effectiveStatus";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
+import { isActionOpen, isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
@@ -18,7 +19,7 @@ export function ItemCard({
   item: ItemWithRelations;
   onClick: () => void;
 }) {
-  const { tPriority, tStatus } = useLang();
+  const { t, tPriority, tStatus } = useLang();
   const sc = itemScore(item);
   const rt = calcRate(item.readings);
   const dd = daysUntil(item.next_insp);
@@ -86,6 +87,20 @@ export function ItemCard({
           )}
           <Badge text={tStatus(eff)} color={STATUS_COLOR[eff] || DS.text3} sm />
           {item.sece && <Badge text="SECE" color={DS.red} sm />}
+          {item.is_accessory && (
+            <Badge
+              text={item.accessory_type || t("f.isAccessory")}
+              color={DS.blu}
+              sm
+            />
+          )}
+          {isActionOpen(item) && (
+            <Badge
+              text={t("badge.action")}
+              color={isActionOverdue(item, today()) ? DS.red : DS.ora}
+              sm
+            />
+          )}
           {rt !== null && (
             <Badge
               text={rt.toFixed(2) + "mm/yr"}

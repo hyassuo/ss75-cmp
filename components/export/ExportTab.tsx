@@ -117,7 +117,8 @@ function showPdfInTab(win: Window | null, blob: Blob) {
 
 export function ExportTab() {
   const { t, tPriority, tStatus } = useLang();
-  const { zones, itemsByZone } = useData();
+  const { zones, itemsByZone, subareas } = useData();
+  const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
   const [busy, setBusy] = useState<string | null>(null);
   // Default ON so a fresh user sees the expected, complete PDF (photos
   // are the most useful evidence in a CMP audit). Power users who want a
@@ -144,6 +145,7 @@ export function ExportTab() {
         Zone: it.zid,
         "Zone Name": it.zname,
         System: it.zsys,
+        "Sub-area": (it.subarea_id && subareaName.get(it.subarea_id)) || "",
         Item: it.name,
         Mechanism: it.mechanism ?? "",
         Protection: it.protection ?? "",
@@ -151,15 +153,23 @@ export function ExportTab() {
         "IFS Object Desc": it.ifs_obj_desc ?? "",
         "IFS WO": it.ifs_wo ?? "",
         "IFS FL": it.ifs_fl ?? "",
+        "Line Accessory": it.is_accessory ? "YES" : "NO",
+        "Accessory Type": it.accessory_type ?? "",
         Probability: it.prob ?? "",
         Consequence: it.cons ?? "",
         RPN: it.prob && it.cons ? it.prob * it.cons : "",
+        "Corrosion Extent (%)": it.corr_extent_band ?? "",
+        "Material Loss (%)": it.material_loss_band ?? "",
         Priority: it.priority ?? "",
         Status: it.status,
         SECE: it.sece ? "YES" : "NO",
         Frequency: it.freq_insp ?? "",
         "Last Inspection": it.last_insp ?? "",
         "Next Inspection": it.next_insp ?? "",
+        "Action Type": it.action_type ?? "",
+        "Action Due": it.action_due ?? "",
+        "Action Status": it.action_status ?? "",
+        "Action Note": it.action_note ?? "",
         "Corrosion Rate (mm/yr)": rt !== null ? rt.toFixed(3) : "",
         Notes: it.notes ?? "",
         Archived: it.archived ? "YES" : "NO",
@@ -414,6 +424,7 @@ export function ExportTab() {
           id: it.id,
           zid: it.zid,
           zname: it.zname,
+          subarea: (it.subarea_id && subareaName.get(it.subarea_id)) || "",
           name: it.name,
           ifs: it.ifs_obj_id ?? "",
           priority: it.priority ?? "",
@@ -422,6 +433,10 @@ export function ExportTab() {
           last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
           next_insp: it.next_insp ? fmtCompact(it.next_insp) : "",
           rate: rt !== null ? rt.toFixed(3) : "",
+          action: it.action_type
+            ? `Tratativa: ${it.action_type} · ${it.action_status || "Sem planejamento"}` +
+              (it.action_due ? ` · prazo ${fmtCompact(it.action_due)}` : "")
+            : "",
         };
       });
       let photoLoad: PhotoLoad | undefined;
