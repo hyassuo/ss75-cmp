@@ -30,7 +30,11 @@ idempotent — safe to re-run.
 
 | File | Purpose |
 |------|---------|
-| `supabase-setup.sql` | Tables, RLS **(final hardened state, incl. rounds 1–4)**, triggers, storage bucket, 1 unit + 14 DROPS zones. The base. |
+| `supabase-setup.sql` | Tables (incl. `subareas` + all item columns through v1.4.0), RLS **(final hardened state, incl. rounds 1–4)**, triggers, storage bucket, 1 unit + 14 DROPS zones. The base. |
+| `supabase-schema-v130.sql` | Upgrade for pre-1.3.0 DBs: `drops_risk`, `structural`, `obs_source` on items + audit trigger update. |
+| `supabase-schema-v140.sql` | Upgrade for pre-1.14 DBs: `subareas` catalog, tratativa fields, assessment bands, line-accessory fields + audit/integrity triggers. |
+| `supabase-rollback-v140.sql` | Exact rollback of v140 (drops the new table/columns, restores the v130 audit trigger). Snapshot first. |
+| `supabase-backup-snapshot.sql` | Read-only JSON dump of the 7 app tables — run + download before any migration. |
 | `supabase-security-fixes.sql` | Round-1 hardening: SECURITY DEFINER on the audit trigger, column grants on `profiles`, scoped INSERTs, authorship trigger, storage SELECT by unit. |
 | `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
 | `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
