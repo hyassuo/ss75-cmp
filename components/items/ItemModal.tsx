@@ -18,6 +18,7 @@ import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
 import { calcPriority } from "@/lib/domain/calcPriority";
 import { calcNextInspection } from "@/lib/domain/calcNextInspection";
+import { suggestActionDue } from "@/lib/domain/actionPlan";
 import { today } from "@/lib/utils/format";
 import {
   MECHANISMS,
@@ -26,15 +27,25 @@ import {
   OBS_SOURCES,
   FREQUENCIES,
   PRIORITY_COLOR,
+  ACTION_TYPES,
+  ACTION_STATUSES,
+  CORR_EXTENT_BANDS,
+  MATERIAL_LOSS_BANDS,
+  ACCESSORY_TYPES,
 } from "@/lib/utils/constants";
 import type {
+  AccessoryType,
+  ActionStatus,
+  ActionType,
   AIAnalysis,
+  CorrExtentBand,
   IfsObject,
   InspectionFrequency,
   Item,
   ItemPriority,
   ItemStatus,
   ItemWithRelations,
+  MaterialLossBand,
 } from "@/lib/types/domain";
 
 interface Props {
@@ -65,6 +76,15 @@ type Form = {
   last_insp: string | null;
   next_insp: string | null;
   resolved_at: string | null;
+  subarea_id: string;
+  action_type: ActionType | "";
+  action_due: string | null;
+  action_status: ActionStatus | "";
+  action_note: string;
+  corr_extent_band: CorrExtentBand | "";
+  material_loss_band: MaterialLossBand | "";
+  is_accessory: boolean;
+  accessory_type: AccessoryType | "";
   notes: string;
 };
 
@@ -84,6 +104,8 @@ function ItemModalInner({
   const {
     profile,
     zones,
+    subareasByZone,
+    createSubarea,
     updateItem,
     deleteItem,
     addReading,
@@ -123,6 +145,15 @@ function ItemModalInner({
     last_insp: item.last_insp ?? (isNew ? today() : null),
     next_insp: item.next_insp ?? null,
     resolved_at: item.resolved_at ?? null,
+    subarea_id: item.subarea_id ?? "",
+    action_type: item.action_type ?? "",
+    action_due: item.action_due ?? null,
+    action_status: item.action_status ?? "",
+    action_note: item.action_note ?? "",
+    corr_extent_band: item.corr_extent_band ?? "",
+    material_loss_band: item.material_loss_band ?? "",
+    is_accessory: item.is_accessory ?? false,
+    accessory_type: item.accessory_type ?? "",
     notes: item.notes ?? "",
   }));
   const [saving, setSaving] = useState(false);
@@ -132,6 +163,10 @@ function ItemModalInner({
   const [pendingAiReading, setPendingAiReading] = useState<number | null>(null);
   // True while the evidence entry form holds an unsaved photo/description.
   const [evidenceDirty, setEvidenceDirty] = useState(false);
+  // Inline admin mini-form for creating a sub-área without leaving the modal.
+  const [addingSubarea, setAddingSubarea] = useState(false);
+  const [newSubareaName, setNewSubareaName] = useState("");
+  const [savingSubarea, setSavingSubarea] = useState(false);
 
   const isReadOnly = profile.role === "viewer";
   const isAdmin = profile.role === "admin";
@@ -169,6 +204,25 @@ function ItemModalInner({
         withNi.structural
       );
       return { ...withNi, priority: p ?? withNi.priority };
+    });
+  }
+
+  // Informative bands — a plain merge today. This is the seam for a future
+  // suggestRiskFromBands(corr, loss): route the patch through
+  // recalcPriority instead of setF to also propose P×C.
+  function onBandChange(next: Partial<Form>) {
+    setF((x) => ({ ...x, ...next }));
+  }
+
+  // Picking an action type suggests a deadline from OUR priority (Critical
+  // +90d … Low +1095d). Never overwrites a user-entered date.
+  function onActionTypeChange(v: string) {
+    setF((x) => {
+      const next = { ...x, action_type: (v || "") as ActionType | "" };
+      if (v && !x.action_due) {
+        next.action_due = suggestActionDue(x.priority, today());
+      }
+      return next;
     });
   }
 
@@ -292,6 +346,15 @@ function ItemModalInner({
     const patch: Partial<Item> = {
       name: trimmedName,
       zone_id: f.zone_id,
+      subarea_id: f.subarea_id || null,
+      action_type: f.action_type || null,
+      action_due: f.action_due,
+      action_status: f.action_type ? f.action_status || "Sem planejamento" : null,
+      action_note: f.action_note || null,
+      corr_extent_band: f.corr_extent_band || null,
+      material_loss_band: f.material_loss_band || null,
+      is_accessory: f.is_accessory,
+      accessory_type: f.is_accessory ? f.accessory_type || null : null,
       mechanism: f.mechanism || null,
       protection: f.protection || null,
       ifs_obj_id: f.ifs_obj_id || null,
@@ -499,9 +562,102 @@ function ItemModalInner({
           <Select
             label={t("f.zone")}
             value={f.zone_id}
-            onChange={(v) => set("zone_id", v)}
+            onChange={(v) =>
+              // Changing the zone always clears the sub-área — a sub-área
+              // belongs to exactly one zone (DB trigger is the backstop).
+              setF((x) => ({ ...x, zone_id: v, subarea_id: "" }))
+            }
             options={zoneOpts}
           />
+        </div>
+        <div>
+          <Select
+            label={t("f.subarea")}
+            value={f.subarea_id}
+            onChange={(v) => set("subarea_id", v)}
+            options={[{ v: "", l: t("subarea.none") }].concat(
+              subareasByZone(f.zone_id).map((s) => ({ v: s.id, l: s.name }))
+            )}
+          />
+          {isAdmin && !addingSubarea && (
+            <button
+              type="button"
+              onClick={() => setAddingSubarea(true)}
+              style={{
+                background: "none",
+                border: "none",
+                color: DS.blu,
+                cursor: "pointer",
+                fontSize: 11,
+                fontWeight: 600,
+                padding: 0,
+                marginTop: -6,
+                marginBottom: 8,
+              }}
+            >
+              {t("subarea.add")}
+            </button>
+          )}
+          {isAdmin && addingSubarea && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input
+                value={newSubareaName}
+                onChange={(e) => setNewSubareaName(e.target.value)}
+                placeholder={t("subarea.namePlaceholder")}
+                style={{ ...S.inp, marginBottom: 0, flex: 1 }}
+              />
+              <button
+                type="button"
+                disabled={savingSubarea || !newSubareaName.trim()}
+                onClick={() => {
+                  void (async () => {
+                    setSavingSubarea(true);
+                    const created = await createSubarea(
+                      f.zone_id,
+                      newSubareaName
+                    );
+                    setSavingSubarea(false);
+                    if (created) {
+                      set("subarea_id", created.id);
+                      setNewSubareaName("");
+                      setAddingSubarea(false);
+                    }
+                  })();
+                }}
+                style={{
+                  background: DS.blu,
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 7,
+                  padding: "0 14px",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: savingSubarea ? "default" : "pointer",
+                  opacity: savingSubarea || !newSubareaName.trim() ? 0.6 : 1,
+                }}
+              >
+                {t("common.add")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingSubarea(false);
+                  setNewSubareaName("");
+                }}
+                style={{
+                  background: "none",
+                  border: "1px solid " + DS.bord,
+                  color: DS.text3,
+                  borderRadius: 7,
+                  padding: "0 10px",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
         <Select
           label={t("f.mechanism")}
@@ -577,6 +733,52 @@ function ItemModalInner({
           placeholder="ex: 320045678"
           mono
         />
+        {/* Line accessory: the IFS object is the parent LINE; this item is
+            an accessory (support/valve/flange) installed on it. */}
+        <div style={{ marginTop: 4 }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 12,
+              color: DS.text2,
+              fontWeight: 600,
+              cursor: "pointer",
+              marginBottom: 4,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={f.is_accessory}
+              onChange={(e) =>
+                setF((x) => ({
+                  ...x,
+                  is_accessory: e.target.checked,
+                  accessory_type: e.target.checked ? x.accessory_type : "",
+                }))
+              }
+              style={{ cursor: "pointer" }}
+            />
+            {t("f.isAccessory")}
+          </label>
+          <div style={{ fontSize: 10, color: DS.text3, marginBottom: 8 }}>
+            {t("f.isAccessoryHint")}
+          </div>
+          {f.is_accessory && (
+            <Select
+              label={t("f.accessoryType")}
+              value={f.accessory_type}
+              onChange={(v) => set("accessory_type", v as AccessoryType | "")}
+              options={[{ v: "", l: blank }].concat(
+                ACCESSORY_TYPES.map((a) => ({
+                  v: a,
+                  l: t(`accType.${a}` as DictKey) || a,
+                }))
+              )}
+            />
+          )}
+        </div>
       </Section>
 
       <Section title={t("sec.risk")} accent={DS.vio}>
@@ -814,6 +1016,39 @@ function ItemModalInner({
             </div>
           </div>
         </div>
+
+        {/* Informative assessment bands (FM-116-OFF method). Handlers go
+            through onBandChange — the seam where a future
+            suggestRiskFromBands(corr, loss) can swap `set` for
+            recalcPriority to also suggest P×C. */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            marginTop: 12,
+          }}
+        >
+          <Select
+            label={t("f.corrExtent")}
+            value={f.corr_extent_band}
+            onChange={(v) => onBandChange({ corr_extent_band: v as CorrExtentBand | "" })}
+            options={[{ v: "", l: "-" }].concat(
+              CORR_EXTENT_BANDS.map((b) => ({ v: b, l: `${b}%` }))
+            )}
+          />
+          <Select
+            label={t("f.materialLoss")}
+            value={f.material_loss_band}
+            onChange={(v) => onBandChange({ material_loss_band: v as MaterialLossBand | "" })}
+            options={[{ v: "", l: "-" }].concat(
+              MATERIAL_LOSS_BANDS.map((b) => ({ v: b, l: `${b}%` }))
+            )}
+          />
+        </div>
+        <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
+          {t("f.bandsInfo")}
+        </div>
       </Section>
 
       <Section title={t("sec.inspection")} accent={DS.ora}>
@@ -877,6 +1112,85 @@ function ItemModalInner({
             </div>
           </div>
         </div>
+      </Section>
+
+      <Section title={t("sec.action")} accent={DS.grn}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            marginBottom: 10,
+          }}
+        >
+          <Select
+            label={t("f.actionType")}
+            value={f.action_type}
+            onChange={onActionTypeChange}
+            options={[{ v: "", l: blank }].concat(
+              ACTION_TYPES.map((a) => ({
+                v: a,
+                l: t(`actionType.${a}` as DictKey) || a,
+              }))
+            )}
+          />
+          <Select
+            label={t("f.actionStatus")}
+            value={f.action_type ? f.action_status || "Sem planejamento" : ""}
+            onChange={(v) => set("action_status", v as ActionStatus | "")}
+            options={
+              f.action_type
+                ? ACTION_STATUSES.map((s) => ({
+                    v: s,
+                    l: t(`actionStatus.${s}` as DictKey) || s,
+                  }))
+                : [{ v: "", l: "—" }]
+            }
+          />
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            alignItems: "end",
+            marginBottom: 4,
+          }}
+        >
+          <div>
+            <Label>{t("f.actionDue")}</Label>
+            <input
+              type="date"
+              value={f.action_due ?? ""}
+              onChange={(e) => set("action_due", e.target.value || null)}
+              style={{ ...S.inp, marginBottom: 0 }}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: DS.text3, paddingBottom: 10 }}>
+            {f.action_type ? t("f.actionDueSuggested") : null}
+          </div>
+        </div>
+        {f.action_type && (f.action_status || "Sem planejamento") === "Executado" && (
+          <div
+            style={{
+              background: DS.grnBg,
+              border: "1px solid " + DS.grnBord,
+              borderRadius: 8,
+              padding: "8px 12px",
+              marginBottom: 10,
+              fontSize: 11,
+              color: DS.grn,
+            }}
+          >
+            {t("f.actionDoneHint")}
+          </div>
+        )}
+        <Textarea
+          label={t("f.actionNote")}
+          value={f.action_note}
+          onChange={(v) => set("action_note", v)}
+          rows={2}
+        />
       </Section>
 
       <Section title={t("sec.pit")} accent={DS.ora}>

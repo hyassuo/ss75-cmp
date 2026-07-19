@@ -17,6 +17,7 @@ import type {
   ItemWithRelations,
   Profile,
   Reading,
+  Subarea,
   Zone,
 } from "@/lib/types/domain";
 
@@ -25,6 +26,9 @@ interface DataState {
   error: string | null;
   profile: Profile;
   zones: Zone[];
+  subareas: Subarea[];
+  subareasByZone: (zid: string) => Subarea[];
+  createSubarea: (zoneId: string, name: string) => Promise<Subarea | null>;
   allItems: ItemWithRelations[];
   itemsByZone: (zid: string) => ItemWithRelations[];
   refresh: () => Promise<void>;
@@ -69,25 +73,33 @@ export function DataProvider({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [subareas, setSubareas] = useState<Subarea[]>([]);
   const [allItems, setAllItems] = useState<ItemWithRelations[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     const supabase = createClient();
-    const [zoneRes, itemRes] = await Promise.all([
+    const [zoneRes, subareaRes, itemRes] = await Promise.all([
       supabase.from("zones").select("*").order("display_order"),
+      supabase.from("subareas").select("*").order("display_order").order("name"),
       supabase
         .from("items")
         .select("*, readings(*), evidences(*)")
         .order("created_at"),
     ]);
-    if (zoneRes.error || itemRes.error) {
-      setError(zoneRes.error?.message || itemRes.error?.message || "Load error");
+    if (zoneRes.error || subareaRes.error || itemRes.error) {
+      setError(
+        zoneRes.error?.message ||
+          subareaRes.error?.message ||
+          itemRes.error?.message ||
+          "Load error"
+      );
       setLoading(false);
       return;
     }
     setZones((zoneRes.data as Zone[]) ?? []);
+    setSubareas((subareaRes.data as Subarea[]) ?? []);
     const raw = (itemRes.data as unknown as ItemWithRelations[]) ?? [];
 
     // Drop abandoned drafts. createItem inserts a stub row immediately so the
@@ -107,6 +119,12 @@ export function DataProvider({
       !i.freq_insp &&
       !i.last_insp &&
       !i.notes &&
+      i.subarea_id == null &&
+      !i.action_type &&
+      !i.action_due &&
+      !i.corr_extent_band &&
+      !i.material_loss_band &&
+      !i.is_accessory &&
       i.readings.length === 0 &&
       i.evidences.length === 0 &&
       i.created_by === profile.id &&
@@ -145,6 +163,53 @@ export function DataProvider({
     [grouped]
   );
 
+  const subareasGrouped = useMemo(() => {
+    const map = new Map<string, Subarea[]>();
+    for (const s of subareas) {
+      const arr = map.get(s.zone_id);
+      if (arr) arr.push(s);
+      else map.set(s.zone_id, [s]);
+    }
+    return map;
+  }, [subareas]);
+
+  const subareasByZone = useCallback(
+    (zid: string) => subareasGrouped.get(zid) ?? [],
+    [subareasGrouped]
+  );
+
+  const createSubarea = useCallback(
+    async (zoneId: string, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) return null;
+      const supabase = createClient();
+      const { data, error: e } = await supabase
+        .from("subareas")
+        .insert({
+          unit_id: profile.unit_id!,
+          zone_id: zoneId,
+          name: trimmed,
+        })
+        .select("*")
+        .single();
+      if (e || !data) {
+        // Unique violation (duplicate name) or RLS denial surfaces here.
+        setError(e?.message || "Create sub-area failed");
+        return null;
+      }
+      const created = data as Subarea;
+      setSubareas((prev) =>
+        [...prev, created].sort(
+          (a, b) =>
+            (a.display_order ?? 0) - (b.display_order ?? 0) ||
+            a.name.localeCompare(b.name)
+        )
+      );
+      return created;
+    },
+    [profile.unit_id]
+  );
+
   const createItem = useCallback(
     async (zoneId: string, patch: Partial<Item>) => {
       const supabase = createClient();
@@ -171,6 +236,15 @@ export function DataProvider({
           freq_insp: patch.freq_insp ?? null,
           last_insp: patch.last_insp ?? null,
           next_insp: patch.next_insp ?? null,
+          subarea_id: patch.subarea_id ?? null,
+          action_type: patch.action_type ?? null,
+          action_due: patch.action_due ?? null,
+          action_status: patch.action_status ?? null,
+          action_note: patch.action_note ?? null,
+          corr_extent_band: patch.corr_extent_band ?? null,
+          material_loss_band: patch.material_loss_band ?? null,
+          is_accessory: patch.is_accessory ?? false,
+          accessory_type: patch.accessory_type ?? null,
           notes: patch.notes ?? null,
           created_by: profile.id,
           updated_by: profile.id,
@@ -357,6 +431,9 @@ export function DataProvider({
         error,
         profile,
         zones,
+        subareas,
+        subareasByZone,
+        createSubarea,
         allItems,
         itemsByZone,
         refresh: load,

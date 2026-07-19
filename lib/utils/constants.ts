@@ -78,6 +78,32 @@ export const FREQUENCIES: InspectionFrequency[] = [
   "As required",
 ];
 
+// Tratativa (corrective-action cycle) + bands + accessory — canonical
+// values are PORTUGUESE (FM-116-OFF reference method; deliberate exception
+// to the "DB stores English" rule). Dict keys: actionType.*, actionStatus.*,
+// accType.*. Band labels render as `${band}%` directly.
+export const ACTION_TYPES = [
+  "Monitorar",
+  "Tratamento mecânico e pintura",
+  "Caldeiraria + tratamento e pintura",
+  "Reparo compósito",
+  "Substituição",
+  "Outro",
+] as const;
+
+export const ACTION_STATUSES = [
+  "Sem planejamento",
+  "Planejado",
+  "Aguardando material",
+  "Em execução",
+  "Executado",
+] as const;
+
+export const CORR_EXTENT_BANDS = ["3-10", "10-16", "16-33", "33-50", ">50"] as const;
+export const MATERIAL_LOSS_BANDS = ["10-16", "16-33", "33-50", ">50"] as const;
+
+export const ACCESSORY_TYPES = ["Suporte", "Válvula", "Flange", "Outro"] as const;
+
 export const SYSTEMS = [
   "All",
   "Drilling",

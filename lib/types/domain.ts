@@ -7,6 +7,30 @@ export type ItemStatus = "OK" | "Attention" | "Critical" | "Pending";
 // 'Overdue' is computed for display only — never stored.
 export type EffectiveStatus = ItemStatus | "Overdue";
 
+// Tratativa (corrective-action cycle) + assessment bands + line accessory.
+// Canonical values are PORTUGUESE — a deliberate deviation from the
+// "DB stores English" convention: they come from the FM-116-OFF reference
+// method and are fixed by product decision. The dict provides EN labels.
+export type ActionType =
+  | "Monitorar"
+  | "Tratamento mecânico e pintura"
+  | "Caldeiraria + tratamento e pintura"
+  | "Reparo compósito"
+  | "Substituição"
+  | "Outro";
+
+export type ActionStatus =
+  | "Sem planejamento"
+  | "Planejado"
+  | "Aguardando material"
+  | "Em execução"
+  | "Executado";
+
+export type CorrExtentBand = "3-10" | "10-16" | "16-33" | "33-50" | ">50";
+export type MaterialLossBand = "10-16" | "16-33" | "33-50" | ">50";
+
+export type AccessoryType = "Suporte" | "Válvula" | "Flange" | "Outro";
+
 export type InspectionFrequency =
   | "Weekly"
   | "Monthly"
@@ -48,6 +72,17 @@ export interface Zone {
   default_freq: InspectionFrequency | null;
   drops_zone: boolean;
   display_order: number | null;
+}
+
+// Managed compartment inside a DROPS zone (admin-curated catalog).
+export interface Subarea {
+  id: string;
+  unit_id: string;
+  zone_id: string;
+  name: string;
+  display_order: number | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface Reading {
@@ -131,6 +166,15 @@ export interface Item {
   next_insp: string | null;
   resolved_at: string | null;
   archived: boolean;
+  subarea_id: string | null;
+  action_type: ActionType | null;
+  action_due: string | null;
+  action_status: ActionStatus | null;
+  action_note: string | null;
+  corr_extent_band: CorrExtentBand | null;
+  material_loss_band: MaterialLossBand | null;
+  is_accessory: boolean;
+  accessory_type: AccessoryType | null;
   notes: string | null;
   created_by: string | null;
   updated_by: string | null;

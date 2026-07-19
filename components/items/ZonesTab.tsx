@@ -22,7 +22,7 @@ interface Open {
 
 export function ZonesTab() {
   const { t, tDept, tIntegrity } = useLang();
-  const { zones, itemsByZone, createItem } = useData();
+  const { zones, itemsByZone, subareasByZone, createItem } = useData();
   const { sysFilter } = useShell();
   const [open, setOpen] = useState<Open | null>(null);
   const [creating, setCreating] = useState(false);
@@ -171,31 +171,97 @@ export function ZonesTab() {
                 }}
               >{t("nav.addItem")}</button>
             </div>
-            {activeItems.length > 0 && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fill,minmax(min(280px,100%),1fr))",
-                  minWidth: 0,
-                  gap: 8,
-                }}
-              >
-                {activeItems.map((it) => (
-                  <ItemCard
-                    key={it.id}
-                    item={it}
-                    onClick={() =>
-                      setOpen({
-                        itemId: it.id,
-                        zoneName: z.name,
-                        isNew: false,
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            )}
+            {activeItems.length > 0 &&
+              (() => {
+                // Group cards by sub-área. Items whose subarea_id is unset
+                // (or points at another zone's sub-área — legacy data) fall
+                // into the trailing "no sub-area" group. When nothing in
+                // the zone uses sub-áreas, render the flat grid exactly as
+                // before — zero visual change for units not using them.
+                const zoneSubs = subareasByZone(z.zid);
+                const bySub = new Map<string | null, typeof activeItems>();
+                for (const it of activeItems) {
+                  const key =
+                    it.subarea_id &&
+                    zoneSubs.some((s) => s.id === it.subarea_id)
+                      ? it.subarea_id
+                      : null;
+                  const arr = bySub.get(key);
+                  if (arr) arr.push(it);
+                  else bySub.set(key, [it]);
+                }
+                const grid = (its: typeof activeItems) => (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill,minmax(min(280px,100%),1fr))",
+                      minWidth: 0,
+                      gap: 8,
+                    }}
+                  >
+                    {its.map((it) => (
+                      <ItemCard
+                        key={it.id}
+                        item={it}
+                        onClick={() =>
+                          setOpen({
+                            itemId: it.id,
+                            zoneName: z.name,
+                            isNew: false,
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                );
+                const grouped = zoneSubs.filter((s) => bySub.has(s.id));
+                if (!grouped.length) return grid(activeItems);
+                return (
+                  <div>
+                    {grouped.map((s) => (
+                      <div key={s.id} style={{ marginBottom: 12 }}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: DS.text3,
+                            textTransform: "uppercase",
+                            letterSpacing: 1.2,
+                            fontWeight: 700,
+                            marginBottom: 6,
+                          }}
+                        >
+                          {s.name}{" "}
+                          <span style={{ fontWeight: 400 }}>
+                            ({bySub.get(s.id)!.length})
+                          </span>
+                        </div>
+                        {grid(bySub.get(s.id)!)}
+                      </div>
+                    ))}
+                    {bySub.has(null) && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: DS.text3,
+                            textTransform: "uppercase",
+                            letterSpacing: 1.2,
+                            fontWeight: 700,
+                            marginBottom: 6,
+                          }}
+                        >
+                          {t("subarea.none")}{" "}
+                          <span style={{ fontWeight: 400 }}>
+                            ({bySub.get(null)!.length})
+                          </span>
+                        </div>
+                        {grid(bySub.get(null)!)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
           </div>
         );
       })}

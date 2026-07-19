@@ -47,6 +47,20 @@ const s = StyleSheet.create({
     marginLeft: 4,
   },
   photoCell: { width: 90, marginRight: 4, marginBottom: 4 },
+  subarea: {
+    fontSize: 8,
+    color: "#445566",
+    fontWeight: 700,
+    marginTop: 5,
+    marginBottom: 2,
+  },
+  actionLine: {
+    fontSize: 7,
+    color: "#445566",
+    marginLeft: 8,
+    marginTop: 1,
+    marginBottom: 2,
+  },
   photoImg: {
     width: 90,
     height: 64,
@@ -60,6 +74,8 @@ export interface PdfItem {
   id: string;
   zid: string;
   zname: string;
+  // Sub-área name ("" when none) — rendered as a group subheader.
+  subarea: string;
   name: string;
   ifs: string;
   priority: string;
@@ -68,6 +84,9 @@ export interface PdfItem {
   last_insp: string;
   next_insp: string;
   rate: string;
+  // Pre-formatted tratativa line ("" when none) — rendered as a second
+  // indented line under the item row.
+  action: string;
 }
 
 export interface PdfPhoto {
@@ -113,10 +132,30 @@ export function PdfDocument({
         </Text>
         {note ? <Text style={s.sub}>{note}</Text> : null}
         {zones.map((zid) => {
-          const zoneItems = items.filter((i) => i.zid === zid);
-          const zname = zoneItems[0]?.zname ?? "";
+          const unsorted = items.filter((i) => i.zid === zid);
+          const zname = unsorted[0]?.zname ?? "";
+          // Group by sub-área (original order preserved inside each group;
+          // items without one come last). Subheaders only when the zone
+          // actually uses sub-áreas.
+          const subNames = Array.from(
+            new Set(unsorted.map((i) => i.subarea).filter(Boolean))
+          );
+          const zoneItems = subNames.length
+            ? subNames
+                .flatMap((sn) => unsorted.filter((i) => i.subarea === sn))
+                .concat(unsorted.filter((i) => !i.subarea))
+            : unsorted;
           const rows: ReactNode[] = [];
+          let lastSub: string | null = null;
           zoneItems.forEach((it, idx) => {
+            if (subNames.length && it.subarea !== lastSub) {
+              lastSub = it.subarea;
+              rows.push(
+                <Text key={`s${idx}`} style={s.subarea}>
+                  {it.subarea ? `▸ ${it.subarea}` : "▸ —"}
+                </Text>
+              );
+            }
             rows.push(
               <View key={`r${idx}`} style={s.row}>
                 <Text style={s.cName}>
@@ -129,6 +168,13 @@ export function PdfDocument({
                 <Text style={s.cNext}>{it.next_insp || "-"}</Text>
               </View>
             );
+            if (it.action) {
+              rows.push(
+                <Text key={`a${idx}`} style={s.actionLine}>
+                  {it.action}
+                </Text>
+              );
+            }
             const photos = photosByItem?.get(it.id);
             if (photos && photos.length) {
               rows.push(
