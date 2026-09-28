@@ -42,6 +42,9 @@ const ID = {
   gone: "00000000-0000-0000-0000-0000000e2e0a",
   draftConflict: "00000000-0000-0000-0000-0000000e2e0b",
   evFail: "00000000-0000-0000-0000-0000000e2e0c",
+  rate: "00000000-0000-0000-0000-0000000e2e0d",
+  nav: "00000000-0000-0000-0000-0000000e2e0e",
+  a11y: "00000000-0000-0000-0000-0000000e2e0f",
 };
 const USERS = {
   admin1: "00000000-0000-0000-0000-00000000a001",
@@ -148,7 +151,7 @@ class Check {
   }
 }
 
-async function newPage(chk, label) {
+async function newPage(chk, label, opts = {}) {
   const ctx = await browser.newContext({
     bypassCSP: true, // app CSP only allows https://*.supabase.co
     serviceWorkers: "block",
@@ -156,6 +159,7 @@ async function newPage(chk, label) {
     viewport: { width: 1440, height: 1000 },
     locale: "en-US",
     timezoneId: "America/Sao_Paulo",
+    ...opts,
   });
   const page = await ctx.newPage();
   page.__label = label;
@@ -202,8 +206,13 @@ async function login(page, email) {
 }
 
 async function waitLoaded(page) {
-  // DataContext finished loading when the dashboard KPI row is rendered.
-  await page.getByText(/inspected/).first().waitFor({ timeout: 60000 });
+  // DataContext finished loading when the skeleton (no text) is replaced by
+  // real content — works for every tab and language.
+  await page.waitForFunction(
+    () => (document.querySelector("main.app-content")?.innerText || "").trim().length > 40,
+    null,
+    { timeout: 60000 }
+  );
 }
 
 // The sidebar starts collapsed (icon-only buttons carry the label in title).
@@ -215,6 +224,18 @@ const modal = (page) => page.locator(".modal-card");
 const nameInput = (page) => modal(page).locator('div:has(> label:text-is("Item Name / Tag")) > input');
 const notesArea = (page) => modal(page).locator('div:has(> div:text-is("NOTES")) textarea');
 const ifsWoInput = (page) => modal(page).locator('div:has(> label:text-matches("IFS WO|Work Order", "i")) > input').first();
+
+
+// Scroll whichever element actually scrolls the modal (card or overlay).
+async function scrollModal(page, frac) {
+  return page.evaluate((frac) => {
+    const cands = [document.querySelector(".modal-overlay"), document.querySelector(".modal-card")];
+    const el = cands.find((e) => e && /auto|scroll/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 10);
+    if (!el) return null;
+    el.scrollTop = (el.scrollHeight - el.clientHeight) * frac;
+    return { cls: el.className, top: Math.round(el.scrollTop), max: el.scrollHeight - el.clientHeight };
+  }, frac);
+}
 
 async function openItem(page, name) {
   await gotoTab(page, "Zones & Items");
@@ -272,8 +293,8 @@ async function main() {
   await run("b", "New item -> name -> Save -> appears; history shows events", async (c) => {
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
-    await page.locator('button[title="New Item"]').first().click();
-    await page.getByText("New Item — select a zone").locator("..").getByText("Main Deck", { exact: true }).click();
+    await page.locator('button[title="+ New Item"]').first().click();
+    await page.locator(".zone-picker").getByText("Main Deck", { exact: true }).click();
     await modal(page).waitFor();
     const newId = (await one(
       "SELECT id FROM items WHERE created_by = $1 AND name = 'Untitled' ORDER BY created_at DESC LIMIT 1",
@@ -418,7 +439,8 @@ async function main() {
     c.expect(ls.length >= 1, "draft mirrored to localStorage", ls);
     await page.reload();
     await waitLoaded(page);
-    await openItem(page, "E2E Draft Target");
+    // v1.16: ?item= is in the URL, so F5 re-opens the modal by itself.
+    await modal(page).waitFor({ timeout: 30000 });
     const banner = modal(page).getByText(/Unsaved changes from a previous session were found/);
     await banner.waitFor({ timeout: 5000 }).catch(() => {});
     c.expect(await banner.isVisible(), "restore banner shown");
@@ -454,8 +476,8 @@ async function main() {
     c.expect(db.notes === "base note", "nothing saved", db);
 
     // New item + reading, then cancel.
-    await page.locator('button[title="New Item"]').first().click();
-    await page.getByText("New Item — select a zone").locator("..").getByText("Main Deck", { exact: true }).click();
+    await page.locator('button[title="+ New Item"]').first().click();
+    await page.locator(".zone-picker").getByText("Main Deck", { exact: true }).click();
     await modal(page).waitFor();
     const newId = (await one(
       "SELECT id FROM items WHERE created_by = $1 AND name = 'Untitled' ORDER BY created_at DESC LIMIT 1",
@@ -491,7 +513,7 @@ async function main() {
     const add = modal(page).getByRole("button", { name: "+ Reading" });
     await depth.fill("-1");
     await add.click();
-    c.expect(await modal(page).getByText("Enter a depth of 0 mm or more.").isVisible(), "negative depth -> validation message");
+    c.expect(await modal(page).getByText("Enter a depth between 0 and 999.999 mm.").isVisible(), "negative depth -> validation message");
     await shot(c, page, "negative");
     const future = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
     await date.fill(future);
@@ -526,7 +548,7 @@ async function main() {
     await openItem(page, "E2E Evidence Target");
     const pngPath = path.join(ART, "..", ".state", "tiny.png");
     fs.writeFileSync(pngPath, tinyPng());
-    await modal(page).locator('input[type="file"]').setInputFiles(pngPath);
+    await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
     await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E2E rust bloom photo");
     await modal(page).getByRole("button", { name: "Save evidence record" }).click();
     const img = modal(page).locator('img[alt="tiny.png"]');
@@ -685,8 +707,8 @@ async function main() {
   await run("b2", "Create Item with an empty name is refused inline", async (c) => {
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
-    await page.locator('button[title="New Item"]').first().click();
-    await page.getByText("New Item — select a zone").locator("..").getByText("Main Deck", { exact: true }).click();
+    await page.locator('button[title="+ New Item"]').first().click();
+    await page.locator(".zone-picker").getByText("Main Deck", { exact: true }).click();
     await modal(page).waitFor();
     const id = (await one("SELECT id FROM items WHERE created_by = $1 AND name = 'Untitled' ORDER BY created_at DESC LIMIT 1", [USERS.insp1]))?.id;
     await modal(page).getByRole("button", { name: "Create Item" }).click();
@@ -712,23 +734,22 @@ async function main() {
     await modal(page).getByRole("button", { name: "Save", exact: true }).click();
     await page.waitForTimeout(2500);
     const db1 = await one("SELECT notes FROM items WHERE id = $1", [ID.lost]);
-    c.expect(db1.notes === "committed but response lost", "server applied the first save", db1);
-    c.expect(await modalOpen(page), "modal stays open (client saw a network error)");
-    const a1 = await modal(page).locator('[role="alert"]').allInnerTexts();
-    c.step(`alert after lost response: ${JSON.stringify(a1)}`);
-    await shot(c, page, "lost-response");
-    await modal(page).getByRole("button", { name: "Save", exact: true }).click();
-    await page.waitForTimeout(2500);
-    const conflictShown = await modal(page).getByText(/Someone else changed this item/).isVisible().catch(() => false);
-    const stillOpen = await modalOpen(page);
-    c.step(`retry: modalOpen=${stillOpen} conflictBanner=${conflictShown}`);
-    await shot(c, page, "retry");
-    c.expect(!conflictShown, "retry of the user's own committed save is not reported as someone else's change",
-      "conflict banner 'Someone else changed this item' shown for the user's own write");
-    if (stillOpen && conflictShown) {
-      await modal(page).getByRole("button", { name: "Save my changes on top" }).click();
-      await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+    c.expect(db1.notes === "committed but response lost", "server applied the save", db1);
+    const log = (await ctl.log(0)).filter((l) => l.method === "PATCH" && l.url.includes(ID.lost));
+    c.step(`PATCH attempts seen by the gateway: ${log.length}`);
+    let conflictShown = await modal(page).getByText(/Someone else changed this item/).isVisible().catch(() => false);
+    let open = await modalOpen(page);
+    c.step(`after lost response: modalOpen=${open} conflictBanner=${conflictShown} alerts=${JSON.stringify(open ? await modal(page).locator('[role="alert"]').allInnerTexts() : [])}`);
+    await shot(c, page, "after-lost-response");
+    if (open && !conflictShown) {
+      // Browser didn't auto-retry: the user retries by hand.
+      await modal(page).getByRole("button", { name: "Save", exact: true }).click();
+      await page.waitForTimeout(2500);
+      conflictShown = await modal(page).getByText(/Someone else changed this item/).isVisible().catch(() => false);
+      open = await modalOpen(page);
     }
+    c.expect(!conflictShown, "no false 'someone else changed this item' for the user's own committed write");
+    c.expect(!open, "save reported as success, modal closed");
     await page.context().close();
   });
 
@@ -767,8 +788,7 @@ async function main() {
     await waitLoaded(page);
     const insp2 = await apiAs("insp2@test.local");
     await insp2.from("items").update({ ifs_wo: "WO-AFTER-DRAFT" }).eq("id", ID.draftConflict);
-    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-    await openItem(page, "E2E Draft Conflict Target");
+    await modal(page).waitFor({ timeout: 30000 });
     await modal(page).getByRole("button", { name: "Restore" }).click();
     await modal(page).getByRole("button", { name: "Save", exact: true }).click();
     const banner = modal(page).getByText(/Someone else changed this item/);
@@ -785,13 +805,13 @@ async function main() {
   await run("f2", "Inspector cancels a new item that already has a photo", async (c) => {
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
-    await page.locator('button[title="New Item"]').first().click();
-    await page.getByText("New Item — select a zone").locator("..").getByText("Main Deck", { exact: true }).click();
+    await page.locator('button[title="+ New Item"]').first().click();
+    await page.locator(".zone-picker").getByText("Main Deck", { exact: true }).click();
     await modal(page).waitFor();
     const id = (await one("SELECT id FROM items WHERE created_by = $1 AND name = 'Untitled' ORDER BY created_at DESC LIMIT 1", [USERS.insp1]))?.id;
     const pngPath = path.join(ART, "..", ".state", "tiny.png");
     fs.writeFileSync(pngPath, tinyPng());
-    await modal(page).locator('input[type="file"]').setInputFiles(pngPath);
+    await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
     await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("photo on a draft");
     await modal(page).getByRole("button", { name: "Save evidence record" }).click();
     await modal(page).locator('img[alt="tiny.png"]').waitFor({ timeout: 15000 }).catch(() => {});
@@ -810,7 +830,7 @@ async function main() {
     await page.context().close();
   });
 
-  await run("g2", "Reading beyond numeric(6,3) range surfaces an error (not silent)", async (c) => {
+  await run("g2", "Reading >= 1000 mm rejected in the form (numeric(6,3) range)", async (c) => {
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
     await openItem(page, "E2E Reading Target");
@@ -819,7 +839,8 @@ async function main() {
     await modal(page).getByRole("button", { name: "+ Reading" }).click();
     await page.waitForTimeout(1500);
     const alerts = await modal(page).locator('[role="alert"]').allInnerTexts();
-    c.expect(alerts.some((t) => /Reading not saved/.test(t)), "'Reading not saved' error shown", alerts);
+    c.expect(alerts.some((t) => /between 0 and 999\.999 mm/.test(t)), "client-side range message shown (v1.16: no raw DB error)", alerts);
+    c.expect(c.network.length === 0, "no request reached the API", c.network);
     c.expect((await depth.inputValue()) === "1000", "typed value kept for correction");
     c.step(`message: ${JSON.stringify(alerts)}`);
     await shot(c, page, "overflow");
@@ -833,7 +854,7 @@ async function main() {
     const pngPath = path.join(ART, "..", ".state", "tiny.png");
     fs.writeFileSync(pngPath, tinyPng());
     const desc = modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea');
-    await modal(page).locator('input[type="file"]').setInputFiles(pngPath);
+    await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
     await desc.fill("upload will fail");
     await ctl.fault({ method: "POST", prefix: "/storage/v1/object/evidence-photos", status: 503, times: 1 });
     await modal(page).getByRole("button", { name: "Save evidence record" }).click();
@@ -862,6 +883,599 @@ async function main() {
     await modal(page).locator('img[alt="tiny.png"]').waitFor({ timeout: 15000 }).catch(() => {});
     const total = await sql("SELECT name FROM storage.objects WHERE name LIKE $1", [`${ID.evFail}/%`]);
     c.step(`after successful retry: ${total.length} storage objects for 1 evidence row`);
+    await page.context().close();
+  });
+
+
+  // =================================================== v1.16.0 (field UX)
+  const q = (page) => new URL(page.url());
+  const hasItemParam = (page) => q(page).searchParams.has("item");
+  const dialog = (page) => page.getByRole("dialog").filter({ has: page.locator("h2") });
+  const title = async (page) => (await modal(page).locator("h2").first().textContent())?.trim();
+  const newDraftId = async () =>
+    (await one("SELECT id FROM items WHERE created_by = $1 AND name = 'Untitled' ORDER BY created_at DESC LIMIT 1", [USERS.insp1]))?.id;
+  async function newItemFromSidebar(page) {
+    await page.locator('button[aria-label="+ New Item"], button[title="+ New Item"]').first().click();
+    await page.locator(".zone-picker").getByText("Main Deck", { exact: true }).click();
+    await modal(page).waitFor();
+    await page.waitForTimeout(300);
+    return newDraftId();
+  }
+
+  await run("n1", "URL navigation: tabs, ?item=, F5, deep link, unknown id, legacy routes", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    for (const [label, want] of [["Zones & Items", "?tab=zones"], ["Risk Matrix", "?tab=risk"], ["Schedule", "?tab=schedule"], ["Export", "?tab=export"], ["Dashboard", ""]]) {
+      await gotoTab(page, label);
+      await page.waitForTimeout(300);
+      c.expect(page.url() === `${APP}/dashboard${want}`, `tab '${label}' -> /dashboard${want}`, page.url());
+    }
+    await openItem(page, "E2E Nav Target");
+    c.expect(q(page).searchParams.get("item") === ID.nav && q(page).searchParams.get("tab") === "zones", "opening an item pushes ?tab=zones&item=<id>", page.url());
+    await page.reload();
+    await waitLoaded(page);
+    await modal(page).waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect((await modalOpen(page)) && (await title(page)) === "E2E Nav Target", "F5 re-opens the same item", await title(page).catch(() => null));
+    await shot(c, page, "after-f5");
+    const p2 = await page.context().newPage();
+    await p2.goto(`${APP}/dashboard?tab=zones&item=${ID.nav}`);
+    await modal(p2).waitFor({ timeout: 30000 }).catch(() => {});
+    c.expect((await modalOpen(p2)) && (await title(p2)) === "E2E Nav Target", "deep link opens the item");
+    await p2.goto(`${APP}/dashboard?tab=zones&item=00000000-0000-0000-0000-00000000dead`);
+    await waitLoaded(p2);
+    await p2.waitForTimeout(2000);
+    c.expect(!hasItemParam(p2) && q(p2).searchParams.get("tab") === "zones", "unknown ?item= dropped from the URL (tab kept)", p2.url());
+    c.expect(!(await modalOpen(p2)), "no modal for an unknown id");
+    for (const [route, tab] of [["/zones", "zones"], ["/risk-matrix", "risk"], ["/schedule", "schedule"], ["/export", "export"]]) {
+      await p2.goto(APP + route);
+      await p2.waitForURL(/\/dashboard/, { timeout: 15000 }).catch(() => {});
+      c.expect(q(p2).pathname === "/dashboard" && q(p2).searchParams.get("tab") === tab, `${route} redirects to ?tab=${tab}`, p2.url());
+    }
+    await p2.close();
+    // `page` was reloaded with ?item= in the URL: one Cancel must close it.
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForTimeout(1500);
+    const stuck = await modalOpen(page);
+    c.expect(!stuck, "after F5, a single Cancel closes the modal",
+      `modal still open after Cancel (URL already ${page.url()}); a second Cancel is needed`);
+    await shot(c, page, "cancel-after-f5");
+    if (stuck) {
+      await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+      await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    }
+    // New item URL carries &new=1
+    const id = await newItemFromSidebar(page);
+    c.expect(q(page).searchParams.get("item") === id && q(page).searchParams.get("new") === "1", "new item URL has ?item=<id>&new=1", page.url());
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!hasItemParam(page), "Cancel removes ?item=", page.url());
+    await page.context().close();
+  });
+
+  await run("n2", "Browser Back: closes modal; dirty -> confirm (decline keeps it); new draft discarded; fresh ?item= load", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await openItem(page, "E2E Nav Target");
+    await page.goBack();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!(await modalOpen(page)) && page.url() === `${APP}/dashboard?tab=zones`, "Back closes a clean modal, stays on the tab", page.url());
+    await openItem(page, "E2E Nav Target");
+    await notesArea(page).fill("back-button edit");
+    page.__dialogPolicy = [false];
+    await page.goBack();
+    await page.waitForTimeout(1200);
+    c.expect(c.dialogs.some((d) => /Discard your unsaved changes/.test(d)), "Back with unsaved edits asks first", c.dialogs);
+    c.expect(await modalOpen(page), "declining keeps the modal open");
+    c.expect(q(page).searchParams.get("item") === ID.nav, "…and the URL still has ?item=", page.url());
+    c.expect((await notesArea(page).inputValue()) === "back-button edit", "…with the edits");
+    await shot(c, page, "declined");
+    page.__dialogPolicy = [true];
+    await page.goBack();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!(await modalOpen(page)) && !hasItemParam(page), "accepting closes it", page.url());
+    c.expect(q(page).pathname === "/dashboard", "still inside the app", page.url());
+    const db = await one("SELECT notes FROM items WHERE id = $1", [ID.nav]);
+    c.expect(db.notes === "base note", "nothing saved", db);
+    const before = c.dialogs.length;
+    const id = await newItemFromSidebar(page);
+    await page.goBack();
+    await modal(page).waitFor({ state: "detached", timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+    const n = await one("SELECT count(*)::int n FROM items WHERE id = $1", [id]);
+    c.expect(n.n === 0, "Back on a brand-new item discards the draft row", n);
+    c.expect(c.dialogs.length === before, "no confirm for an untouched draft", c.dialogs.slice(before));
+    const p2 = await page.context().newPage();
+    await p2.goto(`${APP}/dashboard?tab=zones&item=${ID.nav}`);
+    await modal(p2).waitFor({ timeout: 30000 });
+    await p2.goBack();
+    await modal(p2).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    const st = await p2.evaluate(() => history.state);
+    c.expect(!(await modalOpen(p2)), "fresh ?item= page: Back closes the modal",
+      `modal still open while the URL is ${p2.url()} (history.state=${JSON.stringify(st)})`);
+    if (await modalOpen(p2)) {
+      await modal(p2).getByRole("button", { name: "Cancel", exact: true }).click();
+      await p2.waitForTimeout(1500);
+      c.step(`then Cancel -> ${p2.url()}`);
+    }
+    c.expect(p2.url() === `${APP}/dashboard?tab=zones`, "…and stays on /dashboard?tab=zones", p2.url());
+    // Same in a brand-new tab (a shared link opened from chat/e-mail).
+    const p3 = await page.context().newPage();
+    await p3.goto(`${APP}/dashboard?tab=zones&item=${ID.nav}`);
+    await modal(p3).waitFor({ timeout: 30000 });
+    await p3.goBack().catch(() => {});
+    await p3.waitForTimeout(1500);
+    const open3 = await modalOpen(p3);
+    if (open3) {
+      await modal(p3).getByRole("button", { name: "Cancel", exact: true }).click().catch(() => {});
+      await p3.waitForTimeout(1500);
+    }
+    c.expect(!open3 && p3.url().startsWith(`${APP}/dashboard`), "new tab via shared link: Back closes the modal and the app stays open",
+      `modal open after Back=${open3}; after Cancel the tab is at ${p3.url()}`);
+    await shot(c, p3, "shared-link-back");
+    await page.context().close();
+  });
+
+  await run("n3", "Cancel racing Back never navigates twice", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    // (1) Back first, Cancel a moment later.
+    await openItem(page, "E2E Nav Target");
+    await page.evaluate(() => {
+      history.back();
+      setTimeout(() => [...document.querySelectorAll(".modal-card button")].find((b) => b.textContent.trim() === "Cancel")?.click(), 30);
+    });
+    await page.waitForTimeout(1500);
+    c.expect(page.url() === `${APP}/dashboard?tab=zones` && !(await modalOpen(page)), "Back then Cancel: one step back (zones tab)", page.url());
+    // (2) Cancel of a NEW item (slow DELETE) and Back while it runs.
+    await newItemFromSidebar(page);
+    await ctl.fault({ method: "DELETE", prefix: "/rest/v1/items", mode: "delay", delay: 1500, times: 1 });
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForTimeout(200);
+    await page.goBack().catch(() => {});
+    await page.waitForTimeout(3000);
+    c.expect(page.url() === `${APP}/dashboard?tab=zones`, "Cancel (slow delete) + Back: still on the zones tab", page.url());
+    c.expect(!(await modalOpen(page)), "modal closed");
+    const alerts = await page.locator('[role="alert"]').allInnerTexts();
+    c.step(`alerts after race: ${JSON.stringify(alerts)}`);
+    // (3) Same-task Cancel + Back (worst case).
+    await openItem(page, "E2E Nav Target");
+    await page.evaluate(() => {
+      [...document.querySelectorAll(".modal-card button")].find((b) => b.textContent.trim() === "Cancel")?.click();
+      history.back();
+    });
+    await page.waitForTimeout(1500);
+    c.expect(q(page).pathname === "/dashboard", "same-task Cancel + Back stays in /dashboard", page.url());
+    c.expect(page.url() === `${APP}/dashboard?tab=zones`, "same-task Cancel + Back stays on the zones tab", page.url());
+    await page.context().close();
+  });
+
+  await run("n4", "Saved item reached via Forward / &new=1 is never deleted on Escape/Cancel", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    const id = await newItemFromSidebar(page);
+    await nameInput(page).fill("E2E Forward Saved");
+    await modal(page).getByRole("button", { name: "Create Item" }).click();
+    await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+    await page.goForward();
+    await modal(page).waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect(q(page).searchParams.get("new") === "1" && (await modalOpen(page)), "Forward re-opens the item with &new=1 in the URL", page.url());
+    c.expect(!(await modal(page).getByRole("button", { name: "Create Item" }).count()), "modal treats it as an existing item (no 'Create Item')");
+    await shot(c, page, "forward");
+    await page.keyboard.press("Escape");
+    await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    let n = await one("SELECT count(*)::int n FROM items WHERE id = $1", [id]);
+    c.expect(n.n === 1, "item still in the DB after Escape", n);
+    await page.goto(`${APP}/dashboard?item=${id}&new=1`);
+    await modal(page).waitFor({ timeout: 30000 });
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.waitForTimeout(1000);
+    n = await one("SELECT count(*)::int n FROM items WHERE id = $1", [id]);
+    c.expect(n.n === 1, "item still in the DB after Cancel on a &new=1 link", n);
+    await page.context().close();
+  });
+
+  await run("n5", "Deep link while logged out -> /login?next= -> item; open redirect blocked", async (c) => {
+    const page = await newPage(c, "anon");
+    await page.goto(`${APP}/dashboard?tab=zones&item=${ID.nav}`);
+    await page.waitForURL(/\/login/, { timeout: 15000 });
+    const next = q(page).searchParams.get("next");
+    c.expect(next === `/dashboard?tab=zones&item=${ID.nav}`, "redirected to /login?next=<path+query>", page.url());
+    await page.locator('input[type="email"]').fill("insp1@test.local");
+    await page.locator('input[type="password"]').fill(PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/item=/, { timeout: 30000 }).catch(() => {});
+    await modal(page).waitFor({ timeout: 30000 }).catch(() => {});
+    c.expect((await modalOpen(page)) && (await title(page)) === "E2E Nav Target", "after login the shared item is open", page.url());
+    await shot(c, page, "landed");
+    await page.context().close();
+    for (const evil of ["https://evil.example", "//evil.example", "/\\evil.example"]) {
+      const p = await newPage(c, "anon");
+      await p.goto(`${APP}/login?next=${encodeURIComponent(evil)}`);
+      await p.locator('input[type="email"]').fill("insp1@test.local");
+      await p.locator('input[type="password"]').fill(PASSWORD);
+      await p.getByRole("button", { name: /sign in/i }).click();
+      await p.waitForTimeout(3000);
+      c.expect(p.url().startsWith(`${APP}/dashboard`), `next=${evil} -> lands on /dashboard`, p.url());
+      await p.context().close();
+    }
+  });
+
+  await run("n6", "Modal a11y: dialog semantics, focus trap, Escape, focus return, inert; IFS combobox keys", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await gotoTab(page, "Zones & Items");
+    const card = page.locator("[role=button]", { hasText: "E2E A11y Target" }).first();
+    await card.scrollIntoViewIfNeeded();
+    await card.focus();
+    await page.keyboard.press("Enter");
+    await modal(page).waitFor();
+    await page.waitForTimeout(300);
+    const dlg = page.locator('.modal-card[role="dialog"]');
+    c.expect((await dlg.count()) === 1, "modal card has role=dialog");
+    c.expect((await dlg.getAttribute("aria-modal")) === "true", "aria-modal=true");
+    const lb = await dlg.getAttribute("aria-labelledby");
+    const lbText = lb ? await page.evaluate((id) => document.getElementById(id)?.textContent, lb) : null;
+    c.expect(lbText === "E2E A11y Target", "aria-labelledby points at the item title", lbText);
+    const inDialog = () => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+    c.expect(await inDialog(), "focus moved into the dialog");
+    c.expect(await page.evaluate(() => document.getElementById("app-root")?.hasAttribute("inert")), "#app-root is inert while open");
+    let escaped = 0;
+    for (let i = 0; i < 80; i++) {
+      await page.keyboard.press("Tab");
+      if (!(await inDialog())) escaped++;
+    }
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press("Shift+Tab");
+      if (!(await inDialog())) escaped++;
+    }
+    c.expect(escaped === 0, "Tab x80 / Shift+Tab x15 never leave the dialog", `${escaped} escapes`);
+    await page.keyboard.press("Escape");
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!(await modalOpen(page)), "Escape closes a clean modal");
+    const focusBack = await page.evaluate(() => (document.activeElement?.textContent || "").includes("E2E A11y Target"));
+    c.expect(focusBack, "focus returned to the opener card");
+    c.expect(!(await page.evaluate(() => document.getElementById("app-root")?.hasAttribute("inert"))), "inert removed after close");
+    await page.keyboard.press("Enter");
+    await modal(page).waitFor();
+    await notesArea(page).fill("dirty for escape");
+    page.__dialogPolicy = [false];
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    c.expect(c.dialogs.some((d) => /Discard your unsaved changes/.test(d)) && (await modalOpen(page)), "Escape when dirty asks; declining keeps it open");
+    // IFS combobox
+    const combo = modal(page).locator('input[role="combobox"]');
+    await combo.scrollIntoViewIfNeeded();
+    await combo.fill("pump");
+    const lbx = modal(page).getByRole("listbox");
+    await lbx.waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect(await lbx.isVisible(), "typing opens the IFS listbox");
+    await combo.press("ArrowDown");
+    c.expect((await combo.getAttribute("aria-activedescendant")) !== null, "ArrowDown sets aria-activedescendant");
+    await combo.press("Enter");
+    await page.waitForTimeout(300);
+    c.expect(!(await lbx.isVisible().catch(() => false)), "Enter closes the listbox");
+    c.expect((await modal(page).getByText("OBJ-PUMP-101", { exact: true }).count()) > 0, "Enter picked OBJ-PUMP-101");
+    await shot(c, page, "ifs-picked");
+    await combo.fill("crane");
+    await lbx.waitFor({ timeout: 10000 }).catch(() => {});
+    await combo.press("Escape");
+    await page.waitForTimeout(400);
+    c.expect(!(await lbx.isVisible().catch(() => false)), "Escape closes only the listbox…");
+    c.expect(await modalOpen(page), "…not the modal");
+    page.__dialogPolicy = [true];
+    await page.keyboard.press("Escape");
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!(await modalOpen(page)), "second Escape (accept) closes the modal");
+    const db = await one("SELECT ifs_obj_id, notes FROM items WHERE id = $1", [ID.a11y]);
+    c.expect(db.ifs_obj_id === null && db.notes === "base note", "discarded edits not saved", db);
+    await page.context().close();
+  });
+
+  await run("n7", "Mobile 390x844: bottom nav, drawer, 44px controls, sticky footer, name error focus, zone picker", async (c) => {
+    const mob = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
+    const page = await newPage(c, "insp1-mobile", mob);
+    await login(page, "insp1@test.local");
+    const bn = page.locator("nav.bottom-nav");
+    c.expect(await bn.isVisible(), "bottom nav visible");
+    const bnButtons = await bn.locator("button").allInnerTexts();
+    c.expect(bnButtons.length === 6, "5 tabs + '+'", bnButtons);
+    c.expect((await bn.locator('button[aria-label="+ New Item"]').count()) === 1, "'+' (new item) for inspector");
+    c.expect(!(await page.locator(".app-sidebar").isVisible()), "sidebar hidden");
+    await shot(c, page, "bottom-nav");
+    await page.getByRole("button", { name: "Menu" }).click();
+    const drawer = page.locator('.app-sidebar[data-collapsed="false"]');
+    c.expect((await drawer.isVisible()) && (await page.locator(".sidebar-backdrop").isVisible()), "hamburger opens the drawer with a backdrop");
+    await shot(c, page, "drawer");
+    await drawer.getByRole("button", { name: /Zones & Items/ }).click();
+    await page.waitForTimeout(400);
+    c.expect(!(await page.locator(".app-sidebar").isVisible()) && q(page).searchParams.get("tab") === "zones", "picking a tab closes the drawer", page.url());
+    await page.getByRole("button", { name: "Menu" }).click();
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    c.expect(!(await page.locator(".app-sidebar").isVisible()), "Escape closes the drawer");
+    await page.getByRole("button", { name: "Menu" }).click();
+    await page.locator(".sidebar-backdrop").click({ position: { x: 370, y: 400 } });
+    await page.waitForTimeout(300);
+    c.expect(!(await page.locator(".app-sidebar").isVisible()), "tapping the backdrop closes the drawer");
+    const card = page.getByText("E2E Nav Target", { exact: true }).first();
+    await card.scrollIntoViewIfNeeded();
+    await card.tap();
+    await modal(page).waitFor();
+    await page.waitForTimeout(400);
+    const sizes = await page.evaluate(() => {
+      const els = [...document.querySelectorAll(".modal-card input, .modal-card select, .modal-card textarea, .modal-card button")]
+        .filter((e) => e.offsetParent !== null && !["file", "checkbox", "radio", "hidden"].includes(e.type));
+      return els.map((e) => ({ tag: e.tagName, type: e.type || "", h: Math.round(e.getBoundingClientRect().height), label: (e.getAttribute("aria-label") || e.textContent || e.placeholder || "").trim().slice(0, 30) }));
+    });
+    const small = sizes.filter((s) => s.h < 44);
+    c.expect(small.length === 0, `all ${sizes.length} visible modal controls >= 44px tall`, small.slice(0, 8));
+    const save = modal(page).getByRole("button", { name: "Save", exact: true });
+    const inView = async () => {
+      const b = await save.boundingBox();
+      return !!b && b.y >= 0 && b.y + b.height <= 844;
+    };
+    c.expect(await inView(), "Save visible without scrolling (sticky footer)");
+    const sc = await scrollModal(page, 0.5);
+    c.step(`scrolled modal container: ${JSON.stringify(sc)}`);
+    c.expect(!!sc && sc.top > 200, "modal form actually scrolled to mid-form", sc);
+    await page.waitForTimeout(300);
+    c.expect(await inView(), "Save still visible mid-form");
+    await shot(c, page, "modal-mid");
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    await bn.locator('button[aria-label="+ New Item"]').tap();
+    const picker = page.locator(".zone-picker");
+    await picker.waitFor();
+    const pb = await picker.boundingBox();
+    c.expect(pb && pb.x >= 0 && pb.x + pb.width <= 390 && pb.y >= 0 && pb.y + pb.height <= 844, "zone picker fits the 390x844 screen", pb);
+    await shot(c, page, "zone-picker");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+    c.expect(!(await picker.isVisible().catch(() => false)), "Escape closes the zone picker");
+    await bn.locator('button[aria-label="+ New Item"]').tap();
+    await picker.getByText("Main Deck", { exact: true }).tap();
+    await modal(page).waitFor();
+    const sc2 = await scrollModal(page, 1);
+    c.step(`scrolled to bottom before Create Item: ${JSON.stringify(sc2)}`);
+    await page.waitForTimeout(300);
+    await modal(page).getByRole("button", { name: "Create Item" }).tap();
+    await page.waitForTimeout(900);
+    const nameFocus = await page.evaluate(() => {
+      const a = document.activeElement;
+      const lbl = a?.id ? document.querySelector(`label[for="${CSS.escape(a.id)}"]`)?.textContent : null;
+      const r = a?.getBoundingClientRect();
+      return { lbl, top: r?.top, bottom: r?.bottom };
+    });
+    c.expect(nameFocus.lbl === "Item Name / Tag", "name-required focuses the name field", nameFocus);
+    c.expect(nameFocus.top >= 0 && nameFocus.bottom <= 844, "…and scrolls it into view", nameFocus);
+    c.expect(await modal(page).getByText("Item name is required.").isVisible(), "error text shown");
+    await shot(c, page, "name-required");
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).tap();
+    await page.context().close();
+
+    const land = await newPage(c, "landscape", { viewport: { width: 740, height: 340 }, hasTouch: true, isMobile: true });
+    await land.goto(`${APP}/login`);
+    const submit = land.locator('button[type="submit"]');
+    const b0 = await submit.boundingBox();
+    const scrollable = await land.evaluate(() => {
+      const m = document.querySelector("main");
+      return m ? { sh: m.scrollHeight, ch: m.clientHeight, oy: getComputedStyle(m).overflowY } : null;
+    });
+    c.step(`landscape login: submit initially at y=${b0?.y}..${b0 && b0.y + b0.height}, main ${JSON.stringify(scrollable)}`);
+    await land.locator('input[type="email"]').fill("insp1@test.local");
+    await land.locator('input[type="password"]').fill(PASSWORD);
+    await land.locator("main").evaluate((m) => m.scrollTo(0, m.scrollHeight));
+    await land.waitForTimeout(300);
+    const b1 = await submit.boundingBox();
+    c.expect(!!b1 && b1.y >= 0 && b1.y + b1.height <= 340, "landscape 740x340: login scrolls to the submit button", b1);
+    await shot(c, land, "landscape-login");
+    await submit.tap();
+    await land.waitForURL(/\/dashboard/, { timeout: 30000 }).catch(() => {});
+    c.expect(land.url().startsWith(`${APP}/dashboard`), "landscape login works");
+    await land.context().close();
+  });
+
+  await run("n8", "Schedule rows and alert-bar entries open their item", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await gotoTab(page, "Schedule");
+    const row = page.locator("main button", { hasText: "Bulk item" }).first();
+    await row.waitFor();
+    const rowText = await row.innerText();
+    const name = rowText.match(/Bulk item \d{4}/)?.[0];
+    await row.click();
+    await modal(page).waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect((await modalOpen(page)) && (await title(page)) === name, `schedule row opens '${name}'`, await title(page).catch(() => null));
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    await gotoTab(page, "Dashboard");
+    const alert = page.locator("main button", { hasText: /inspection due in/ }).first();
+    await alert.waitFor({ timeout: 10000 });
+    const aName = (await alert.innerText()).match(/Bulk item \d{4}/)?.[0];
+    await alert.click();
+    await modal(page).waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect((await modalOpen(page)) && (await title(page)) === aName, `alert entry opens '${aName}'`, await title(page).catch(() => null));
+    await shot(c, page, "from-alert");
+    await page.context().close();
+  });
+
+  await run("n9", "Evidence: 'Take photo' (capture=environment) + 'Gallery / file'; preview thumbnail", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await openItem(page, "E2E Nav Target");
+    const take = modal(page).getByRole("button", { name: /Take photo/ });
+    const gal = modal(page).getByRole("button", { name: /Gallery \/ file/ });
+    c.expect((await take.isVisible()) && (await gal.isVisible()), "both buttons shown");
+    const pngPath = path.join(ART, "..", ".state", "tiny.png");
+    fs.writeFileSync(pngPath, tinyPng());
+    const [fcCam] = await Promise.all([page.waitForEvent("filechooser", { timeout: 5000 }), take.click()]);
+    const camAttrs = await fcCam.element().evaluate((e) => ({ capture: e.getAttribute("capture"), accept: e.accept }));
+    c.expect(camAttrs.capture === "environment" && camAttrs.accept === "image/*", "'Take photo' opens an input with capture=environment, accept=image/*", camAttrs);
+    await fcCam.setFiles(pngPath);
+    const prev = modal(page).locator('img[alt="Selected photo preview"]');
+    await prev.waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect((await prev.evaluate((i) => i.complete && i.naturalWidth).catch(() => 0)) === 32, "camera pick shows a preview thumbnail");
+    const [fcGal] = await Promise.all([page.waitForEvent("filechooser", { timeout: 5000 }), gal.click()]);
+    const galAttrs = await fcGal.element().evaluate((e) => ({ capture: e.getAttribute("capture"), accept: e.accept }));
+    c.expect(galAttrs.capture === null && /pdf/.test(galAttrs.accept), "'Gallery / file' has no capture and accepts PDF", galAttrs);
+    await fcGal.setFiles(pngPath);
+    await page.waitForTimeout(300);
+    c.expect(await prev.isVisible(), "gallery pick shows the preview");
+    await shot(c, page, "preview");
+    page.__dialogPolicy = [true];
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.context().close();
+  });
+
+  await run("n10", "Offline: banner (role=status); tabs + open/close item work offline without reload", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await page.evaluate(() => (window.__marker = 42));
+    await page.context().setOffline(true);
+    const banner = page.getByRole("status").filter({ hasText: /Offline/ });
+    await banner.waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect(await banner.isVisible(), "offline banner shown");
+    await gotoTab(page, "Zones & Items");
+    await page.waitForTimeout(500);
+    c.expect(q(page).searchParams.get("tab") === "zones", "tab switch works offline", page.url());
+    const card = page.getByText("E2E Nav Target", { exact: true }).first();
+    await card.scrollIntoViewIfNeeded();
+    await card.click();
+    await modal(page).waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect(await modalOpen(page), "item opens offline");
+    await shot(c, page, "offline-modal");
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!(await modalOpen(page)) && !hasItemParam(page), "item closes offline");
+    await gotoTab(page, "Schedule");
+    await page.waitForTimeout(500);
+    c.expect(q(page).searchParams.get("tab") === "schedule", "second tab switch offline", page.url());
+    c.expect((await page.evaluate(() => window.__marker)) === 42, "no reload happened (window marker survived)");
+    await page.context().setOffline(false);
+    await page.waitForTimeout(500);
+    c.expect(!(await banner.isVisible().catch(() => false)), "banner hidden when back online");
+    await page.context().close();
+  });
+
+  await run("n11", "Idle: warning at 28 min, 'Stay signed in' keeps session, 30 min idle -> /login + cookie cleared", async (c) => {
+    const page = await newPage(c, "insp1");
+    await page.clock.install();
+    await login(page, "insp1@test.local");
+    await page.waitForTimeout(500);
+    await page.clock.fastForward("28:05");
+    const toast = page.getByRole("alert").filter({ hasText: "Stay signed in" });
+    await toast.waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect(await toast.isVisible(), "warning toast at 28 min");
+    await shot(c, page, "warning");
+    await toast.getByRole("button", { name: "Stay signed in" }).click();
+    await page.waitForTimeout(300);
+    c.expect(!(await toast.isVisible().catch(() => false)), "toast dismissed");
+    await page.clock.fastForward("05:00");
+    await page.waitForTimeout(1000);
+    c.expect(q(page).pathname === "/dashboard", "session kept 5 min after 'Stay signed in' (33 min since login)", page.url());
+    const t0 = Date.now();
+    await page.clock.fastForward("30:10");
+    await page.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(page).pathname === "/login", "30 min idle -> redirected to /login", page.url());
+    const sb = (await page.context().cookies()).filter((k) => k.name.startsWith("sb-") && k.value);
+    c.expect(sb.length === 0, "Supabase session cookie cleared", sb.map((k) => k.name));
+    const lo = (await ctl.log(t0)).filter((l) => l.url.startsWith("/auth/v1/logout"));
+    c.step(`logout calls: ${JSON.stringify(lo.map((l) => l.url))}`);
+    c.expect(lo.every((l) => l.url.includes("scope=local")), "signOut used scope=local");
+    await page.context().close();
+  });
+
+  await run("n12", "Language PT: <html lang>, cookie, SSR after reload, login in PT, CSV ';' + decimal comma", async (c) => {
+    const page = await newPage(c, "admin1");
+    await login(page, "admin1@test.local");
+    await page.getByRole("button", { name: "PT", exact: true }).click();
+    await page.waitForTimeout(500);
+    c.expect((await page.evaluate(() => document.documentElement.lang)) === "pt-BR", "<html lang=pt-BR> after switching");
+    const ck = (await page.context().cookies()).find((k) => k.name === "ss75-cmp.lang");
+    c.expect(ck?.value === "pt", "cookie ss75-cmp.lang=pt", ck);
+    const html = await (await page.request.get(`${APP}/dashboard`)).text();
+    c.expect(/<html lang="pt-BR"/.test(html), "server renders <html lang=\"pt-BR\"> on reload");
+    await page.reload();
+    await waitLoaded(page);
+    c.expect((await page.locator('button[aria-label="Zonas e Itens"]').count()) === 1, "UI still in PT after reload");
+    await shot(c, page, "pt");
+    await gotoTab(page, "Exportar");
+    const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.getByRole("button", { name: /^Exportar CSV$/ }).click()]);
+    const csvP = path.join(ART, "n12-export-pt.csv");
+    await dl.saveAs(csvP);
+    const lines = fs.readFileSync(csvP, "utf8").replace(/^﻿/, "").split("\n");
+    c.expect(lines[0].split(";").length > 10 && !lines[0].includes(","), "header uses ';' delimiter", lines[0].slice(0, 120));
+    const rateRow = lines.find((l) => l.includes("E2E Rate Target")) || "";
+    c.expect(/;0,12\d;/.test(rateRow), "corrosion rate written as 0,12x (decimal comma)", rateRow);
+    c.expect(!/;\d+\.\d+;/.test(rateRow), "no dot decimals in the row", rateRow);
+    await page.goto(`${APP}/audit-log`);
+    await page.getByRole("button", { name: /CSV/ }).waitFor();
+    await page.waitForTimeout(3000);
+    const [dl2] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.getByRole("button", { name: /CSV/ }).click()]);
+    const aP = path.join(ART, "n12-audit-pt.csv");
+    await dl2.saveAs(aP);
+    const a0 = fs.readFileSync(aP, "utf8").replace(/^﻿/, "").split("\n")[0];
+    c.expect(a0.split(";").length >= 8, "audit CSV in PT uses ';'", a0);
+    await page.context().close();
+    const lp = await newPage(c, "anon-pt");
+    await lp.context().addCookies([{ name: "ss75-cmp.lang", value: "pt", url: APP }]);
+    await lp.goto(`${APP}/login`);
+    c.expect((await lp.evaluate(() => document.documentElement.lang)) === "pt-BR", "login page <html lang=pt-BR>");
+    c.expect(await lp.getByRole("button", { name: "Entrar" }).isVisible(), "login page in PT ('Entrar')");
+    await shot(c, lp, "login-pt");
+    await lp.context().close();
+  });
+
+  await run("n13", "Contrast spot-check (text3 labels, badges, modal labels) >= 4.5:1", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    const measure = (sel) =>
+      page.evaluate((sel) => {
+        const parse = (s) => { const m = s.match(/[\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 }; };
+        const over = (top, bot) => ({ r: top.r * top.a + bot.r * (1 - top.a), g: top.g * top.a + bot.g * (1 - top.a), b: top.b * top.a + bot.b * (1 - top.a), a: 1 });
+        const bgOf = (el) => {
+          const layers = [];
+          for (let e = el; e; e = e.parentElement) {
+            const c = parse(getComputedStyle(e).backgroundColor);
+            if (c.a > 0) { layers.push(c); if (c.a >= 1) break; }
+          }
+          let acc = { r: 255, g: 255, b: 255, a: 1 };
+          for (let i = layers.length - 1; i >= 0; i--) acc = over(layers[i], acc);
+          return acc;
+        };
+        const lum = ({ r, g, b }) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+        const out = [];
+        for (const el of document.querySelectorAll(sel)) {
+          if (!el.offsetParent || !(el.textContent || "").trim()) continue;
+          const cs = getComputedStyle(el);
+          const bg = bgOf(el);
+          const fg = over(parse(cs.color), bg);
+          const L1 = lum(fg), L2 = lum(bg);
+          const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+          const size = parseFloat(cs.fontSize), bold = Number(cs.fontWeight) >= 700;
+          const large = size >= 24 || (bold && size >= 18.66);
+          out.push({ text: el.textContent.trim().slice(0, 30), color: cs.color, ratio: Math.round(ratio * 100) / 100, need: large ? 3 : 4.5 });
+          if (out.length >= 40) break;
+        }
+        return out;
+      }, sel);
+    const groups = {};
+    groups["text3 text (dashboard)"] = await measure('main [style*="color: rgb(79, 103, 127)"]');
+    await gotoTab(page, "Zones & Items");
+    await page.waitForTimeout(500);
+    groups["item-card badges"] = await measure('main [role=button] span[style*="border-radius: 5px"]');
+    groups["zone header text3"] = await measure('main [style*="color: rgb(79, 103, 127)"]');
+    await openItem(page, "E2E Nav Target");
+    groups["modal labels"] = await measure(".modal-card label");
+    groups["modal section titles"] = await measure('.modal-card div[style*="text-transform: uppercase"]');
+    groups["sidebar/topbar text"] = await measure('#app-root nav button, header span, #app-root [style*="color: rgb(157, 181, 204)"]');
+    for (const [g, rows] of Object.entries(groups)) {
+      const bad = rows.filter((r) => r.ratio < r.need);
+      const min = rows.reduce((m, r) => Math.min(m, r.ratio), Infinity);
+      c.step(`${g}: ${rows.length} samples, min ${min}`);
+      c.expect(rows.length > 0 && bad.length === 0, `${g}: all >= 4.5:1 (3:1 large)`, bad.slice(0, 5));
+    }
     await page.context().close();
   });
 

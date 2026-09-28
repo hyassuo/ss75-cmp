@@ -479,7 +479,7 @@ const server = http.createServer(async (req, res) => {
     if (url.startsWith("/__ctl")) {
       if (url === "/__ctl/fault" && req.method === "POST") {
         const f = json(await readBody(req));
-        faults.push({ method: f.method, prefix: f.prefix || "/", status: f.status ?? 503, times: f.times ?? -1, body: f.body, mode: f.mode });
+        faults.push({ method: f.method, prefix: f.prefix || "/", status: f.status ?? 503, times: f.times ?? -1, body: f.body, mode: f.mode, delay: f.delay });
         return send(res, 200, { faults });
       }
       if (url === "/__ctl/fault" && req.method === "DELETE") {
@@ -512,7 +512,10 @@ const server = http.createServer(async (req, res) => {
       up.end(body);
       return;
     }
-    if (fault) {
+    if (fault && fault.mode === "delay") {
+      // Slow link: hold the request, then pass it through untouched.
+      await new Promise((r) => setTimeout(r, fault.delay || 1500));
+    } else if (fault) {
       await readBody(req);
       if (fault.status === 0) return req.socket.destroy(); // simulate a dropped link
       return send(res, fault.status, fault.body ?? { code: "E2E_FAULT", message: `Injected fault ${fault.status}`, details: null, hint: null });
