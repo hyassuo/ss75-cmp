@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { SystemFilter } from "@/lib/utils/constants";
+import { SYSTEMS, type SystemFilter } from "@/lib/utils/constants";
 
 export type MainTab =
   | "dashboard"
@@ -47,6 +47,10 @@ const ShellContext = createContext<ShellState | null>(null);
 // reload keeps the user where they were, a link opens a specific item, and
 // the phone's Back button steps back through tabs and closes the item
 // modal instead of leaving the app.
+//
+// Within /dashboard the URL is changed with the History API (Next ≥ 14.1
+// keeps useSearchParams in sync): no server round-trip, so switching tabs
+// and opening items keep working offline and cost nothing on VSAT.
 export function ShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -61,7 +65,10 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const v = window.localStorage.getItem(SYS_KEY);
-      if (v) setSysFilterState(v as SystemFilter);
+      // Ignore stale values (a renamed department would empty every list).
+      if (v && (v === "All" || (SYSTEMS as readonly string[]).includes(v))) {
+        setSysFilterState(v as SystemFilter);
+      }
     } catch {
       // storage unavailable — default filter
     }
@@ -83,42 +90,69 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const openItemId = params.get("item");
   const openItemIsNew = params.get("new") === "1";
 
+  const onMain = pathname.startsWith("/dashboard");
+
+  // Landing directly on an item (reload, shared link): put a plain entry
+  // underneath it so Back closes the modal (through its discard check)
+  // instead of leaving the app.
+  useEffect(() => {
+    if (!onMain || !openItemId || pushedItem.current) return;
+    const under = new URLSearchParams(params.toString());
+    under.delete("item");
+    under.delete("new");
+    const qs = under.toString();
+    window.history.replaceState(null, "", qs ? `/dashboard?${qs}` : "/dashboard");
+    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
+    pushedItem.current = true;
+    // Once, on first load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // However the item closed (Cancel, Back), nothing is pushed any more.
+  useEffect(() => {
+    if (!openItemId) pushedItem.current = false;
+  }, [openItemId]);
+
   const setTab = useCallback(
     (t: MainTab) => {
+      const url = t === "dashboard" ? "/dashboard" : `/dashboard?tab=${t}`;
       pushedItem.current = false;
-      router.push(t === "dashboard" ? "/dashboard" : `/dashboard?tab=${t}`, {
-        scroll: false,
-      });
+      if (onMain) window.history.pushState(null, "", url);
+      else router.push(url, { scroll: false });
     },
-    [router]
+    [onMain, router]
   );
 
   const openItem = useCallback(
     (id: string, opts: { isNew?: boolean } = {}) => {
-      const onMain = pathname.startsWith("/dashboard");
       const next = new URLSearchParams(onMain ? params.toString() : "");
       next.set("item", id);
       if (opts.isNew) next.set("new", "1");
       else next.delete("new");
+      const url = `/dashboard?${next.toString()}`;
       pushedItem.current = true;
-      router.push(`/dashboard?${next.toString()}`, { scroll: false });
+      if (onMain) window.history.pushState(null, "", url);
+      else router.push(url, { scroll: false });
     },
-    [params, pathname, router]
+    [onMain, params, router]
   );
 
   const closeItem = useCallback(() => {
+    // Already closed (e.g. Back won a race with Cancel): don't navigate
+    // again — a second back() would leave the tab or the app.
+    if (!params.get("item")) return;
     closingIntentionally.current = true;
     if (pushedItem.current) {
       pushedItem.current = false;
-      router.back();
+      window.history.back();
       return;
     }
     const next = new URLSearchParams(params.toString());
     next.delete("item");
     next.delete("new");
     const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [params, pathname, router]);
+    window.history.replaceState(null, "", qs ? `${pathname}?${qs}` : pathname);
+  }, [params, pathname]);
 
   const value = useMemo<ShellState>(
     () => ({

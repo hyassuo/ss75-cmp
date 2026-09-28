@@ -3,12 +3,14 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
 } from "react";
 import { DS } from "@/lib/design/tokens";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
+import { useLang } from "@/lib/context/LangContext";
 import { pressable } from "@/lib/utils/a11y";
 
 interface NewItemState {
@@ -20,6 +22,7 @@ const NewItemContext = createContext<NewItemState | null>(null);
 export function NewItemProvider({ children }: { children: ReactNode }) {
   const { zones, createItem } = useData();
   const { sysFilter, sidebarCollapsed, openItem } = useShell();
+  const { t } = useLang();
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -38,6 +41,14 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Keyboard users land on the first zone.
+  useEffect(() => {
+    if (!picking) return;
+    document
+      .querySelector<HTMLElement>(".zone-picker [role=button]")
+      ?.focus();
+  }, [picking]);
+
   return (
     <NewItemContext.Provider value={{ openNewItem: () => setPicking(true) }}>
       {children}
@@ -53,7 +64,14 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
           }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("newItem.pickZone")}
+            className="zone-picker"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setPicking(false);
+            }}
             style={{
               position: "fixed",
               left: sidebarCollapsed ? 64 : 204,
@@ -81,7 +99,7 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
                 borderBottom: "1px solid " + DS.bord,
               }}
             >
-              New Item — select a zone
+              {t("newItem.pickZone")}
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {visibleZones.map((z) => (

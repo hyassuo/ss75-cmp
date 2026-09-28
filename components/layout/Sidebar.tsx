@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
@@ -55,6 +56,18 @@ export function Sidebar() {
       toggleSidebar();
     }
   }
+
+  // Escape closes the phone drawer.
+  useEffect(() => {
+    if (collapsed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && window.matchMedia("(max-width: 768px)").matches) {
+        toggleSidebar();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [collapsed, toggleSidebar]);
 
   function goTab(t: MainTab) {
     setTab(t);

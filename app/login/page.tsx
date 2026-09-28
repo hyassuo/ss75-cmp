@@ -1,5 +1,11 @@
+import { Suspense } from "react";
 import { LoginForm } from "@/components/layout/LoginForm";
 
 export default function LoginPage() {
-  return <LoginForm />;
+  // LoginForm reads ?next= (useSearchParams).
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
 }

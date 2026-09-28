@@ -29,4 +29,11 @@ describe("csvCell", () => {
   it("builds rows", () => {
     expect(csvRow(["a", "b,c", "=1"])).toBe('a,"b,c",\'=1');
   });
+
+  it("writes decimal commas with the pt-BR ';' delimiter", () => {
+    expect(csvCell(0.125, ";")).toBe("0,125");
+    expect(csvCell("2.500", ";")).toBe("2,500");
+    expect(csvCell("2026-01-01", ";")).toBe("2026-01-01");
+    expect(csvCell(0.125, ",")).toBe("0.125");
+  });
 });

@@ -137,7 +137,10 @@ export function ConnectionBanner() {
   const [online, setOnline] = useState(true);
   const { t } = useLang();
   useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
+    const update = () => {
+      setOnline(navigator.onLine);
+      document.body.classList.toggle("is-offline", !navigator.onLine);
+    };
     update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);

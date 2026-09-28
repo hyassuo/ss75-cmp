@@ -427,3 +427,21 @@ body {
   }
 }
 
+/* Keep a focused field clear of the sticky modal footer when tabbing. */
+.modal-overlay {
+  scroll-padding-bottom: 120px;
+}
+/* The offline banner sits over the top edge: push full-screen modals
+   (phones) down so their title and close button stay visible. */
+.is-offline .modal-overlay {
+  padding-top: 32px !important;
+}
+@media (max-width: 640px) {
+  .zone-picker {
+    left: 16px !important;
+    right: 16px !important;
+    width: auto !important;
+    top: 72px !important;
+  }
+}
+
