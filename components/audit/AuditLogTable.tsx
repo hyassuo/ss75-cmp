@@ -5,10 +5,23 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
+import { csvRow } from "@/lib/utils/csv";
+import { addDays } from "@/lib/utils/format";
+import { useLang } from "@/lib/context/LangContext";
 import { download } from "@/lib/utils/download";
+import { latestNameByRef } from "@/lib/utils/historyNames";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
+
+// Upper bound on rows pulled into the browser; the date filter narrows it.
+const MAX_ROWS = 10_000;
+
+// Local calendar day → UTC instant of its start (event_date is timestamptz).
+function dayStartIso(d: string): string {
+  return new Date(d + "T00:00:00").toISOString();
+}
 
 export function AuditLogTable() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -17,30 +30,58 @@ export function AuditLogTable() {
   const [to, setTo] = useState("");
   const [action, setAction] = useState("");
   const [user, setUser] = useState("");
+  const [truncated, setTruncated] = useState(false);
+  const [loadErr, setLoadErr] = useState("");
+  const { lang, t } = useLang();
+  // Excel in pt-BR expects ";" (the comma is the decimal separator).
+  const csvSep = lang === "pt" ? ";" : ",";
 
+  // Date filtering runs server-side (on the user's local calendar days), so
+  // older events are reachable instead of silently cut off by a row cap.
   useEffect(() => {
     let active = true;
     const supabase = createClient();
+    setLoading(true);
     (async () => {
-      const { data } = await supabase
-        .from("history")
-        .select("*, items(name)")
-        .order("event_date", { ascending: false })
-        .limit(1000);
-      const raw = (data as unknown as Array<
+      const res = await fetchAll<
         HistoryEntry & { items: { name: string } | null }
-      >) ?? [];
-      if (active) {
-        setRows(
-          raw.map((r) => ({ ...r, itemName: r.items?.name ?? r.item_id }))
-        );
-        setLoading(false);
-      }
+      >(
+        (lo, hi) => {
+          let q = supabase
+            .from("history")
+            .select("*, items(name)")
+            .order("event_date", { ascending: false })
+            .order("id");
+          if (from) q = q.gte("event_date", dayStartIso(from));
+          if (to) q = q.lt("event_date", dayStartIso(addDays(to, 1) ?? to));
+          return q.range(lo, hi);
+        },
+        { max: MAX_ROWS, key: (r) => r.id }
+      );
+      if (!active) return;
+      const raw = res.data;
+      // item_id is NULL once the item is deleted; fall back to the name
+      // snapshots kept on the audit rows.
+      const names = latestNameByRef(raw);
+      setRows(
+        raw.map((r) => ({
+          ...r,
+          itemName:
+            r.items?.name ??
+            (r.item_ref ? names.get(r.item_ref) : undefined) ??
+            r.item_name ??
+            r.item_ref ??
+            "—",
+        }))
+      );
+      setTruncated(res.truncated);
+      setLoadErr(res.error ?? "");
+      setLoading(false);
     })();
     return () => {
       active = false;
     };
-  }, []);
+  }, [from, to]);
 
   const actions = useMemo(
     () => Array.from(new Set(rows.map((r) => r.action))).sort(),
@@ -55,9 +96,6 @@ export function AuditLogTable() {
   );
 
   const filtered = rows.filter((r) => {
-    const d = r.event_date.split("T")[0];
-    if (from && d < from) return false;
-    if (to && d > to) return false;
     if (action && r.action !== action) return false;
     if (user && r.by_user_email !== user) return false;
     return true;
@@ -74,25 +112,19 @@ export function AuditLogTable() {
       "Note",
       "User",
     ];
-    const esc = (v: unknown) => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const csv = [
-      headers.join(","),
+      csvRow(headers, csvSep),
       ...filtered.map((r) =>
-        [
+        csvRow([
           r.event_date,
           r.itemName,
           r.action,
-          r.field_changed ?? "",
-          r.prev_value ?? "",
-          r.new_value ?? "",
-          r.note ?? "",
-          r.by_user_email ?? "",
-        ]
-          .map(esc)
-          .join(",")
+          r.field_changed,
+          r.prev_value,
+          r.new_value,
+          r.note,
+          r.by_user_email,
+        ], csvSep)
       ),
     ].join("\n");
     download(
@@ -172,7 +204,7 @@ export function AuditLogTable() {
           onChange={(e) => setAction(e.target.value)}
           style={filterStyle}
         >
-          <option value="">All actions</option>
+          <option value="">{t("audit.allActions")}</option>
           {actions.map((a) => (
             <option key={a} value={a}>
               {a.replace(/_/g, " ")}
@@ -184,7 +216,7 @@ export function AuditLogTable() {
           onChange={(e) => setUser(e.target.value)}
           style={filterStyle}
         >
-          <option value="">All users</option>
+          <option value="">{t("audit.allUsers")}</option>
           {users.map((u) => (
             <option key={u} value={u}>
               {u}
@@ -214,6 +246,16 @@ export function AuditLogTable() {
         )}
       </div>
 
+      {loadErr && (
+        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 10 }}>
+          {t("audit.loadFailed")} {loadErr}
+        </div>
+      )}
+      {truncated && (
+        <div role="status" style={{ color: DS.ora, fontSize: 12, marginBottom: 10 }}>
+          {t("audit.truncated")}
+        </div>
+      )}
       {loading ? (
         <div style={{ fontSize: 13, color: DS.text3 }}>Loading…</div>
       ) : (

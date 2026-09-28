@@ -65,14 +65,19 @@ export async function updateSession(request: NextRequest) {
     const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
     if (!user && !isPublic) {
+      // Remember where the user was going (e.g. a shared item link) so the
+      // login can continue there. Only the path + query are kept.
       const url = request.nextUrl.clone();
       url.pathname = "/login";
+      url.search = "";
+      url.searchParams.set("next", path + request.nextUrl.search);
       return NextResponse.redirect(url);
     }
 
     if (user && path === "/login") {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
+      url.search = "";
       return NextResponse.redirect(url);
     }
 

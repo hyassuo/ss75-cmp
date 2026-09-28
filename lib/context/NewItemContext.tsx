@@ -3,13 +3,15 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
 } from "react";
 import { DS } from "@/lib/design/tokens";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
-import { ItemModal } from "@/components/items/ItemModal";
+import { useLang } from "@/lib/context/LangContext";
+import { pressable } from "@/lib/utils/a11y";
 
 interface NewItemState {
   openNewItem: () => void;
@@ -17,29 +19,35 @@ interface NewItemState {
 
 const NewItemContext = createContext<NewItemState | null>(null);
 
-interface OpenItem {
-  itemId: string;
-  zoneName: string;
-}
-
 export function NewItemProvider({ children }: { children: ReactNode }) {
   const { zones, createItem } = useData();
-  const { sysFilter, sidebarCollapsed } = useShell();
+  const { sysFilter, sidebarCollapsed, openItem } = useShell();
+  const { t } = useLang();
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState<OpenItem | null>(null);
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
 
-  async function choose(zid: string, zoneName: string) {
+  async function choose(zid: string) {
     if (busy) return;
     setBusy(true);
-    const created = await createItem(zid, { status: "Pending" });
-    setBusy(false);
-    setPicking(false);
-    if (created) setOpen({ itemId: created.id, zoneName });
+    try {
+      const created = await createItem(zid, { status: "Pending" });
+      setPicking(false);
+      if (created) openItem(created.id, { isNew: true });
+    } finally {
+      setBusy(false);
+    }
   }
+
+  // Keyboard users land on the first zone.
+  useEffect(() => {
+    if (!picking) return;
+    document
+      .querySelector<HTMLElement>(".zone-picker [role=button]")
+      ?.focus();
+  }, [picking]);
 
   return (
     <NewItemContext.Provider value={{ openNewItem: () => setPicking(true) }}>
@@ -56,7 +64,14 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
           }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("newItem.pickZone")}
+            className="zone-picker"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setPicking(false);
+            }}
             style={{
               position: "fixed",
               left: sidebarCollapsed ? 64 : 204,
@@ -84,13 +99,13 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
                 borderBottom: "1px solid " + DS.bord,
               }}
             >
-              New Item — select a zone
+              {t("newItem.pickZone")}
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {visibleZones.map((z) => (
                 <div
                   key={z.zid}
-                  onClick={() => void choose(z.zid, z.name)}
+                  {...pressable(() => void choose(z.zid))}
                   style={{
                     padding: "10px 16px",
                     cursor: busy ? "default" : "pointer",
@@ -130,15 +145,6 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
             </div>
           </div>
         </div>
-      )}
-
-      {open && (
-        <ItemModal
-          itemId={open.itemId}
-          zoneName={open.zoneName}
-          isNew
-          onClose={() => setOpen(null)}
-        />
       )}
     </NewItemContext.Provider>
   );

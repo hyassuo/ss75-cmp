@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
@@ -8,6 +8,9 @@ import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import type { Reading } from "@/lib/types/domain";
+import { useFeedback } from "@/lib/context/FeedbackContext";
+
+type Outcome = { ok: true } | { ok: false; error: string };
 
 interface Props {
   readings: Reading[];
@@ -16,8 +19,8 @@ interface Props {
     depth_mm: number;
     location: string | null;
     checked_by: string | null;
-  }) => void;
-  onRemove: (id: string) => void;
+  }) => Promise<Outcome>;
+  onRemove: (id: string) => Promise<Outcome>;
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -30,28 +33,81 @@ export function ReadingsPanel({
   canDelete = true,
 }: Props) {
   const { t } = useLang();
+  const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [depth, setDepth] = useState("");
   const [loc, setLoc] = useState("");
   const [tech, setTech] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fid = useId();
+  const [err, setErr] = useState("");
 
   const sorted = [...readings].sort((a, b) =>
     a.reading_date.localeCompare(b.reading_date)
   );
   const rate = calcRate(readings);
 
-  function add() {
-    if (!depth.trim()) return;
-    onAdd({
-      reading_date: date,
-      depth_mm: parseFloat(depth),
-      location: loc || null,
-      checked_by: tech || null,
-    });
-    setDate(today());
-    setDepth("");
-    setLoc("");
-    setTech("");
+  async function add() {
+    if (busy || !depth.trim()) return;
+    // Plain decimal only — Number() would also take "0x10" or "1e2".
+    // Accept a decimal comma too ("1,5"), the norm on pt-BR keyboards.
+    const txt = depth.trim();
+    if (!/^\d+([.,]\d+)?$/.test(txt)) {
+      setErr(t("readings.invalidDepth"));
+      return;
+    }
+    const mm = Number(txt.replace(",", "."));
+    // depth_mm is numeric(6,3): anything ≥ 1000 mm would be rejected by the
+    // database with a raw overflow error.
+    if (mm >= 1000) {
+      setErr(t("readings.invalidDepth"));
+      return;
+    }
+    if (!date) {
+      setErr(t("readings.missingDate"));
+      return;
+    }
+    if (date > today()) {
+      setErr(t("readings.futureDate"));
+      return;
+    }
+    setErr("");
+    setBusy(true);
+    try {
+      const res = await onAdd({
+        reading_date: date,
+        depth_mm: mm,
+        location: loc || null,
+        checked_by: tech || null,
+      });
+      if (!res.ok) {
+        // Keep what was typed so the user can retry.
+        setErr(t("readings.saveFailed") + " " + res.error);
+        return;
+      }
+      setDate(today());
+      setDepth("");
+      setLoc("");
+      setTech("");
+      toast(t("toast.readingSaved"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (
+      !(await confirm({
+        message: t("readings.confirmDelete"),
+        confirmLabel: t("common.delete"),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    setErr("");
+    const res = await onRemove(id);
+    if (!res.ok) setErr(t("common.deleteFailed") + " " + res.error);
   }
 
   return (
@@ -67,27 +123,26 @@ export function ReadingsPanel({
         }}
       >
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 10,
-            alignItems: "end",
-            marginBottom: 10,
-          }}
+          className="form-grid-3"
+          style={{ alignItems: "end", marginBottom: 10 }}
         >
           <div>
-            <Label>{t("f.date")}</Label>
+            <Label htmlFor={fid + "date"}>{t("f.date")}</Label>
             <input
+              id={fid + "date"}
               type="date"
               value={date}
+              max={today()}
               onChange={(e) => setDate(e.target.value)}
               style={{ ...S.inp, marginBottom: 0 }}
             />
           </div>
           <div>
-            <Label>{t("f.pitDepth")}</Label>
+            <Label htmlFor={fid + "depth"}>{t("f.pitDepth")}</Label>
             <input
-              type="number"
+              id={fid + "depth"}
+              type="text"
+              inputMode="decimal"
               value={depth}
               placeholder="e.g. 1.5"
               onChange={(e) => setDepth(e.target.value)}
@@ -95,8 +150,9 @@ export function ReadingsPanel({
             />
           </div>
           <div>
-            <Label>{t("f.location")}</Label>
+            <Label htmlFor={fid + "loc"}>{t("f.location")}</Label>
             <input
+              id={fid + "loc"}
               type="text"
               value={loc}
               placeholder="ex: FR-12 P/S"
@@ -114,8 +170,9 @@ export function ReadingsPanel({
           }}
         >
           <div>
-            <Label>{t("f.checkedBy")}</Label>
+            <Label htmlFor={fid + "tech"}>{t("f.checkedBy")}</Label>
             <input
+              id={fid + "tech"}
               type="text"
               value={tech}
               onChange={(e) => setTech(e.target.value)}
@@ -123,7 +180,8 @@ export function ReadingsPanel({
             />
           </div>
           <button
-            onClick={add}
+            onClick={() => void add()}
+            disabled={busy}
             style={{
               background: DS.blu,
               color: "#fff",
@@ -141,6 +199,12 @@ export function ReadingsPanel({
           >{t("f.addReading")}</button>
         </div>
       </div>
+      )}
+
+      {err && (
+        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 10 }}>
+          {err}
+        </div>
       )}
 
       {rate !== null && (
@@ -205,7 +269,7 @@ export function ReadingsPanel({
           style={{
             textAlign: "center",
             fontSize: 12,
-            color: DS.bord2,
+            color: DS.text3,
             padding: "12px 0",
           }}
         >{t("f.notRecorded")}</div>
@@ -298,7 +362,7 @@ export function ReadingsPanel({
                     <td style={{ padding: "7px 8px" }}>
                       {canDelete && (
                         <button
-                          onClick={() => onRemove(r.id)}
+                          onClick={() => void remove(r.id)}
                           style={{
                             background: "none",
                             border: "none",

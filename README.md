@@ -1,8 +1,8 @@
 # SS-75 CMP — Corrosion Management Plan
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
-Next.js 14 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
-Storage) · Tailwind 3 · Gemini for AI photo analysis.
+Next.js 15 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
+Storage) · Tailwind 3 · Gemini for AI photo analysis. Node 22 (`.nvmrc`).
 
 ## Setup
 
@@ -18,51 +18,172 @@ Storage) · Tailwind 3 · Gemini for AI photo analysis.
 ### AI provider
 
 `lib/ai/client.ts` calls the **Gemini** API. Set `GEMINI_API_KEY` and
-optionally `GEMINI_MODEL` (defaults to `gemini-2.0-flash`). AI output
+optionally `GEMINI_MODEL` (defaults to `gemini-2.5-flash`). AI output
 is advisory triage only — item criticality is driven by the
 deterministic risk matrix (P×C, SECE, overdue) plus quantitative
 pit-depth readings.
 
-## Supabase schema
+## Database (Supabase)
 
-Apply these files in order via the Supabase SQL Editor. Each is
-idempotent — safe to re-run.
+```
+supabase/
+  config.toml                 Supabase CLI project config (local dev)
+  migrations/                 the schema, applied in order (Supabase CLI)
+    20260928000000_baseline.sql       tables, RLS (hardening rounds 1–5),
+                                      triggers, storage bucket + policies,
+                                      1 unit + 14 DROPS zones
+    20260928000100_ifs_register.sql   IFS Equipment Register table
+  seed/
+    ifs-data.sql              11,312-row IFS register (TRUNCATE + INSERT)
+    demo.sql                  optional ~25 [DEMO] items (registered in
+                              demo_seed_items; re-runs only replace those)
+  upgrades/                   in-place upgrades for databases created
+                              before the baseline (see below)
+  ops/
+    backup-snapshot.sql       read-only JSON dump of the app tables
+```
 
-| File | Purpose |
-|------|---------|
-| `supabase-setup.sql` | Tables (incl. `subareas` + all item columns through v1.4.0), RLS **(final hardened state, incl. rounds 1–4)**, triggers, storage bucket, 1 unit + 14 DROPS zones. The base. |
-| `supabase-schema-v130.sql` | Upgrade for pre-1.3.0 DBs: `drops_risk`, `structural`, `obs_source` on items + audit trigger update. |
-| `supabase-schema-v140.sql` | Upgrade for pre-1.14 DBs: `subareas` catalog, tratativa fields, assessment bands, line-accessory fields + audit/integrity triggers. |
-| `supabase-rollback-v140.sql` | Exact rollback of v140 (drops the new table/columns, restores the v130 audit trigger). Snapshot first. |
-| `supabase-backup-snapshot.sql` | Read-only JSON dump of the 7 app tables — run + download before any migration. |
-| `supabase-security-fixes.sql` | Round-1 hardening: SECURITY DEFINER on the audit trigger, column grants on `profiles`, scoped INSERTs, authorship trigger, storage SELECT by unit. |
-| `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
-| `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
-| `supabase-hardening-4.sql` | Round-4 hardening: per-unit scoping for admins — profiles RLS, admin DELETE on items/readings/evidences/storage, and the `units` policy no longer reach other units via direct PostgREST; the shared `zones` catalog becomes read-only at runtime. |
-| `supabase-ifs-schema.sql` | IFS Equipment Register table (id, description, sece) with pg_trgm indexes for fast autocomplete. |
-| `supabase-ifs-data.sql` | TRUNCATE + INSERT of the 11,312-row IFS register. Refresh by re-running. |
-| `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. |
+### New project
 
-Fresh installs need only `supabase-setup.sql` + the IFS files — the
-`security-fixes`/`hardening*` files are already folded into it. They are
-kept as the in-place upgrade path for databases created before v1.13 and
-re-run safely (idempotent).
+With the [Supabase CLI](https://supabase.com/docs/guides/cli):
+`supabase link --project-ref <ref>` then `supabase db push` (applies
+`migrations/`), and load `seed/ifs-data.sql` in the SQL Editor. Without
+the CLI, paste the two migration files and then the seed into the SQL
+Editor, in that order — every file is idempotent.
 
-First sign-in for `hyassuo@gmail.com` is auto-promoted to `admin`.
-All other accounts must be created by an admin via the **Users** page.
+**Before opening the app to users:** in Supabase → Authentication, turn
+**off** public sign-ups and turn **on** email confirmation. The baseline
+auto-promotes the first sign-in of `hyassuo@gmail.com` to admin (the
+bootstrap account); every other account is created by an admin on the
+**Users** page and starts inactive otherwise.
+
+### Existing database (created before the baseline)
+
+Download a snapshot first (`supabase/ops/backup-snapshot.sql`), then run
+the files of `supabase/upgrades/` in the SQL Editor, starting from the
+version the database is at (all idempotent):
+
+| From | Run, in order |
+|------|---------------|
+| before v1.3 | `schema-v130.sql` → `schema-v140.sql` → `security-fixes.sql` → `hardening.sql` → `hardening-3.sql` → `hardening-4.sql` → `hardening-5.sql` → `schema-v115.sql` |
+| v1.3 – v1.13 | `schema-v140.sql` → `security-fixes.sql` → `hardening.sql` → `hardening-3.sql` → `hardening-4.sql` → `hardening-5.sql` → `schema-v115.sql` |
+| v1.14 (this repo before v1.14.1) | `hardening-5.sql` → `schema-v115.sql` |
+
+then re-run `supabase/migrations/20260928000100_ifs_register.sql` (makes the
+IFS register read-only at runtime).
+
+- `hardening-5.sql` is security round 5 (authorship, an audit trail that
+  survives deletion, the storage-policy fix, the server-side draft sweep —
+  details in its header). It depends on the v1.4 columns. If you ever
+  re-run an older file (`security-fixes`, `hardening*`, `schema-v130/140`),
+  re-run `hardening-5.sql` afterwards: older rounds redefine some objects
+  with weaker versions.
+- `rollback-v140.sql` refuses to run under round 5 — restore a backup
+  instead.
+
+Then adopt the migration history once, so `supabase db push` only applies
+future migrations, and check for drift:
+
+```
+supabase link --project-ref <ref>
+supabase migration repair --status applied 20260928000000 20260928000100
+supabase db diff --linked   # should report no schema differences
+```
+
+### Schema changes from now on
+
+Add a new file with `supabase migration new <name>`, write idempotent SQL,
+add checks to `tests/sql/run.sh`, and apply with `supabase db push`. Push
+the SQL **before** merging code that depends on it: Vercel deploys `main`
+immediately.
 
 ### Refreshing the IFS register
 
-The IFS Equipment Register lives in `public.ifs_objects`. To refresh
-from a new export:
+`node scripts/gen-ifs-seed.js path/to/Objects.xlsx` regenerates
+`supabase/seed/ifs-data.sql` (it warns about duplicate Object IDs whose
+SECE flag disagrees). Run the file in the SQL Editor: the `TRUNCATE` at the
+top wipes the previous rows. The `sece` flag is the source of truth the
+item modal copies when an Object is selected.
 
-1. Replace the upstream xlsx and run `node scripts/gen-ifs-seed.js` →
-   regenerates `supabase-ifs-data.sql`.
-2. Paste the new `supabase-ifs-data.sql` into the SQL Editor. The
-   `TRUNCATE` at the top wipes the previous rows; the inserts re-seed
-   in seconds. The `sece` flag in each row is the source of truth that
-   the item modal reads when an Object is selected.
+## Backups
 
+- **Point-in-time recovery**: enable PITR in Supabase (paid add-on) for
+  minute-level restores of the database.
+- **Daily off-site copy** — `.github/workflows/backup.yml` runs
+  `scripts/backup.sh`: a restorable data dump (`data.sql`), a full
+  custom-format dump (`database.dump`, forensic) and every file of the
+  `evidence-photos` bucket, packed and encrypted with
+  [age](https://age-encryption.org), kept as a workflow artifact for 30
+  days. It is off until you set the repository variable
+  `BACKUP_ENABLED=true` and the secrets `SUPABASE_DB_URL` (the **session
+  pooler** connection string — the direct `db.<ref>` host is IPv6-only and
+  GitHub runners have no IPv6), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+  and `BACKUP_AGE_RECIPIENT` (an age *public* key — keep the private key
+  offline; it is the only way to restore).
+
+**Restore** (into a new or emptied project; rehearse it once):
+
+1. `age -d -i key.txt ss75-backup-….tar.gz.age | tar xz`
+2. Create the schema: `supabase link --project-ref <ref> && supabase db push`.
+3. `psql "<session pooler URL>" -f ss75-backup-…/data.sql` — data only,
+   loaded with triggers off (`session_replication_role = replica`), so
+   authorship/audit triggers neither rewrite nor duplicate history.
+4. `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/restore-storage.mjs ss75-backup-…/storage`
+   re-uploads the photos to the same paths.
+
+## Tests
+
+| Command | What it covers |
+|---------|----------------|
+| `npm test` | Vitest unit tests: domain logic (priority, dates across time zones, corrosion rate…), the item-form diff/rebase logic, CSV escaping, paging, redirects (`tests/*.test.ts`). |
+| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role — fresh install, the full upgrade chain, demo seed and rollback guard. |
+| `npm run test:e2e` | End-to-end suite (`tests/e2e/`): builds the app and drives it in Chromium (Playwright) against a local Supabase stand-in — see below. |
+
+CI (`.github/workflows/ci.yml`, least-privilege, actions pinned by SHA)
+runs lint, typecheck, unit tests (also under four time zones), a
+production build, `npm audit` (fails on high/critical in shipped
+dependencies) and the SQL suite. Dependabot proposes dependency and action
+updates (`.github/dependabot.yml`).
+
+
+### End-to-end tests (`tests/e2e/`)
+
+`npm run test:e2e` runs the production build of the app in Chromium against
+a throwaway local stack — no Supabase project, Docker or secrets needed:
+
+- **PostgreSQL** (`tests/sql/supabase-stub.sql` + `supabase/migrations/*.sql`,
+  i.e. the real schema, triggers and RLS) plus the fixtures in
+  `tests/e2e/sql/` (4 users, 1200+ items to exercise paging past the
+  1000-row cap);
+- **PostgREST v12** (downloaded once into `tests/e2e/.bin/`, checksum
+  verified);
+- **`tests/e2e/gateway.mjs`**, playing the Supabase API: proxies `/rest/v1`,
+  implements the parts of GoTrue (`/auth/v1`) and Storage (`/storage/v1`)
+  the app uses — Storage writes/reads/deletes `storage.objects` *as the
+  caller*, so the real storage policies decide — and offers fault injection
+  (HTTP errors, dropped connections, "commit then lose the response",
+  delays) for the offline/concurrency scenarios;
+- `next build` + `next start` with the local keys, then
+  `tests/e2e/scenarios.mjs` (plain Playwright; results in
+  `tests/e2e/artifacts/`: `results.json`, screenshots, logs, exports).
+
+Scenarios cover the data-integrity flows (failed/lost saves, conflicts,
+local drafts, cancel/delete guards and the audit trail, evidence upload and
+cleanup under RLS, audit-log/CSV/XLSX exports), URL navigation and Back,
+the accessible dialogs and confirmations, phone layout, offline, idle
+sign-out, language and contrast.
+
+Setup: `npm ci`, then `cd tests/e2e && npm ci && npx playwright install
+chromium` (Playwright and `pg` are harness-only dependencies with their own
+lockfile, so the app's install stays lean). Needs the PostgreSQL server
+binaries (`initdb`/`pg_ctl`, e.g. `apt install postgresql`); works as a
+normal user or as root. Useful variables: `ONLY=c,d1` (subset),
+`SKIP_BUILD=1`, `KEEP=1` (leave the stack up), `HEADED=1`, and
+`PG_PORT`/`PGRST_PORT`/`GW_PORT`/`APP_PORT`/`E2E_TMP` (see
+`tests/e2e/env.sh`). The run builds `.next` with the local stack's
+`NEXT_PUBLIC_*` values — rebuild before deploying from the same checkout.
+CI runs it on every pull request (`.github/workflows/e2e.yml`) and uploads
+`tests/e2e/artifacts/` when it fails.
 ## Storage (evidence photos)
 
 Inspection photos uploaded from the item modal go to the **private**
@@ -72,10 +193,11 @@ Supabase Storage bucket `evidence-photos`. Path convention:
 {item_id}/{uuid}_{filename}
 ```
 
-RLS scopes both SELECT and INSERT to the owning item's unit, so
-photos never leak across units. Files are displayed in the modal via
-short-lived signed URLs. The PDF export currently embeds only the
-inspection metadata, not the images themselves.
+RLS scopes SELECT, INSERT and DELETE to the owning item's unit, so
+photos never leak across units (see hardening round 5 for the
+`objects.name` qualification this depends on). Files are displayed in the modal via
+signed URLs. The PDF export embeds photo thumbnails (with a note when some
+could not be loaded).
 
 ## PWA
 

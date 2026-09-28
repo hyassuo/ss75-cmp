@@ -1,3 +1,4 @@
+import { DS } from "@/lib/design/tokens";
 import { describe, it, expect } from "vitest";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { makeReading } from "./helpers";
@@ -54,10 +55,40 @@ describe("calcRate", () => {
 
 describe("rateColor", () => {
   it("bands: null / >0.5 / >0.2 / >0 / 0", () => {
-    expect(rateColor(null)).toBe("#7a95b0");
-    expect(rateColor(0.6)).toBe("#c0392b");
-    expect(rateColor(0.3)).toBe("#c0591b");
-    expect(rateColor(0.1)).toBe("#a07c10");
-    expect(rateColor(0)).toBe("#1e7e45");
+    expect(rateColor(null)).toBe(DS.text3);
+    expect(rateColor(0.6)).toBe(DS.red);
+    expect(rateColor(0.3)).toBe(DS.ora);
+    expect(rateColor(0.1)).toBe(DS.yel);
+    expect(rateColor(0)).toBe(DS.grn);
+  });
+});
+
+describe("calcRate ignores AI pit-depth estimates", () => {
+  it("does not turn an AI guess into a corrosion rate", () => {
+    const r = calcRate([
+      makeReading({
+        reading_date: "2026-01-01",
+        depth_mm: 0.3,
+        location: "AI estimate",
+        checked_by: "AI Vision",
+      }),
+      makeReading({ id: "r-2", reading_date: "2026-01-31", depth_mm: 1.5 }),
+    ]);
+    expect(r).toBeNull(); // only one measured reading
+  });
+
+  it("uses the measured readings around an AI estimate", () => {
+    const r = calcRate([
+      makeReading({ reading_date: "2025-01-01", depth_mm: 1.0 }),
+      makeReading({
+        id: "r-ai",
+        reading_date: "2025-06-01",
+        depth_mm: 9.9,
+        location: "AI estimate",
+        checked_by: "AI Vision",
+      }),
+      makeReading({ id: "r-2", reading_date: "2026-01-01", depth_mm: 2.0 }),
+    ]);
+    expect(r).toBeCloseTo(1.0, 5);
   });
 });

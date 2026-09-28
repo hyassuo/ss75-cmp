@@ -1,4 +1,5 @@
 import type { InspectionFrequency } from "@/lib/types/domain";
+import { addDays } from "@/lib/utils/format";
 
 export const FREQ_DAYS: Record<InspectionFrequency, number | null> = {
   Weekly: 7,
@@ -21,7 +22,5 @@ export function calcNextInspection(
   if (!lastInsp || !freq) return null;
   const days = FREQ_DAYS[freq];
   if (!days) return null;
-  const d = new Date(lastInsp);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  return addDays(lastInsp, days);
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
@@ -10,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 
 import type { DictKey } from "@/lib/i18n/dict";
 import { useLang } from "@/lib/context/LangContext";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 interface TabItem {
   tab: MainTab;
@@ -36,10 +38,11 @@ const ADMIN_LINKS: LinkItem[] = [
 ];
 
 export function Sidebar() {
-  const { sidebarCollapsed, tab, setTab } = useShell();
+  const { sidebarCollapsed, toggleSidebar, tab, setTab } = useShell();
   const { profile } = useData();
   const { openNewItem } = useNewItem();
   const { t } = useLang();
+  const { confirm } = useFeedback();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -48,15 +51,36 @@ export function Sidebar() {
   const collapsed = sidebarCollapsed;
   const onMain = pathname === "/dashboard";
 
+  // On phones the expanded sidebar is an overlay drawer: close it once the
+  // user has picked a destination.
+  function closeDrawer() {
+    if (!collapsed && window.matchMedia("(max-width: 768px)").matches) {
+      toggleSidebar();
+    }
+  }
+
+  // Escape closes the phone drawer.
+  useEffect(() => {
+    if (collapsed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && window.matchMedia("(max-width: 768px)").matches) {
+        toggleSidebar();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [collapsed, toggleSidebar]);
+
   function goTab(t: MainTab) {
     setTab(t);
-    if (!onMain) router.push("/dashboard");
+    closeDrawer();
   }
 
   async function signOut() {
-    if (!confirm(t("nav.signOutConfirm"))) return;
+    if (!(await confirm(t("nav.signOutConfirm")))) return;
     const supabase = createClient();
-    await supabase.auth.signOut();
+    // This device only — other devices keep their sessions.
+    await supabase.auth.signOut({ scope: "local" });
     router.replace("/login");
     router.refresh();
   }
@@ -102,7 +126,19 @@ export function Sidebar() {
   });
 
   return (
-    <div
+    <>
+    {!collapsed && (
+      <button
+        type="button"
+        className="sidebar-backdrop"
+        aria-label={t("common.close")}
+        onClick={toggleSidebar}
+      />
+    )}
+    <nav
+      className="app-sidebar"
+      data-collapsed={collapsed}
+      aria-label={t("nav.main")}
       style={{
         width: collapsed ? 56 : 196,
         background: DS.sbBg,
@@ -125,7 +161,9 @@ export function Sidebar() {
               key={nav.tab}
               onClick={() => goTab(nav.tab)}
               title={collapsed ? label : ""}
-              style={itemStyle(active)}
+              aria-label={collapsed ? label : undefined}
+              aria-current={active ? "page" : undefined}
+              style={{ ...itemStyle(active), minHeight: 44 }}
             >
               <span style={{ fontSize: 14, opacity: 0.85 }}>{nav.icon}</span>
               {!collapsed && <span>{label}</span>}
@@ -140,8 +178,11 @@ export function Sidebar() {
               <Link
                 key={n.href}
                 href={n.href}
+                onClick={closeDrawer}
                 title={collapsed ? label : ""}
-                style={itemStyle(active)}
+                aria-label={collapsed ? label : undefined}
+                aria-current={active ? "page" : undefined}
+                style={{ ...itemStyle(active), minHeight: 44 }}
               >
                 <span style={{ fontSize: 14, opacity: 0.85 }}>{n.icon}</span>
                 {!collapsed && <span>{label}</span>}
@@ -158,8 +199,12 @@ export function Sidebar() {
             }}
           >
             <button
-              onClick={openNewItem}
-              title={collapsed ? "New Item" : ""}
+              onClick={() => {
+                closeDrawer();
+                openNewItem();
+              }}
+              title={collapsed ? t("nav.newItem") : ""}
+              aria-label={collapsed ? t("nav.newItem") : undefined}
               style={{
                 display: "block",
                 textAlign: "center",
@@ -235,7 +280,8 @@ export function Sidebar() {
         )}
         <button
           onClick={() => void signOut()}
-          title={collapsed ? "Sign out" : ""}
+          title={collapsed ? t("nav.signOut") : ""}
+          aria-label={collapsed ? t("nav.signOut") : undefined}
           style={{
             background: "transparent",
             border: "1px solid " + DS.sbBord,
@@ -257,6 +303,7 @@ export function Sidebar() {
           {collapsed ? "⏻" : t("nav.signOut")}
         </button>
       </div>
-    </div>
+    </nav>
+    </>
   );
 }

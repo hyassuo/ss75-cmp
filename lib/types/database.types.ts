@@ -1,4 +1,4 @@
-// Hand-authored from supabase-setup.sql. Mirrors the provisioned schema.
+// Hand-authored from supabase/migrations/20260928000000_baseline.sql. Mirrors the provisioned schema.
 import type {
   AccessoryType,
   ActionStatus,
@@ -254,7 +254,10 @@ export interface Database {
       history: {
         Row: {
           id: string;
-          item_id: string;
+          item_id: string | null;
+          item_ref: string | null;
+          item_name: string | null;
+          unit_id: string | null;
           event_date: string;
           action: string;
           field_changed: string | null;
@@ -266,7 +269,10 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          item_id: string;
+          item_id?: string | null;
+          item_ref?: string | null;
+          item_name?: string | null;
+          unit_id?: string | null;
           event_date?: string;
           action: string;
           field_changed?: string | null;
@@ -303,6 +309,14 @@ export interface Database {
       current_user_unit: {
         Args: Record<string, never>;
         Returns: string;
+      };
+      is_pristine_draft: {
+        Args: { p_item: string };
+        Returns: boolean;
+      };
+      discard_my_abandoned_drafts: {
+        Args: Record<string, never>;
+        Returns: string[];
       };
     };
     Enums: {

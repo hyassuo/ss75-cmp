@@ -12,8 +12,13 @@ import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/compressImage";
 import { useLang } from "@/lib/context/LangContext";
 import type { AIAnalysis, Evidence } from "@/lib/types/domain";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 const BUCKET = "evidence-photos";
+// Gemini on a VSAT link can be slow, but a spinner must never hang forever.
+const AI_TIMEOUT_MS = 60_000;
+
+type Outcome = { ok: true } | { ok: false; error: string };
 
 interface Props {
   itemId: string;
@@ -26,8 +31,8 @@ interface Props {
     file_type: string | null;
     file_size: number | null;
     ai_analysis: AIAnalysis | null;
-  }) => Promise<void> | void;
-  onRemove: (id: string) => void;
+  }) => Promise<Outcome>;
+  onRemove: (id: string) => Promise<Outcome>;
   isAdmin: boolean;
   canEdit?: boolean;
   // force=false: fill-only-empty (auto-apply). force=true: overwrite
@@ -49,6 +54,7 @@ export function EvidencePanel({
   onDirtyChange,
 }: Props) {
   const { t } = useLang();
+  const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -60,8 +66,21 @@ export function EvidencePanel({
   const [aiResult, setAiResult] = useState<AIAnalysis | null>(null);
   const [aiErr, setAiErr] = useState("");
   const [saveErr, setSaveErr] = useState("");
+  const [listErr, setListErr] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  // Local preview of the picked photo (revoked when replaced/unmounted).
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image")) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   useEffect(() => {
     onDirtyChange?.(!!file || !!desc.trim());
@@ -71,13 +90,22 @@ export function EvidencePanel({
     let active = true;
     const supabase = createClient();
     (async () => {
+      // One round-trip for all photos instead of one per evidence.
+      const withFile = evidences.filter((ev) => ev.file_path);
       const next: Record<string, string> = {};
-      for (const ev of evidences) {
-        if (ev.file_path) {
-          const { data } = await supabase.storage
-            .from(BUCKET)
-            .createSignedUrl(ev.file_path, 3600);
-          if (data?.signedUrl) next[ev.id] = data.signedUrl;
+      if (withFile.length) {
+        const { data } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrls(
+            withFile.map((ev) => ev.file_path as string),
+            3600
+          );
+        const byPath = new Map(
+          (data ?? []).map((d) => [d.path, d.signedUrl] as const)
+        );
+        for (const ev of withFile) {
+          const url = byPath.get(ev.file_path as string);
+          if (url) next[ev.id] = url;
         }
       }
       if (active) setUrls(next);
@@ -120,11 +148,14 @@ export function EvidencePanel({
     setAiLoading(true);
     setAiResult(null);
     setAiErr("");
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
     try {
       const r = await fetch("/api/ai/analyze-photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ base64: b64, mediaType: mediaType || "image/jpeg" }),
+        signal: ctrl.signal,
       });
       const data = await r.json();
       if (!r.ok) {
@@ -140,52 +171,98 @@ export function EvidencePanel({
         // force-applies for deliberate overwrites.
         onAIApply(result, false);
       }
-    } catch {
-      setAiErr("AI analysis request failed.");
+    } catch (e) {
+      setAiErr(
+        e instanceof DOMException && e.name === "AbortError"
+          ? t("ai.timeout")
+          : "AI analysis request failed."
+      );
+    } finally {
+      clearTimeout(timer);
+      setAiLoading(false);
     }
-    setAiLoading(false);
   }
 
   async function add() {
-    if (!desc.trim()) return;
+    if (!desc.trim() || uploading) return;
     setUploading(true);
     setSaveErr("");
+    const supabase = createClient();
     let filePath: string | null = null;
-    if (file) {
-      const supabase = createClient();
-      const safeName = file.name.replace(/[^\w.\-]/g, "_");
-      const path = `${itemId}/${crypto.randomUUID()}_${safeName}`;
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, { contentType: file.type });
-      if (error) {
-        // Abort instead of silently saving an evidence row with no file —
-        // the form keeps its state so the user can retry.
-        setSaveErr(t("f.uploadFailed") + " " + error.message);
-        setUploading(false);
+    try {
+      if (file) {
+        const safeName = file.name.replace(/[^\w.\-]/g, "_");
+        const path = `${itemId}/${crypto.randomUUID()}_${safeName}`;
+        const { error } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, file, { contentType: file.type });
+        if (error) {
+          // Abort instead of silently saving an evidence row with no file —
+          // the form keeps its state so the user can retry.
+          setSaveErr(t("f.uploadFailed") + " " + error.message);
+          return;
+        }
+        filePath = path;
+      }
+      const res = await onAdd({
+        evidence_date: date,
+        description: desc,
+        file_path: filePath,
+        file_name: file?.name ?? null,
+        file_type: file?.type ?? null,
+        file_size: file?.size ?? null,
+        ai_analysis: aiResult,
+      });
+      if (!res.ok) {
+        // Keep the form for a retry and drop the blob just uploaded (the
+        // retry uploads a fresh copy) — unless the insert did land and only
+        // its response was lost on the link: then the blob is in use.
+        if (filePath) {
+          const { data: landed } = await supabase
+            .from("evidences")
+            .select("id")
+            .eq("file_path", filePath)
+            .limit(1);
+          if (!landed?.length) {
+            await supabase.storage.from(BUCKET).remove([filePath]);
+          }
+        }
+        setSaveErr(t("evidence.saveFailed") + " " + res.error);
         return;
       }
-      filePath = path;
+      toast(t("toast.evidenceSaved"));
+      setDate(today());
+      setDesc("");
+      setFile(null);
+      setB64(null);
+      setMediaType("");
+      setCompressInfo("");
+      setAiResult(null);
+      setAiErr("");
+      if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
+    } catch (e) {
+      setSaveErr(
+        t("evidence.saveFailed") + " " + (e instanceof Error ? e.message : String(e))
+      );
+    } finally {
+      setUploading(false);
     }
-    await onAdd({
-      evidence_date: date,
-      description: desc,
-      file_path: filePath,
-      file_name: file?.name ?? null,
-      file_type: file?.type ?? null,
-      file_size: file?.size ?? null,
-      ai_analysis: aiResult,
-    });
-    setDate(today());
-    setDesc("");
-    setFile(null);
-    setB64(null);
-    setMediaType("");
-    setCompressInfo("");
-    setAiResult(null);
-    setAiErr("");
-    if (fileRef.current) fileRef.current.value = "";
-    setUploading(false);
+  }
+
+  async function remove(id: string) {
+    if (
+      !(await confirm({
+        message: t("evidence.confirmDelete"),
+        confirmLabel: t("common.delete"),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
+    setListErr("");
+    const res = await onRemove(id);
+    if (!res.ok) setListErr(t("common.deleteFailed") + " " + res.error);
   }
 
   return (
@@ -216,32 +293,82 @@ export function EvidencePanel({
         {/* Step 1 — attach */}
         <div style={{ marginBottom: 12 }}>
           <Label>{t("f.step1")}</Label>
+          {/* capture="environment" opens the rear camera straight away on
+              phones/tablets; the second input keeps gallery/PDF picking. */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFile}
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{ display: "none" }}
+          />
           <input
             ref={fileRef}
             type="file"
             accept="image/*,.pdf"
             onChange={handleFile}
+            tabIndex={-1}
+            aria-hidden="true"
             style={{ display: "none" }}
           />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            style={{
-              ...S.inp,
-              width: "100%",
-              background: DS.sur,
-              color: file ? DS.text : DS.text3,
-              cursor: "pointer",
-              textAlign: "left",
-              fontWeight: file ? 600 : 400,
-              fontSize: 12,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {file ? file.name : t("f.choose")}
-          </button>
+          <div className="form-grid-2">
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              style={pickBtn(true)}
+            >
+              📷 {t("f.takePhoto")}
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              style={pickBtn(false)}
+            >
+              🖼 {t("f.fromGallery")}
+            </button>
+          </div>
+          {file && (
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                marginTop: 8,
+                fontSize: 12,
+                color: DS.text,
+                minWidth: 0,
+              }}
+            >
+              {preview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={preview}
+                  alt={t("f.photoPreview")}
+                  style={{
+                    width: 72,
+                    height: 54,
+                    objectFit: "cover",
+                    borderRadius: 6,
+                    border: "1px solid " + DS.bord,
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontWeight: 600,
+                }}
+              >
+                {file.name}
+              </span>
+            </div>
+          )}
           {compressInfo && (
             <div style={{ fontSize: 10, color: DS.grn, marginTop: 6 }}>
               {compressInfo}
@@ -391,6 +518,11 @@ export function EvidencePanel({
         >{t("f.noEvidence")}</div>
       )}
 
+      {listErr && (
+        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 8 }}>
+          {listErr}
+        </div>
+      )}
       {evidences.map((ev) => (
         <div
           key={ev.id}
@@ -472,7 +604,7 @@ export function EvidencePanel({
           </div>
           {isAdmin && (
             <button
-              onClick={() => onRemove(ev.id)}
+              onClick={() => void remove(ev.id)}
               style={{
                 background: "none",
                 border: "none",
@@ -490,4 +622,18 @@ export function EvidencePanel({
       ))}
     </div>
   );
+}
+
+function pickBtn(primary: boolean): React.CSSProperties {
+  return {
+    background: primary ? DS.vio : DS.sur,
+    color: primary ? "#fff" : DS.text,
+    border: "1px solid " + (primary ? DS.vio : DS.bord),
+    borderRadius: 7,
+    minHeight: 44,
+    padding: "8px 10px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+  };
 }

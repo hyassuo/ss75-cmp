@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CMP — ROLLBACK of supabase-schema-v140.sql (run once in SQL Editor)
+-- SS-75 CMP — ROLLBACK of supabase/upgrades/schema-v140.sql (run once in SQL Editor)
 -- =============================================================================
 -- Idempotent. Returns the database to the exact pre-v140 state:
 --   1) drops the subarea integrity trigger + function
@@ -9,8 +9,21 @@
 --
 -- WARNING: dropping the columns/table DELETES any data stored in them
 -- (sub-áreas, tratativas, faixas, acessório). Take a snapshot first
--- (supabase-backup-snapshot.sql) if that data matters.
+-- (supabase/ops/backup-snapshot.sql) if that data matters.
 -- =============================================================================
+
+-- 0) Guard ---------------------------------------------------------------------
+-- Security round 5 (supabase/upgrades/hardening-5.sql) and later reference the v140
+-- columns (is_pristine_draft, audit_item_identity, sweep). Dropping them
+-- under those functions would make every item UPDATE/DELETE fail. Refuse;
+-- restore a backup instead, or drop round 5 deliberately first.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'rollback-v140 is not compatible with security round 5 (is_pristine_draft exists). Restore from backup instead.';
+  END IF;
+END $$;
 
 -- 1) Subarea integrity trigger ------------------------------------------------
 DROP TRIGGER IF EXISTS trg_items_validate_subarea ON public.items;

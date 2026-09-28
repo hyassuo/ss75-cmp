@@ -1,0 +1,10 @@
+{
+  "name": "ss75-e2e-harness",
+  "private": true,
+  "type": "module",
+  "description": "Local fake-Supabase + Playwright E2E harness for SS-75 CMP (not part of the app build)",
+  "dependencies": {
+    "playwright": "1.56.1",
+    "pg": "^8.13.0"
+  }
+}

@@ -6,7 +6,6 @@ import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
 import { ItemCard } from "@/components/items/ItemCard";
-import { ItemModal } from "@/components/items/ItemModal";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { isOverdue } from "@/lib/utils/format";
@@ -14,30 +13,21 @@ import { zoneScore } from "@/lib/domain/zoneScore";
 import { integrityColor, integrityLabel } from "@/lib/domain/itemScore";
 import { useLang } from "@/lib/context/LangContext";
 
-interface Open {
-  itemId: string;
-  zoneName: string;
-  isNew: boolean;
-}
-
 export function ZonesTab() {
   const { t, tDept, tIntegrity } = useLang();
   const { zones, itemsByZone, subareasByZone, createItem } = useData();
-  const { sysFilter } = useShell();
-  const [open, setOpen] = useState<Open | null>(null);
+  const { sysFilter, openItem } = useShell();
   const [creating, setCreating] = useState(false);
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
 
-  async function addItem(zid: string, zoneName: string) {
+  async function addItem(zid: string) {
     if (creating) return;
     setCreating(true);
     const created = await createItem(zid, { status: "Pending" });
     setCreating(false);
-    if (created) {
-      setOpen({ itemId: created.id, zoneName, isNew: true });
-    }
+    if (created) openItem(created.id, { isNew: true });
   }
 
   const totalItems = visibleZones.reduce(
@@ -157,7 +147,7 @@ export function ZonesTab() {
                 </div>
               </div>
               <button
-                onClick={() => void addItem(z.zid, z.name)}
+                onClick={() => void addItem(z.zid)}
                 style={{
                   background: DS.sur2,
                   color: DS.blu,
@@ -204,13 +194,7 @@ export function ZonesTab() {
                       <ItemCard
                         key={it.id}
                         item={it}
-                        onClick={() =>
-                          setOpen({
-                            itemId: it.id,
-                            zoneName: z.name,
-                            isNew: false,
-                          })
-                        }
+                        onClick={() => openItem(it.id)}
                       />
                     ))}
                   </div>
@@ -265,15 +249,6 @@ export function ZonesTab() {
           </div>
         );
       })}
-
-      {open && (
-        <ItemModal
-          itemId={open.itemId}
-          zoneName={open.zoneName}
-          isNew={open.isNew}
-          onClose={() => setOpen(null)}
-        />
-      )}
     </div>
   );
 }

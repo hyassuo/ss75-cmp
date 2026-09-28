@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
@@ -9,12 +8,9 @@ import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
-import { ItemModal } from "@/components/items/ItemModal";
-
-interface Open {
-  itemId: string;
-  zoneName: string;
-}
+import { effectivePriority } from "@/lib/domain/calcPriority";
+import { useShell } from "@/lib/context/ShellContext";
+import { pressable } from "@/lib/utils/a11y";
 
 function cellClr(p: number, c: number): string {
   const v = p * c;
@@ -24,7 +20,7 @@ function cellClr(p: number, c: number): string {
 export function RiskMatrix() {
   const { zones, itemsByZone } = useData();
   const { t, tPriority, tStatus } = useLang();
-  const [open, setOpen] = useState<Open | null>(null);
+  const { openItem } = useShell();
   const allItems: Array<ItemWithRelations & { zoneName: string }> = zones.flatMap(
     (z) =>
       itemsByZone(z.zid)
@@ -283,12 +279,7 @@ export function RiskMatrix() {
                             <div
                               key={it.id}
                               title={it.name}
-                              onClick={() =>
-                                setOpen({
-                                  itemId: it.id,
-                                  zoneName: it.zoneName,
-                                })
-                              }
+                              {...pressable(() => openItem(it.id), it.name)}
                               style={{
                                 fontSize: 9,
                                 color: DS.text,
@@ -348,15 +339,6 @@ export function RiskMatrix() {
         </div>
       </div>
 
-      {open && (
-        <ItemModal
-          itemId={open.itemId}
-          zoneName={open.zoneName}
-          isNew={false}
-          onClose={() => setOpen(null)}
-        />
-      )}
-
       {highRisk.length > 0 && (
         <div style={S.card}>
           <div
@@ -375,9 +357,7 @@ export function RiskMatrix() {
             return (
               <div
                 key={it.id}
-                onClick={() =>
-                  setOpen({ itemId: it.id, zoneName: it.zoneName })
-                }
+                {...pressable(() => openItem(it.id))}
                 style={{
                   background: DS.sur2,
                   borderRadius: 8,
@@ -418,10 +398,10 @@ export function RiskMatrix() {
                 <div
                   style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
                 >
-                  {it.priority && (
+                  {effectivePriority(it) && (
                     <Badge
-                      text={tPriority(it.priority)}
-                      color={PRIORITY_COLOR[it.priority]}
+                      text={tPriority(effectivePriority(it))}
+                      color={PRIORITY_COLOR[effectivePriority(it)!]}
                       sm
                     />
                   )}

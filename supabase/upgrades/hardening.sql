@@ -1,7 +1,7 @@
 -- =============================================================================
 -- SS-75 CMP — SECURITY HARDENING ROUND 2 (run once in Supabase SQL Editor)
 -- =============================================================================
--- Idempotent. Apply after supabase-setup.sql / supabase-security-fixes.sql.
+-- Idempotent. Apply after supabase/migrations/20260928000000_baseline.sql / supabase/upgrades/security-fixes.sql.
 --
 -- FIX: rogue self-registration. If public sign-ups are ever enabled, the
 -- handle_new_user trigger would create an ACTIVE profile in the SS-75 unit,

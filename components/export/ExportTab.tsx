@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import * as XLSX from "@e965/xlsx";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
@@ -9,6 +8,9 @@ import { useData } from "@/lib/context/DataContext";
 import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
+import { csvRow } from "@/lib/utils/csv";
+import { latestNameByRef } from "@/lib/utils/historyNames";
 import { download } from "@/lib/utils/download";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
@@ -16,6 +18,8 @@ import type { HistoryEntry } from "@/lib/types/domain";
 // PdfDocument + @react-pdf/renderer (~500 KB) are lazy-loaded inside
 // exportPDF so the dashboard chunk stays light for users who never export.
 import type { PdfItem, PdfPhoto } from "@/components/export/PdfDocument";
+import { effectivePriority } from "@/lib/domain/calcPriority";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 // Cap per item to keep PDF size sane (~250 KB per JPEG => 1 MB max per item).
 const MAX_PHOTOS_PER_ITEM = 4;
@@ -116,7 +120,10 @@ function showPdfInTab(win: Window | null, blob: Blob) {
 }
 
 export function ExportTab() {
-  const { t, tPriority, tStatus } = useLang();
+  const { lang, t, tPriority, tStatus } = useLang();
+  // Excel in pt-BR expects ";" (the comma is the decimal separator).
+  const csvSep = lang === "pt" ? ";" : ",";
+  const { toast } = useFeedback();
   const { zones, itemsByZone, subareas } = useData();
   const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
   const [busy, setBusy] = useState<string | null>(null);
@@ -160,7 +167,7 @@ export function ExportTab() {
         RPN: it.prob && it.cons ? it.prob * it.cons : "",
         "Corrosion Extent (%)": it.corr_extent_band ?? "",
         "Material Loss (%)": it.material_loss_band ?? "",
-        Priority: it.priority ?? "",
+        Priority: effectivePriority(it) ?? "",
         Status: it.status,
         SECE: it.sece ? "YES" : "NO",
         Frequency: it.freq_insp ?? "",
@@ -180,14 +187,10 @@ export function ExportTab() {
   function exportCSV() {
     const rows = itemRows();
     const headers = Object.keys(rows[0] ?? { Zone: "" });
-    const esc = (v: unknown) => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const csv = [
-      headers.join(","),
+      csvRow(headers, csvSep),
       ...rows.map((r) =>
-        headers.map((h) => esc((r as Record<string, unknown>)[h])).join(",")
+        csvRow(headers.map((h) => (r as Record<string, unknown>)[h]), csvSep)
       ),
     ].join("\n");
     download(
@@ -200,28 +203,36 @@ export function ExportTab() {
     setBusy("xlsx");
     try {
       const supabase = createClient();
-      const itemIds = flat.map((i) => i.id);
-      let history: HistoryEntry[] = [];
-      if (itemIds.length) {
-        // The only export query with a network dependency — time it out so
-        // a stalled request errors visibly instead of hanging the button
-        // on "Generating…" forever.
-        const { data, error } = await withTimeout(
-          Promise.resolve(
-            supabase
-              .from("history")
-              .select("*")
-              .in("item_id", itemIds)
-              .order("event_date", { ascending: false })
-          ),
-          15_000,
-          "history fetch"
-        );
-        if (error) throw new Error(`history fetch: ${error.message}`);
-        history = (data as HistoryEntry[]) ?? [];
-      }
+      const itemIds = new Set(flat.map((i) => i.id));
+      // The unit's whole audit trail (RLS scopes it to the unit), paged past
+      // the 1000-row response cap, then narrowed to the exported items plus
+      // deleted ones (item_id NULL) so deletions stay on the record. The
+      // only export query with a network dependency — time it out so a
+      // stalled request errors visibly instead of hanging the button on
+      // "Generating…" forever.
+      const res = await withTimeout(
+        fetchAll<HistoryEntry>((from, to) =>
+          supabase
+            .from("history")
+            .select("*")
+            .order("event_date", { ascending: false })
+            .order("id")
+            .range(from, to),
+          { key: (h) => h.id }
+        ),
+        60_000,
+        "history fetch"
+      );
+      if (res.error) throw new Error(`history fetch: ${res.error}`);
+      const history = res.data.filter(
+        (h) => h.item_id === null || itemIds.has(h.item_id)
+      );
       const nameById = new Map(flat.map((i) => [i.id, i]));
+      const deletedNames = latestNameByRef(history);
 
+      // SheetJS (~120 kB gz) loads only when someone exports, instead of
+      // riding in every dashboard visit's first load.
+      const XLSX = await import("@e965/xlsx");
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(
         wb,
@@ -266,7 +277,12 @@ export function ExportTab() {
         wb,
         XLSX.utils.json_to_sheet(
           history.map((h) => ({
-            Item: nameById.get(h.item_id)?.name ?? h.item_id,
+            Item:
+              (h.item_id ? nameById.get(h.item_id)?.name : undefined) ??
+              (h.item_ref ? deletedNames.get(h.item_ref) : undefined) ??
+              h.item_name ??
+              h.item_ref ??
+              "",
             Date: h.event_date,
             Action: h.action,
             Field: h.field_changed ?? "",
@@ -291,7 +307,7 @@ export function ExportTab() {
       // Surface the failure — was previously silent, so a thrown error left
       // the button stuck in "Generating..." with no signal to the user.
       const msg = e instanceof Error ? e.message : String(e);
-      alert(`XLSX export failed:\n\n${msg}`);
+      toast(`${t("exp.xlsxFail")} ${msg}`, "error");
     }
     setBusy(null);
   }
@@ -427,7 +443,7 @@ export function ExportTab() {
           subarea: (it.subarea_id && subareaName.get(it.subarea_id)) || "",
           name: it.name,
           ifs: it.ifs_obj_id ?? "",
-          priority: it.priority ?? "",
+          priority: effectivePriority(it) ?? "",
           status: it.status,
           sece: it.sece,
           last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
@@ -462,10 +478,7 @@ export function ExportTab() {
         photoLoad.photos.size === 0 &&
         photoLoad.failed > 0
       ) {
-        alert(
-          "Note: this report's photos could not be loaded, so the PDF is " +
-            "being generated without thumbnails."
-        );
+        toast(t("exp.photosUnavailable"), "error");
       }
       // Lazy-load the PDF chunk only when an export actually runs — keeps
       // it out of the dashboard's first-load bundle.
@@ -501,7 +514,7 @@ export function ExportTab() {
           generated={fmtCompact(today())}
           total={activeFlat.length}
           sece={activeFlat.filter((i) => i.sece).length}
-          critical={activeFlat.filter((i) => i.priority === "Critical").length}
+          critical={activeFlat.filter((i) => effectivePriority(i) === "Critical").length}
           items={items}
           photosByItem={photosByItem}
           note={note || undefined}
@@ -520,7 +533,7 @@ export function ExportTab() {
     } catch (e) {
       if (win && !win.closed) win.close();
       const msg = e instanceof Error ? e.message : String(e);
-      alert(`${t("exp.pdfFail")}\n\n${msg}`);
+      toast(`${t("exp.pdfFail")} ${msg}`, "error");
     }
     setBusy(null);
   }
@@ -658,7 +671,7 @@ export function ExportTab() {
                     ? DS.ora
                     : it.next_insp
                       ? DS.text3
-                      : DS.bord2;
+                      : DS.text3;
                 return (
                   <tr
                     key={it.id}
@@ -695,10 +708,10 @@ export function ExportTab() {
                       {it.ifs_obj_id || "-"}
                     </td>
                     <td style={{ padding: "8px 10px" }}>
-                      {it.priority ? (
+                      {effectivePriority(it) ? (
                         <Badge
-                          text={tPriority(it.priority)}
-                          color={PRIORITY_COLOR[it.priority]}
+                          text={tPriority(effectivePriority(it))}
+                          color={PRIORITY_COLOR[effectivePriority(it)!]}
                           sm
                         />
                       ) : (
@@ -724,7 +737,7 @@ export function ExportTab() {
                         padding: "8px 10px",
                         fontFamily: "monospace",
                         fontSize: 11,
-                        color: it.last_insp ? DS.text3 : DS.bord2,
+                        color: it.last_insp ? DS.text3 : DS.text3,
                       }}
                     >
                       {fmtCompact(it.last_insp)}
@@ -745,7 +758,7 @@ export function ExportTab() {
                         padding: "8px 10px",
                         fontFamily: "monospace",
                         fontSize: 10,
-                        color: it.ifs_wo ? DS.grn : DS.bord2,
+                        color: it.ifs_wo ? DS.grn : DS.text3,
                       }}
                     >
                       {it.ifs_wo || "-"}

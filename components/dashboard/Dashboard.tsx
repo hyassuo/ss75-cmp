@@ -14,6 +14,7 @@ import { zoneScore } from "@/lib/domain/zoneScore";
 import { isActionOpen, isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import type { ItemPriority } from "@/lib/types/domain";
+import { effectivePriority } from "@/lib/domain/calcPriority";
 
 export function Dashboard() {
   const { zones, itemsByZone } = useData();
@@ -94,7 +95,7 @@ export function Dashboard() {
     return d !== null && d >= 0 && d <= 30;
   }).length;
   const seceItems = allItems.filter((i) => i.sece);
-  const critItems = allItems.filter((i) => i.priority === "Critical");
+  const critItems = allItems.filter((i) => effectivePriority(i) === "Critical");
   const withSched = allItems.filter((i) => i.next_insp).length;
   const schedC =
     withSched > 0 ? Math.round(((withSched - overdue) / withSched) * 100) : 100;
@@ -144,7 +145,8 @@ export function Dashboard() {
           ? Math.round((seceOK / seceItems.length) * 100)
           : 100) + "%",
       sub: `${seceOK}/${seceItems.length} SECE`,
-      color: DS.red,
+      // Colour tracks the value (it used to be red even at 100%).
+      color: pctColor(seceItems.length ? seceOK / seceItems.length : 1),
     },
     {
       label: t("dash.criticalItemsOk"),
@@ -153,7 +155,7 @@ export function Dashboard() {
           ? Math.round((critOK / critItems.length) * 100)
           : 100) + "%",
       sub: `${critOK}/${critItems.length} ${t("priority.Critical").toLowerCase()}`,
-      color: DS.ora,
+      color: pctColor(critItems.length ? critOK / critItems.length : 1),
     },
     {
       label: t("dash.openActions"),
@@ -322,7 +324,7 @@ export function Dashboard() {
 
       <div style={gridAuto}>
         {priorities.map((p) => {
-          const its = allItems.filter((i) => i.priority === p);
+          const its = allItems.filter((i) => effectivePriority(i) === p);
           const sc = zoneScore(its);
           return (
             <div
@@ -375,4 +377,11 @@ export function Dashboard() {
       </div>
     </div>
   );
+}
+
+// Share of items in good standing → status colour (same bands as the
+// schedule-compliance KPI).
+function pctColor(ratio: number): string {
+  const pct = ratio * 100;
+  return pct >= 90 ? DS.grn : pct >= 70 ? DS.yel : DS.red;
 }

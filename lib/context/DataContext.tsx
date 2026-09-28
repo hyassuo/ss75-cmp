@@ -6,10 +6,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
+import { pruneItemDrafts } from "@/lib/utils/itemDraft";
 import type {
   AIAnalysis,
   Evidence,
@@ -21,9 +24,21 @@ import type {
   Zone,
 } from "@/lib/types/domain";
 
+// Every mutation reports its outcome so the caller can keep the user's
+// input on screen when it fails (offshore links drop often) instead of
+// closing a form over a lost write.
+//   conflict — the row changed since the caller read it (see updateItem)
+//   notFound — the row is gone (deleted elsewhere) or RLS hides it
+export type MutationResult<T = void> =
+  | { ok: true; data: T }
+  | { ok: false; error: string; conflict?: boolean; notFound?: boolean };
+
+type ReadingInput = Omit<Reading, "id" | "item_id" | "created_at" | "created_by">;
+
 interface DataState {
   loading: boolean;
   error: string | null;
+  clearError: () => void;
   profile: Profile;
   zones: Zone[];
   subareas: Subarea[];
@@ -38,16 +53,23 @@ interface DataState {
   ) => Promise<ItemWithRelations | null>;
   updateItem: (
     id: string,
-    patch: Partial<Item>
-  ) => Promise<ItemWithRelations | null>;
-  deleteItem: (id: string) => Promise<boolean>;
+    patch: Partial<Item>,
+    opts?: { expectedUpdatedAt?: string }
+  ) => Promise<MutationResult<ItemWithRelations>>;
+  deleteItem: (
+    id: string,
+    opts?: { discardDraft?: boolean }
+  ) => Promise<MutationResult>;
   addReading: (
     itemId: string,
-    r: Omit<Reading, "id" | "item_id" | "created_at" | "created_by">
-  ) => Promise<void>;
-  deleteReading: (id: string, itemId: string) => Promise<void>;
-  addEvidence: (itemId: string, e: EvidenceInput) => Promise<void>;
-  deleteEvidence: (id: string, itemId: string) => Promise<void>;
+    r: ReadingInput
+  ) => Promise<MutationResult<Reading>>;
+  deleteReading: (id: string, itemId: string) => Promise<MutationResult>;
+  addEvidence: (
+    itemId: string,
+    e: EvidenceInput
+  ) => Promise<MutationResult<Evidence>>;
+  deleteEvidence: (id: string, itemId: string) => Promise<MutationResult>;
 }
 
 export interface EvidenceInput {
@@ -60,6 +82,12 @@ export interface EvidenceInput {
   file_size: number | null;
   ai_analysis: AIAnalysis | null;
 }
+
+const BUCKET = "evidence-photos";
+const ITEM_SELECT = "*, readings(*), evidences(*)";
+// Re-fetch when the tab regains focus, at most this often, so a screen left
+// open all shift doesn't keep showing (and saving over) stale data.
+const FOCUS_REFRESH_MS = 60 * 1000;
 
 const DataContext = createContext<DataState | null>(null);
 
@@ -75,74 +103,116 @@ export function DataProvider({
   const [zones, setZones] = useState<Zone[]>([]);
   const [subareas, setSubareas] = useState<Subarea[]>([]);
   const [allItems, setAllItems] = useState<ItemWithRelations[]>([]);
+  // Latest items for callbacks that must not be re-created on every change
+  // (and must not roll back to a stale snapshot).
+  const itemsRef = useRef<ItemWithRelations[]>([]);
+  useEffect(() => {
+    itemsRef.current = allItems;
+  }, [allItems]);
+  // Bumped by every local write. A background refresh that started before
+  // a write would put pre-write rows back (resurrect a deleted item, drop a
+  // just-created draft, revert a save) — such a result is discarded.
+  const writeSeq = useRef(0);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const supabase = createClient();
-    const [zoneRes, subareaRes, itemRes] = await Promise.all([
-      supabase.from("zones").select("*").order("display_order"),
-      supabase.from("subareas").select("*").order("display_order").order("name"),
-      supabase
-        .from("items")
-        .select("*, readings(*), evidences(*)")
-        .order("created_at"),
-    ]);
-    if (zoneRes.error || subareaRes.error || itemRes.error) {
-      setError(
-        zoneRes.error?.message ||
-          subareaRes.error?.message ||
-          itemRes.error?.message ||
-          "Load error"
-      );
-      setLoading(false);
-      return;
-    }
-    setZones((zoneRes.data as Zone[]) ?? []);
-    setSubareas((subareaRes.data as Subarea[]) ?? []);
-    const raw = (itemRes.data as unknown as ItemWithRelations[]) ?? [];
+  const replaceItem = useCallback(
+    (id: string, next: ItemWithRelations | undefined) =>
+      setAllItems((prev) =>
+        next
+          ? prev.map((i) => (i.id === id ? next : i))
+          : prev.filter((i) => i.id !== id)
+      ),
+    []
+  );
 
-    // Drop abandoned drafts. createItem inserts a stub row immediately so the
-    // modal has an id for photo uploads; that row stays in the DB if the
-    // user gets kicked by IdleLogout or closes the tab without clicking
-    // Cancel. We treat a row owned by this user, never touched (Untitled +
-    // Pending + no other content) and older than 30 minutes as abandoned.
-    const cutoff = Date.now() - 30 * 60 * 1000;
-    const isDraft = (i: ItemWithRelations) =>
-      i.name === "Untitled" &&
-      i.status === "Pending" &&
-      !i.mechanism &&
-      !i.protection &&
-      !i.ifs_obj_id &&
-      i.prob == null &&
-      i.cons == null &&
-      !i.freq_insp &&
-      !i.last_insp &&
-      !i.notes &&
-      i.subarea_id == null &&
-      !i.action_type &&
-      !i.action_due &&
-      !i.corr_extent_band &&
-      !i.material_loss_band &&
-      !i.is_accessory &&
-      i.readings.length === 0 &&
-      i.evidences.length === 0 &&
-      i.created_by === profile.id &&
-      new Date(i.created_at).getTime() < cutoff;
-    const drafts = raw.filter(isDraft);
-    if (drafts.length) {
-      void supabase
-        .from("items")
-        .delete()
-        .in("id", drafts.map((d) => d.id));
-    }
-    const draftIds = new Set(drafts.map((d) => d.id));
-    setAllItems(raw.filter((i) => !draftIds.has(i.id)));
-    setLoading(false);
-  }, [profile.id]);
+  // silent: background refresh — no skeleton, no error banner, no draft
+  // cleanup, and never drops a row this session already holds (it may be
+  // the draft open in the item modal right now).
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      const seqAtStart = writeSeq.current;
+      const supabase = createClient();
+      const [zoneRes, subareaRes, itemRes] = await Promise.all([
+        supabase.from("zones").select("*").order("display_order"),
+        supabase
+          .from("subareas")
+          .select("*")
+          .order("display_order")
+          .order("name"),
+        // Paged: PostgREST silently caps a response at 1000 rows.
+        fetchAll<ItemWithRelations>((from, to) =>
+          supabase
+            .from("items")
+            .select(ITEM_SELECT)
+            .order("created_at")
+            .order("id")
+            .range(from, to)
+        ),
+      ]);
+      const err =
+        zoneRes.error?.message || subareaRes.error?.message || itemRes.error;
+      // Stale by the time it arrived: a local write happened meanwhile.
+      // (The next focus refresh will pick up remote changes.)
+      if (silent && writeSeq.current !== seqAtStart) return;
+      if (err) {
+        if (!silent) {
+          setError(err);
+          setLoading(false);
+        }
+        return;
+      }
+      setZones((zoneRes.data as Zone[]) ?? []);
+      setSubareas((subareaRes.data as Subarea[]) ?? []);
+      let items = itemRes.data;
+
+      // Abandoned drafts. createItem inserts a stub row immediately so the
+      // modal has an id for photo uploads; that row stays in the DB if the
+      // user gets kicked by IdleLogout or closes the tab without Cancel.
+      // The server decides what is an abandoned draft (untouched stub of
+      // this user, 30+ min old, no readings/photos) and deletes it; we only
+      // drop the ids it reports. Skipped on silent refreshes so a draft
+      // open in the modal right now can never be swept from under it.
+      if (!silent) {
+        const { data: swept } = await supabase.rpc(
+          "discard_my_abandoned_drafts"
+        );
+        if (Array.isArray(swept) && swept.length) {
+          const gone = new Set(swept as string[]);
+          items = items.filter((i) => !gone.has(i.id));
+        }
+      }
+      setAllItems(items);
+      if (!silent) {
+        pruneItemDrafts(profile.id, new Set(items.map((i) => i.id)));
+        setLoading(false);
+      }
+    },
+    [profile.id]
+  );
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    let last = Date.now();
+    const onFocus = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - last < FOCUS_REFRESH_MS) return;
+      last = Date.now();
+      void load(true);
+    };
+    document.addEventListener("visibilitychange", onFocus);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onFocus);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onFocus);
+    };
   }, [load]);
 
   const grouped = useMemo(() => {
@@ -153,7 +223,7 @@ export function DataProvider({
       else map.set(i.zone_id, [i]);
     }
     map.forEach((arr) =>
-      arr.sort((a, b) => a.created_at.localeCompare(b.created_at))
+      arr.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""))
     );
     return map;
   }, [allItems]);
@@ -182,6 +252,7 @@ export function DataProvider({
     async (zoneId: string, name: string) => {
       const trimmed = name.trim();
       if (!trimmed) return null;
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("subareas")
@@ -212,6 +283,7 @@ export function DataProvider({
 
   const createItem = useCallback(
     async (zoneId: string, patch: Partial<Item>) => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("items")
@@ -249,7 +321,7 @@ export function DataProvider({
           created_by: profile.id,
           updated_by: profile.id,
         })
-        .select("*, readings(*), evidences(*)")
+        .select(ITEM_SELECT)
         .single();
       if (e || !data) {
         setError(e?.message || "Create failed");
@@ -262,74 +334,140 @@ export function DataProvider({
     [profile.id, profile.unit_id]
   );
 
+  // expectedUpdatedAt: optimistic concurrency. The write only applies if
+  // the row still carries the updated_at the caller started from; if
+  // someone else saved in between, nothing is written and the result is
+  // { conflict: true } (local state is refreshed with their version).
   const updateItem = useCallback(
-    async (id: string, patch: Partial<Item>) => {
-      const prevItems = allItems;
+    async (
+      id: string,
+      patch: Partial<Item>,
+      opts: { expectedUpdatedAt?: string } = {}
+    ): Promise<MutationResult<ItemWithRelations>> => {
+      writeSeq.current++;
+      // Roll back only the keys this call changed: other state (a reading
+      // added a moment ago, a newer save) must survive a failed write.
+      const before = itemsRef.current.find((i) => i.id === id);
+      const undo: Partial<Item> = {};
+      if (before) {
+        for (const k of Object.keys(patch) as Array<keyof Item>) {
+          (undo as Record<string, unknown>)[k] = before[k];
+        }
+      }
+      const revert = () =>
+        setAllItems((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, ...undo } : i))
+        );
       setAllItems((prev) =>
         prev.map((i) => (i.id === id ? { ...i, ...patch } : i))
       );
       const supabase = createClient();
-      const { data, error: e } = await supabase
+      let q = supabase
         .from("items")
         .update({ ...patch, updated_by: profile.id })
-        .eq("id", id)
-        .select("*, readings(*), evidences(*)")
-        .single();
-      if (e || !data) {
-        setAllItems(prevItems);
-        setError(e?.message || "Update failed");
-        return null;
+        .eq("id", id);
+      if (opts.expectedUpdatedAt) q = q.eq("updated_at", opts.expectedUpdatedAt);
+      const { data, error: e } = await q.select(ITEM_SELECT);
+      if (e) {
+        revert();
+        return { ok: false, error: e.message };
       }
-      const updated = data as unknown as ItemWithRelations;
-      setAllItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
-      return updated;
+      const rows = (data ?? []) as unknown as ItemWithRelations[];
+      if (rows.length === 0) {
+        // Either the row moved on (someone else saved) or it's gone / not
+        // writable for us. Tell them apart and show the current version.
+        const { data: cur } = await supabase
+          .from("items")
+          .select(ITEM_SELECT)
+          .eq("id", id)
+          .maybeSingle();
+        const current = (cur ?? undefined) as unknown as
+          | ItemWithRelations
+          | undefined;
+        // Gone: drop it from the lists (the open modal keeps its own copy).
+        replaceItem(id, current);
+        if (!current) {
+          return { ok: false, error: "Item not found", notFound: true };
+        }
+        if (
+          opts.expectedUpdatedAt &&
+          current.updated_at !== opts.expectedUpdatedAt
+        ) {
+          // Our own write may already have landed: on a flaky link the
+          // browser can retry a PATCH whose response was lost, and the retry
+          // then misses on the old updated_at. If the row holds exactly our
+          // values and we were the last writer, that's success, not a
+          // conflict with "someone else".
+          const mine =
+            current.updated_by === profile.id &&
+            Object.entries(patch).every(
+              ([k, v]) =>
+                JSON.stringify((current as unknown as Record<string, unknown>)[k] ?? null) ===
+                JSON.stringify(v ?? null)
+            );
+          if (mine) return { ok: true, data: current };
+          return { ok: false, error: "Changed by someone else", conflict: true };
+        }
+        return { ok: false, error: "Update not permitted" };
+      }
+      const updated = rows[0];
+      replaceItem(id, updated);
+      return { ok: true, data: updated };
     },
-    [allItems, profile.id]
+    [profile.id, replaceItem]
   );
 
+  // Storage objects don't cascade with the DB row. Their paths are
+  // collected up front (listing needs the item to exist), then:
+  //   discardDraft — files first, then the row: the storage policy lets a
+  //     creator remove files only while the draft row still exists;
+  //   otherwise    — the row first, then the files, so a failed delete
+  //     never leaves an item whose photos are already gone.
   const deleteItem = useCallback(
-    async (id: string) => {
-      const prevItems = allItems;
-      const target = prevItems.find((i) => i.id === id);
-      setAllItems((prev) => prev.filter((i) => i.id !== id));
+    async (
+      id: string,
+      opts: { discardDraft?: boolean } = {}
+    ): Promise<MutationResult> => {
+      const target = itemsRef.current.find((i) => i.id === id);
+      writeSeq.current++;
       const supabase = createClient();
-
-      // Storage doesn't cascade with the DB FK. List + remove anything under
-      // the item's folder before deleting the row so we don't leave orphaned
-      // files burning quota (RLS already hides them, but they'd persist).
-      const storagePaths: string[] = [];
+      const paths = new Set<string>();
       for (const ev of target?.evidences ?? []) {
-        if (ev.file_path) storagePaths.push(ev.file_path);
+        if (ev.file_path) paths.add(ev.file_path);
       }
-      const { data: listed } = await supabase.storage
-        .from("evidence-photos")
-        .list(id);
-      if (listed && listed.length) {
-        for (const obj of listed) {
-          const full = `${id}/${obj.name}`;
-          if (!storagePaths.includes(full)) storagePaths.push(full);
-        }
-      }
-      if (storagePaths.length) {
-        await supabase.storage.from("evidence-photos").remove(storagePaths);
-      }
+      const { data: listed } = await supabase.storage.from(BUCKET).list(id, {
+        limit: 1000,
+      });
+      for (const obj of listed ?? []) paths.add(`${id}/${obj.name}`);
+      const removeFiles = async () => {
+        if (!paths.size) return;
+        const { error: se } = await supabase.storage
+          .from(BUCKET)
+          .remove(Array.from(paths));
+        if (se) console.warn("[deleteItem] storage cleanup failed", se.message);
+      };
 
-      const { error: e } = await supabase.from("items").delete().eq("id", id);
-      if (e) {
-        setAllItems(prevItems);
-        setError(e.message);
-        return false;
+      if (opts.discardDraft) await removeFiles();
+      // RLS turns a disallowed DELETE into a silent 0-row no-op; ask for the
+      // deleted id back so that case is reported instead of "succeeding".
+      const { data: gone, error: e } = await supabase
+        .from("items")
+        .delete()
+        .eq("id", id)
+        .select("id");
+      if (e || !gone?.length) {
+        return { ok: false, error: e?.message || "Delete not permitted" };
       }
-      return true;
+      if (!opts.discardDraft) await removeFiles();
+      setAllItems((prev) => prev.filter((i) => i.id !== id));
+      return { ok: true, data: undefined };
     },
-    [allItems]
+    []
   );
 
   const addReading = useCallback(
-    async (
-      itemId: string,
-      r: Omit<Reading, "id" | "item_id" | "created_at" | "created_by">
-    ) => {
+    async (itemId: string, r: ReadingInput): Promise<MutationResult<Reading>> => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("readings")
@@ -337,38 +475,46 @@ export function DataProvider({
         .select("*")
         .single();
       if (e || !data) {
-        setError(e?.message || "Add reading failed");
-        return;
+        return { ok: false, error: e?.message || "Add reading failed" };
       }
+      const created = data as Reading;
       setAllItems((prev) =>
         prev.map((i) =>
-          i.id === itemId
-            ? { ...i, readings: [...i.readings, data as Reading] }
-            : i
+          i.id === itemId ? { ...i, readings: [...i.readings, created] } : i
         )
       );
+      return { ok: true, data: created };
     },
     [profile.id]
   );
 
-  const deleteReading = useCallback(async (id: string, itemId: string) => {
-    const supabase = createClient();
-    const { error: e } = await supabase.from("readings").delete().eq("id", id);
-    if (e) {
-      setError(e.message);
-      return;
-    }
-    setAllItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId
-          ? { ...i, readings: i.readings.filter((x) => x.id !== id) }
-          : i
-      )
-    );
-  }, []);
+  const deleteReading = useCallback(
+    async (id: string, itemId: string): Promise<MutationResult> => {
+      writeSeq.current++;
+      const supabase = createClient();
+      const { data: gone, error: e } = await supabase
+        .from("readings")
+        .delete()
+        .eq("id", id)
+        .select("id");
+      if (e || !gone?.length) {
+        return { ok: false, error: e?.message || "Delete not permitted" };
+      }
+      setAllItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? { ...i, readings: i.readings.filter((x) => x.id !== id) }
+            : i
+        )
+      );
+      return { ok: true, data: undefined };
+    },
+    []
+  );
 
   const addEvidence = useCallback(
-    async (itemId: string, ev: EvidenceInput) => {
+    async (itemId: string, ev: EvidenceInput): Promise<MutationResult<Evidence>> => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("evidences")
@@ -381,74 +527,101 @@ export function DataProvider({
         .select("*")
         .single();
       if (e || !data) {
-        setError(e?.message || "Add evidence failed");
-        return;
+        return { ok: false, error: e?.message || "Add evidence failed" };
       }
+      const created = data as Evidence;
       setAllItems((prev) =>
         prev.map((i) =>
-          i.id === itemId
-            ? { ...i, evidences: [...i.evidences, data as Evidence] }
-            : i
+          i.id === itemId ? { ...i, evidences: [...i.evidences, created] } : i
         )
       );
+      return { ok: true, data: created };
     },
     [profile.id]
   );
 
+  // Row first, then the file: a failure can at worst orphan a blob (quota),
+  // never leave an evidence row whose photo is already gone.
   const deleteEvidence = useCallback(
-    async (id: string, itemId: string) => {
-    const supabase = createClient();
-    // Remove the storage file before the row so a failure leaves at worst
-    // a row pointing at a missing file (recoverable), not an orphaned blob.
-    const evidence = allItems
-      .find((i) => i.id === itemId)
-      ?.evidences.find((e) => e.id === id);
-    if (evidence?.file_path) {
-      await supabase.storage
-        .from("evidence-photos")
-        .remove([evidence.file_path]);
-    }
-    const { error: e } = await supabase.from("evidences").delete().eq("id", id);
-    if (e) {
-      setError(e.message);
-      return;
-    }
-    setAllItems((prev) =>
-      prev.map((i) =>
-        i.id === itemId
-          ? { ...i, evidences: i.evidences.filter((x) => x.id !== id) }
-          : i
-      )
-    );
+    async (id: string, itemId: string): Promise<MutationResult> => {
+      writeSeq.current++;
+      const supabase = createClient();
+      const evidence = itemsRef.current
+        .find((i) => i.id === itemId)
+        ?.evidences.find((x) => x.id === id);
+      const { data: gone, error: e } = await supabase
+        .from("evidences")
+        .delete()
+        .eq("id", id)
+        .select("id");
+      if (e || !gone?.length) {
+        return { ok: false, error: e?.message || "Delete not permitted" };
+      }
+      if (evidence?.file_path) {
+        const { error: se } = await supabase.storage
+          .from(BUCKET)
+          .remove([evidence.file_path]);
+        if (se) console.warn("[deleteEvidence] storage cleanup failed", se.message);
+      }
+      setAllItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? { ...i, evidences: i.evidences.filter((x) => x.id !== id) }
+            : i
+        )
+      );
+      return { ok: true, data: undefined };
     },
-    [allItems]
+    []
   );
 
-  return (
-    <DataContext.Provider
-      value={{
-        loading,
-        error,
-        profile,
-        zones,
-        subareas,
-        subareasByZone,
-        createSubarea,
-        allItems,
-        itemsByZone,
-        refresh: load,
-        createItem,
-        updateItem,
-        deleteItem,
-        addReading,
-        deleteReading,
-        addEvidence,
-        deleteEvidence,
-      }}
-    >
-      {children}
-    </DataContext.Provider>
+  const clearError = useCallback(() => setError(null), []);
+  const refresh = useCallback(() => load(), [load]);
+
+  const value = useMemo<DataState>(
+    () => ({
+      loading,
+      error,
+      clearError,
+      profile,
+      zones,
+      subareas,
+      subareasByZone,
+      createSubarea,
+      allItems,
+      itemsByZone,
+      refresh,
+      createItem,
+      updateItem,
+      deleteItem,
+      addReading,
+      deleteReading,
+      addEvidence,
+      deleteEvidence,
+    }),
+    [
+      loading,
+      error,
+      clearError,
+      profile,
+      zones,
+      subareas,
+      subareasByZone,
+      createSubarea,
+      allItems,
+      itemsByZone,
+      refresh,
+      createItem,
+      updateItem,
+      deleteItem,
+      addReading,
+      deleteReading,
+      addEvidence,
+      deleteEvidence,
+    ]
   );
+
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
 export function useData(): DataState {

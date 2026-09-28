@@ -9,16 +9,18 @@ export const DS = {
   bord: "#dde4ed",
   bord2: "#c8d3df",
 
-  // Text
+  // Text — every text/background pair used by the UI meets WCAG AA (4.5:1),
+  // including 10px badge text on its tinted chip (color + "20" on sur2).
+  // Field use: tablets in direct sun or dimmed at night.
   text: "#1e2d3d",
   text2: "#445566",
-  text3: "#7a95b0",
+  text3: "#4f677f",
 
   // Semantic
-  red: "#c0392b", redBg: "#fdf2f2", redBord: "#f5c6c2",
-  ora: "#c0591b", oraBg: "#fdf6f0", oraBord: "#f5d0b8",
-  yel: "#a07c10", yelBg: "#fdfbee", yelBord: "#f0e0a0",
-  grn: "#1e7e45", grnBg: "#f0faf4", grnBord: "#a8dfc0",
+  red: "#b0301f", redBg: "#fdf2f2", redBord: "#f5c6c2",
+  ora: "#a4470f", oraBg: "#fdf6f0", oraBord: "#f5d0b8",
+  yel: "#7a5d00", yelBg: "#fdfbee", yelBord: "#f0e0a0",
+  grn: "#1a7040", grnBg: "#f0faf4", grnBord: "#a8dfc0",
   blu: "#1a5cb5", bluBg: "#eef5ff", bluBord: "#aac8f0",
   vio: "#5b3aa0", vioBg: "#f3eeff", vioBord: "#c9b8f0",
 
@@ -26,7 +28,7 @@ export const DS = {
   sbBg: "#2c3e52",
   sbBord: "#374f66",
   sbTxt: "#c5d6e8",
-  sbTxt2: "#6a8faf",
+  sbTxt2: "#9db5cc",
   sbAct: "#3b5570",
   sbActTxt: "#93d4f5",
 

@@ -6,16 +6,25 @@ import { DS } from "@/lib/design/tokens";
 import { Topbar } from "@/components/layout/Topbar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
+import { BottomNav } from "@/components/layout/BottomNav";
 import { AlertBar } from "@/components/dashboard/AlertBar";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
-import { IdleLogout, DeployLogout } from "@/components/layout/SessionGuards";
+import {
+  ConnectionBanner,
+  DeployLogout,
+  IdleLogout,
+} from "@/components/layout/SessionGuards";
 import { NewItemProvider } from "@/lib/context/NewItemContext";
+import { FeedbackProvider } from "@/lib/context/FeedbackContext";
+import { ItemModalHost } from "@/components/items/ItemModalHost";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
+import { useLang } from "@/lib/context/LangContext";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { loading, error } = useData();
+  const { loading, error, clearError } = useData();
   const { tab } = useShell();
+  const { t } = useLang();
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -34,10 +43,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showAlerts = !onAdminRoute && tab !== "export";
 
   return (
+    <FeedbackProvider>
     <NewItemProvider>
       <IdleLogout />
       <DeployLogout />
+      <ConnectionBanner />
       <div
+        id="app-root"
         style={{
           // position:fixed/inset:0 anchors to the *visible* viewport on iOS
           // Safari, sidestepping the 100vh/100dvh quirks where the layout
@@ -62,8 +74,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
         >
           <Sidebar />
-          <div
+          <main
             ref={scrollRef}
+            className="app-content"
             style={{
               flex: 1,
               overflowY: "auto",
@@ -76,6 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div style={{ paddingTop: 16 }}>
               {error && (
                 <div
+                  role="alert"
                   style={{
                     background: DS.redBg,
                     border: "1px solid " + DS.redBord,
@@ -84,9 +98,28 @@ export function AppShell({ children }: { children: ReactNode }) {
                     marginBottom: 16,
                     fontSize: 12,
                     color: DS.red,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
                   }}
                 >
-                  {error}
+                  <span style={{ flex: 1 }}>{error}</span>
+                  <button
+                    type="button"
+                    onClick={clearError}
+                    aria-label={t("common.dismiss")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: DS.red,
+                      fontSize: 18,
+                      cursor: "pointer",
+                      minWidth: 32,
+                      minHeight: 32,
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
               )}
               {loading ? (
@@ -98,10 +131,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </>
               )}
             </div>
-          </div>
+          </main>
         </div>
+        <BottomNav />
         <Footer />
       </div>
+      {/* Rendered outside #app-root: the modal marks #app-root inert. */}
+      {!loading && <ItemModalHost />}
     </NewItemProvider>
+    </FeedbackProvider>
   );
 }

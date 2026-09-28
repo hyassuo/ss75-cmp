@@ -1,0 +1,45 @@
+name: Backup
+
+# Daily encrypted backup of the database and the evidence photos, kept as
+# a workflow artifact (30 days). Off until the repository variable
+# BACKUP_ENABLED is "true" and the four secrets below are set — see
+# README "Backups".
+on:
+  schedule:
+    - cron: "17 3 * * *" # 03:17 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: ${{ vars.BACKUP_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+      # pg_dump must be at least the server's major version (Supabase runs
+      # 15 or 17); the PGDG 17 client dumps both.
+      - name: Install age and the PostgreSQL 17 client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
+      - name: Back up
+        run: scripts/backup.sh backup-out
+        env:
+          PG_DUMP: /usr/lib/postgresql/17/bin/pg_dump
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ss75-backup
+          path: backup-out/*.age
+          retention-days: 30
+          if-no-files-found: error

@@ -11,6 +11,8 @@ import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { isActionOpen, isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
+import { effectivePriority } from "@/lib/domain/calcPriority";
+import { pressable } from "@/lib/utils/a11y";
 
 export function ItemCard({
   item,
@@ -20,6 +22,7 @@ export function ItemCard({
   onClick: () => void;
 }) {
   const { t, tPriority, tStatus } = useLang();
+  const priority = effectivePriority(item);
   const sc = itemScore(item);
   const rt = calcRate(item.readings);
   const dd = daysUntil(item.next_insp);
@@ -27,14 +30,14 @@ export function ItemCard({
 
   return (
     <div
-      onClick={onClick}
+      {...pressable(onClick)}
       style={{
         background: DS.sur2,
         borderRadius: 8,
         padding: "12px 14px",
         borderLeft:
           "3px solid " +
-          ((item.priority && PRIORITY_COLOR[item.priority]) || DS.bord),
+          ((priority && PRIORITY_COLOR[priority]) || DS.bord),
         cursor: "pointer",
         display: "flex",
         gap: 10,
@@ -54,7 +57,7 @@ export function ItemCard({
             whiteSpace: "nowrap",
           }}
         >
-          {item.name || "(unnamed)"}
+          {item.name || t("modal.untitled")}
         </div>
         {item.ifs_obj_id && (
           <div
@@ -78,10 +81,10 @@ export function ItemCard({
             marginBottom: 4,
           }}
         >
-          {item.priority && (
+          {priority && (
             <Badge
-              text={tPriority(item.priority)}
-              color={PRIORITY_COLOR[item.priority]}
+              text={tPriority(priority)}
+              color={PRIORITY_COLOR[priority]}
               sm
             />
           )}
@@ -127,7 +130,7 @@ export function ItemCard({
           }}
         >
           {isOverdue(item.next_insp)
-            ? "OVERDUE "
+            ? tStatus("Overdue").toUpperCase() + " "
             : dd !== null && dd <= 30
               ? dd + "d → "
               : ""}

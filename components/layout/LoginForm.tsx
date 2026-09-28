@@ -1,23 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useId, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { safeNext } from "@/lib/utils/safeNext";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { Spinner } from "@/components/ui/Spinner";
 import { createClient } from "@/lib/supabase/client";
+import { useLang } from "@/lib/context/LangContext";
 
 export function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const { t, lang, setLang } = useLang();
+  const emailId = useId();
+  const pwId = useId();
+  const errId = useId();
 
-  async function doLogin() {
+  async function doLogin(e?: FormEvent) {
+    e?.preventDefault();
+    if (loading) return;
     if (!email.trim() || !password) {
-      setErr("Enter your email and password.");
+      setErr(t("login.missing"));
       return;
     }
     setLoading(true);
@@ -29,33 +38,50 @@ export function LoginForm() {
     });
     if (error) {
       setLoading(false);
-      setErr(error.message || "Invalid email or password.");
+      // Supabase's message is English-only; the common case gets ours.
+      setErr(
+        /invalid login credentials/i.test(error.message)
+          ? t("login.invalid")
+          : /fetch|network|load failed/i.test(error.message)
+            ? t("login.network")
+            : error.message || t("login.invalid")
+      );
       return;
     }
-    router.replace("/dashboard");
+    router.replace(safeNext(params.get("next")));
     router.refresh();
   }
 
   return (
-    <div
+    <main
       style={{
-        minHeight: "100dvh",
+        // body has overflow:hidden (the app shell scrolls internally), so
+        // the login page scrolls itself — landscape phones and the
+        // on-screen keyboard can leave less than the card's height.
+        height: "100dvh",
+        overflowY: "auto",
+        boxSizing: "border-box",
+        padding: "5vh 16px 24px",
         background: DS.sbBg,
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
         // Anchored near the top so the iOS keyboard / password autofill
         // tray doesn't cover the Sign In button.
-        paddingTop: "5vh",
         fontFamily: DS.sans,
       }}
     >
-      <div
+      <form
+        onSubmit={(e) => void doLogin(e)}
+        noValidate
+        aria-describedby={err ? errId : undefined}
         style={{
           background: DS.sur,
           borderRadius: 12,
-          padding: "40px 44px",
-          width: 360,
+          padding: "clamp(24px, 6vw, 40px) clamp(20px, 7vw, 44px)",
+          width: "100%",
+          maxWidth: 360,
+          boxSizing: "border-box",
           boxShadow: "0 16px 48px rgba(0,0,0,0.25)",
           border: "1px solid " + DS.bord,
         }}
@@ -73,30 +99,21 @@ export function LoginForm() {
           >
             SS-75 — Noble Courage
           </div>
-          <div
+          <h1
             style={{
               fontSize: 18,
               fontWeight: 800,
               color: DS.text,
               fontFamily: DS.mono,
               letterSpacing: -0.3,
-              marginBottom: 2,
+              margin: "0 0 16px",
+              lineHeight: 1.3,
             }}
           >
-            CORROSION
-          </div>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color: DS.text,
-              fontFamily: DS.mono,
-              letterSpacing: -0.3,
-              marginBottom: 16,
-            }}
-          >
-            MANAGEMENT PLAN
-          </div>
+            {t("login.title1")}
+            <br />
+            {t("login.title2")}
+          </h1>
           <div
             style={{
               width: 40,
@@ -109,9 +126,12 @@ export function LoginForm() {
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <Label>Email</Label>
+          <Label htmlFor={emailId}>{t("login.email")}</Label>
           <input
+            id={emailId}
+            name="email"
             type="email"
+            required
             value={email}
             autoCapitalize="none"
             autoCorrect="off"
@@ -121,33 +141,33 @@ export function LoginForm() {
               setEmail(e.target.value);
               setErr("");
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void doLogin();
-            }}
-            placeholder="Enter your email"
-            style={{ ...S.inp, height: 40, lineHeight: "38px", fontSize: 13 }}
+            placeholder={t("login.emailPh")}
+            style={{ ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: 14 }}
           />
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <Label>Password</Label>
+          <Label htmlFor={pwId}>{t("login.password")}</Label>
           <input
+            id={pwId}
+            name="password"
             type="password"
+            required
+            autoComplete="current-password"
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
               setErr("");
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void doLogin();
-            }}
-            placeholder="Enter your password"
-            style={{ ...S.inp, height: 40, lineHeight: "38px", fontSize: 13 }}
+            placeholder={t("login.passwordPh")}
+            style={{ ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: 14 }}
           />
         </div>
 
         {err ? (
           <div
+            id={errId}
+            role="alert"
             style={{
               background: DS.redBg,
               border: "1px solid " + DS.redBord,
@@ -164,7 +184,7 @@ export function LoginForm() {
         ) : null}
 
         <button
-          onClick={() => void doLogin()}
+          type="submit"
           disabled={loading}
           style={{
             width: "100%",
@@ -185,7 +205,7 @@ export function LoginForm() {
           }}
         >
           {loading ? <Spinner size={14} /> : null}
-          {loading ? "Signing in..." : "Sign In"}
+          {loading ? t("login.signingIn") : t("login.signIn")}
         </button>
 
         <div
@@ -197,9 +217,27 @@ export function LoginForm() {
             lineHeight: 1.8,
           }}
         >
-          Contact your administrator for access credentials.
+          {t("login.help")}
         </div>
-      </div>
-    </div>
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => setLang(lang === "pt" ? "en" : "pt")}
+            style={{
+              background: "none",
+              border: "1px solid " + DS.bord,
+              borderRadius: 6,
+              color: DS.text2,
+              fontSize: 12,
+              padding: "6px 14px",
+              minHeight: 36,
+              cursor: "pointer",
+            }}
+          >
+            {lang === "pt" ? "English" : "Português"}
+          </button>
+        </div>
+      </form>
+    </main>
   );
 }
