@@ -131,6 +131,7 @@ class Check {
     this.console = [];
     this.network = [];
     this.dialogs = [];
+    this.native = [];
     this.shots = [];
     this.t0 = Date.now();
   }
@@ -181,13 +182,42 @@ async function newPage(chk, label, opts = {}) {
       chk.network.push(`[${label}] ${r.request().method()} ${u.replace(GW, "")} -> ${r.status()} ${body}`);
     }
   });
+  // v1.17 replaced window.confirm/alert with in-page dialogs; a native
+  // dialog now is a regression.
   page.on("dialog", async (d) => {
-    const answer = page.__dialogPolicy.length ? page.__dialogPolicy.shift() : true;
-    chk.dialogs.push(`[${label}] ${d.type()}: "${d.message()}" -> ${answer ? "accept" : "dismiss"}`);
-    if (answer) await d.accept();
-    else await d.dismiss();
+    chk.native.push(`[${label}] NATIVE ${d.type()}: "${d.message()}"`);
+    await d.dismiss().catch(() => {});
   });
+  void autoRespond(page, chk, label);
   return page;
+}
+
+// Answers the app's confirmation dialog (role=alertdialog) the way the old
+// native-dialog handler did: next answer from page.__dialogPolicy (default
+// confirm). Scenarios that inspect the dialog themselves set
+// page.__manualDialogs = true.
+async function autoRespond(page, chk, label) {
+  while (!page.isClosed()) {
+    try {
+      if (!page.__manualDialogs) {
+        const dlg = page.locator('[role="alertdialog"]');
+        if ((await dlg.count()) > 0 && (await dlg.isVisible())) {
+          const info = await dlg.evaluate((el) => ({
+            msg: document.getElementById(el.getAttribute("aria-describedby") || "")?.textContent || el.textContent,
+            focus: document.activeElement?.textContent?.trim(),
+            buttons: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()),
+          }));
+          const ans = page.__dialogPolicy.length ? page.__dialogPolicy.shift() : true;
+          chk.dialogs.push(`[${label}] alertdialog: "${info.msg}" [${info.buttons.join(" | ")}] focus="${info.focus}" -> ${ans ? "confirm" : "cancel"}`);
+          await dlg.locator("button").nth(ans ? 1 : 0).click({ timeout: 3000 });
+          await dlg.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+        }
+      }
+    } catch {
+      // page closing / navigating
+    }
+    await new Promise((r) => setTimeout(r, 80));
+  }
 }
 
 async function shot(chk, page, name) {
@@ -220,7 +250,9 @@ async function gotoTab(page, label) {
   await page.locator(`aside button[title="${label}"], nav button[title="${label}"], button[title="${label}"]`).first().click();
 }
 
-const modal = (page) => page.locator(".modal-card");
+// The item modal (role=dialog); confirmations are role=alertdialog.
+const modal = (page) => page.locator('.modal-card[role="dialog"]');
+const confirmDlg = (page) => page.locator('[role="alertdialog"]');
 const nameInput = (page) => modal(page).locator('div:has(> label:text-is("Item Name / Tag")) > input');
 const notesArea = (page) => modal(page).locator('div:has(> div:text-is("NOTES")) textarea');
 const ifsWoInput = (page) => modal(page).locator('div:has(> label:text-matches("IFS WO|Work Order", "i")) > input').first();
@@ -235,6 +267,12 @@ async function scrollModal(page, frac) {
     el.scrollTop = (el.scrollHeight - el.clientHeight) * frac;
     return { cls: el.className, top: Math.round(el.scrollTop), max: el.scrollHeight - el.clientHeight };
   }, frac);
+}
+
+// Success/error toasts live in the role=status live region (v1.17).
+async function toastSeen(page, text, timeout = 4000) {
+  const t = page.getByRole("status").filter({ hasText: text });
+  return t.first().waitFor({ timeout }).then(() => true).catch(() => false);
 }
 
 async function openItem(page, name) {
@@ -260,6 +298,7 @@ async function run(id, title, fn) {
     chk.failures.push(`exception: ${e.message.split("\n")[0]}`);
     console.log(`   ✗ exception: ${e.stack}`);
   }
+  if (chk.native.length) chk.failures.push(`native browser dialog(s) shown: ${chk.native.join("; ")}`);
   chk.status = chk.failures.length ? "FAIL" : "PASS";
   chk.ms = Date.now() - chk.t0;
   console.log(`   => ${chk.status} (${chk.ms} ms)`);
@@ -304,6 +343,7 @@ async function main() {
     await nameInput(page).fill("E2E New Item B");
     await shot(c, page, "new-modal");
     await modal(page).getByRole("button", { name: "Create Item" }).click();
+    c.expect(await toastSeen(page, "Item saved"), "success toast 'Item saved'");
     await modal(page).waitFor({ state: "detached", timeout: 15000 });
     const row = await one("SELECT name FROM items WHERE id = $1", [newId]);
     c.expect(row?.name === "E2E New Item B", "DB row renamed", row);
@@ -530,6 +570,7 @@ async function main() {
     await date.fill(today);
     await depth.fill("1,5");
     await add.click();
+    c.expect(await toastSeen(page, "Reading saved"), "success toast 'Reading saved'");
     await modal(page).getByRole("cell", { name: "1.5", exact: true }).waitFor({ timeout: 10000 }).catch(() => {});
     const r = await one("SELECT depth_mm::text d, reading_date::text rd FROM readings WHERE item_id = $1", [ID.reading]);
     c.expect(r?.d === "1.500", "'1,5' stored as 1.500 mm", r);
@@ -551,6 +592,7 @@ async function main() {
     await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
     await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E2E rust bloom photo");
     await modal(page).getByRole("button", { name: "Save evidence record" }).click();
+    c.expect(await toastSeen(page, "Evidence saved", 10000), "success toast 'Evidence saved'");
     const img = modal(page).locator('img[alt="tiny.png"]');
     await img.waitFor({ timeout: 15000 }).catch(() => {});
     c.expect(await img.isVisible(), "evidence thumbnail rendered");
@@ -1331,6 +1373,14 @@ async function main() {
   await run("n10", "Offline: banner (role=status); tabs + open/close item work offline without reload", async (c) => {
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
+    // v1.17 loads each tab's code on first use: visit Zones and Schedule
+    // online first (what a user normally does before losing the link).
+    await gotoTab(page, "Zones & Items");
+    await page.getByText(/· \d+ items/).first().waitFor({ timeout: 15000 });
+    await gotoTab(page, "Schedule");
+    await page.waitForTimeout(1500);
+    await gotoTab(page, "Dashboard");
+    await page.waitForTimeout(1000);
     await page.evaluate(() => (window.__marker = 42));
     await page.context().setOffline(true);
     const banner = page.getByRole("status").filter({ hasText: /Offline/ });
@@ -1352,9 +1402,32 @@ async function main() {
     await page.waitForTimeout(500);
     c.expect(q(page).searchParams.get("tab") === "schedule", "second tab switch offline", page.url());
     c.expect((await page.evaluate(() => window.__marker)) === 42, "no reload happened (window marker survived)");
+    // A tab never opened in this session: its code chunk can't be fetched.
+    await gotoTab(page, "Risk Matrix");
+    await page.waitForTimeout(3000);
+    const main = () => page.locator("main").innerText();
+    const broke = /Something went wrong/.test(await main());
+    await shot(c, page, "offline-unvisited-tab");
+    c.expect(!broke, "offline: a tab not yet visited still opens (or shows an offline notice)",
+      "error boundary 'Something went wrong' (ChunkLoadError for the lazy tab chunk)");
     await page.context().setOffline(false);
     await page.waitForTimeout(500);
     c.expect(!(await banner.isVisible().catch(() => false)), "banner hidden when back online");
+    if (broke) {
+      await gotoTab(page, "Dashboard");
+      await page.waitForTimeout(1500);
+      c.expect(!/Something went wrong/.test(await main()), "back online: other tabs render again without a reload",
+        "error screen persists on the Dashboard tab until 'Try again'");
+      const retry = page.getByRole("button", { name: "Try again" });
+      if (await retry.count()) { await retry.click(); await page.waitForTimeout(2000); }
+      await gotoTab(page, "Risk Matrix");
+      await page.waitForTimeout(2500);
+      if (await retry.count()) { await retry.click(); await page.waitForTimeout(2500); }
+      const riskOk = !/Something went wrong/.test(await main());
+      await shot(c, page, "online-retry-risk");
+      c.expect(riskOk, "back online: the failed tab recovers with 'Try again'",
+        "Risk Matrix stays on the error screen even after 'Try again' online (rejected lazy import is cached) — only a full reload helps");
+    }
     await page.context().close();
   });
 
@@ -1461,6 +1534,7 @@ async function main() {
         return out;
       }, sel);
     const groups = {};
+    await page.getByText(/\d+\/\d+ inspected/).first().waitFor({ timeout: 15000 });
     groups["text3 text (dashboard)"] = await measure('main [style*="color: rgb(79, 103, 127)"]');
     await gotoTab(page, "Zones & Items");
     await page.waitForTimeout(500);
@@ -1476,6 +1550,135 @@ async function main() {
       c.step(`${g}: ${rows.length} samples, min ${min}`);
       c.expect(rows.length > 0 && bad.length === 0, `${g}: all >= 4.5:1 (3:1 large)`, bad.slice(0, 5));
     }
+    await page.context().close();
+  });
+
+
+  // ================================================ v1.17.0 (in-page UI)
+  await run("v1", "Confirm dialog (alertdialog) stacked over the item modal", async (c) => {
+    const page = await newPage(c, "insp1");
+    page.__manualDialogs = true;
+    await login(page, "insp1@test.local");
+    await openItem(page, "E2E A11y Target");
+    await notesArea(page).fill("typed before the confirm");
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    const dlg = confirmDlg(page);
+    await dlg.waitFor({ timeout: 5000 });
+    const a = await dlg.evaluate((el) => {
+      const txt = (id) => (id ? document.getElementById(id)?.textContent : null);
+      return {
+        role: el.getAttribute("role"), modal: el.getAttribute("aria-modal"),
+        name: txt(el.getAttribute("aria-labelledby")), desc: txt(el.getAttribute("aria-describedby")),
+        focus: document.activeElement?.textContent?.trim(), focusInside: el.contains(document.activeElement),
+        buttons: [...el.querySelectorAll("button")].map((b) => b.textContent.trim()),
+      };
+    });
+    c.step(`alertdialog: ${JSON.stringify(a)}`);
+    c.expect(a.role === "alertdialog" && a.modal === "true", "role=alertdialog, aria-modal=true", a);
+    c.expect(a.name === "Discard your unsaved changes?" && a.desc === a.name, "accessible name/description = the message", a);
+    c.expect(a.focusInside && a.focus === "Cancel", "focus starts on Cancel", a.focus);
+    c.expect(JSON.stringify(a.buttons) === JSON.stringify(["Cancel", "Discard"]), "buttons Cancel / Discard", a.buttons);
+    const onTop = await page.evaluate(() => {
+      const b = [...document.querySelectorAll('[role="alertdialog"] button')][0];
+      const r = b.getBoundingClientRect();
+      return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === b;
+    });
+    c.expect(onTop, "dialog is painted above the item modal");
+    await shot(c, page, "stacked");
+    let out = 0;
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press(i % 3 === 2 ? "Shift+Tab" : "Tab");
+      if (!(await dlg.evaluate((el) => el.contains(document.activeElement)))) out++;
+    }
+    c.expect(out === 0, "Tab / Shift+Tab stay inside the confirm dialog", `${out} escapes`);
+    await page.keyboard.press("Escape");
+    await dlg.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+    c.expect(!(await dlg.count()), "Escape closes the confirm (= Cancel)");
+    c.expect(await modalOpen(page), "…while the item modal behind stays open");
+    c.expect((await notesArea(page).inputValue()) === "typed before the confirm", "…with the typed text");
+    c.expect(await page.evaluate(() => document.getElementById("app-root")?.hasAttribute("inert")), "#app-root still inert (item modal open)");
+    // Escape on the item modal opens the confirm; a 2nd Escape closes only the confirm.
+    await notesArea(page).focus();
+    await page.keyboard.press("Escape");
+    await dlg.waitFor({ timeout: 3000 }).catch(() => {});
+    c.expect((await dlg.count()) === 1, "Escape on the dirty item modal asks (alertdialog)");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(400);
+    c.expect(!(await dlg.count()) && (await modalOpen(page)), "second Escape closes only the confirm");
+    await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+    await dlg.waitFor({ timeout: 3000 });
+    await dlg.getByRole("button", { name: "Discard" }).click();
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    c.expect(!(await modalOpen(page)), "'Discard' closes the item modal");
+    const db = await one("SELECT notes FROM items WHERE id = $1", [ID.a11y]);
+    c.expect(db.notes === "base note", "nothing saved", db);
+    // Destructive confirm (admin delete) is labelled 'Delete'.
+    await page.context().close();
+    const adm = await newPage(c, "admin1");
+    adm.__manualDialogs = true;
+    await login(adm, "admin1@test.local");
+    await openItem(adm, "E2E A11y Target");
+    await modal(adm).getByRole("button", { name: "Delete", exact: true }).click();
+    const d2 = confirmDlg(adm);
+    await d2.waitFor({ timeout: 5000 });
+    const b2 = await d2.locator("button").allInnerTexts();
+    c.expect(b2[1] === "Delete" && /cannot be undone/.test(await d2.innerText()), "delete confirm: message + 'Delete' button", b2);
+    await adm.keyboard.press("Escape");
+    await adm.waitForTimeout(500);
+    const still = await one("SELECT count(*)::int n FROM items WHERE id = $1", [ID.a11y]);
+    c.expect(still.n === 1 && (await modalOpen(adm)), "Escape on the delete confirm keeps the item (and the modal)");
+    await adm.context().close();
+  });
+
+  await run("v2", "Success toasts: item / reading / evidence saved (role=status, polite)", async (c) => {
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    const live = await page.evaluate(() => [...document.querySelectorAll('[role="status"]')].map((e) => e.getAttribute("aria-live")));
+    c.expect(live.includes("polite"), "a polite role=status live region exists", live);
+    await openItem(page, "E2E Rate Target");
+    await modal(page).locator('div:has(> label:text-is("Pit Depth (mm)")) > input').fill("1.2");
+    await modal(page).getByRole("button", { name: "+ Reading" }).click();
+    c.expect(await toastSeen(page, "Reading saved"), "'Reading saved'");
+    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("toast evidence (no file)");
+    await modal(page).getByRole("button", { name: "Save evidence record" }).click();
+    c.expect(await toastSeen(page, "Evidence saved"), "'Evidence saved'");
+    await notesArea(page).fill("toast check");
+    await modal(page).getByRole("button", { name: "Save", exact: true }).click();
+    c.expect(await toastSeen(page, "Item saved"), "'Item saved'");
+    await shot(c, page, "toast");
+    await page.waitForTimeout(5000);
+    c.expect(!(await page.getByRole("status").filter({ hasText: "Item saved" }).count()), "toast disappears after ~4 s");
+    await page.context().close();
+  });
+
+  await run("v3", "Export tab (lazy chunk) + XLSX with lazy SheetJS; failure -> error toast, no alert()", async (c) => {
+    const page = await newPage(c, "admin1");
+    const js = [];
+    page.on("request", (r) => { if (r.url().includes("/_next/static/chunks/")) js.push({ t: Date.now(), u: r.url().replace(APP, "") }); });
+    await login(page, "admin1@test.local");
+    await page.waitForTimeout(1000);
+    const t0 = Date.now();
+    await gotoTab(page, "Export");
+    const xbtn = page.getByRole("button", { name: /Export XLSX/ }).first();
+    await xbtn.waitFor({ timeout: 15000 });
+    const tabChunks = js.filter((x) => x.t >= t0).map((x) => x.u);
+    c.step(`chunks loaded on opening Export: ${tabChunks.length}`);
+    c.expect(tabChunks.length > 0, "Export tab code is loaded on demand", tabChunks);
+    const t1 = Date.now();
+    const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), xbtn.click()]);
+    const x = path.join(ART, "v3-export.xlsx");
+    await dl.saveAs(x);
+    const clickChunks = js.filter((q2) => q2.t >= t1).map((q2) => q2.u);
+    c.step(`chunks loaded on clicking Export XLSX: ${JSON.stringify(clickChunks)}`);
+    c.expect(clickChunks.length > 0, "SheetJS chunk fetched only when exporting", clickChunks);
+    const wb = XLSX.read(fs.readFileSync(x));
+    c.expect(["Items", "Readings", "Evidences", "Change Log"].every((n) => wb.SheetNames.includes(n)), "workbook has all 4 sheets", wb.SheetNames);
+    // Failure path: history query rejected -> error toast (was window.alert).
+    await ctl.fault({ method: "GET", prefix: "/rest/v1/history", status: 400, times: 1, body: { code: "E2E", message: "history unavailable", details: null, hint: null } });
+    await xbtn.click();
+    c.expect(await toastSeen(page, /XLSX export failed/, 10000), "error toast 'XLSX export failed: …'");
+    await shot(c, page, "xlsx-fail-toast");
+    c.expect(c.native.length === 0, "no native alert()", c.native);
     await page.context().close();
   });
 

@@ -13,3 +13,11 @@ updates:
     directory: /
     schedule:
       interval: monthly
+  # E2E harness dependencies (Playwright, pg) — separate lockfile.
+  - package-ecosystem: npm
+    directory: /tests/e2e
+    schedule:
+      interval: monthly
+    groups:
+      e2e:
+        patterns: ["*"]

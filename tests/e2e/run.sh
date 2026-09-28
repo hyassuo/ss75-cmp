@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# One-shot E2E run of the SS-75 CMP app against a local fake Supabase:
-#   PostgreSQL 16 (real schema + RLS) -> PostgREST v12 -> Node gateway
-#   (REST proxy + fake GoTrue + fake Storage with real RLS) -> next start
-#   -> Playwright/Chromium scenarios (tests/e2e/scenarios.mjs).
+# End-to-end tests: the real app (next build + next start) in Chromium
+# against a local stand-in for Supabase:
 #
-# Usage: tests/e2e/run.sh              full run (fresh DB, build if needed)
-#        SKIP_BUILD=1 tests/e2e/run.sh reuse .next from a previous build
-#        ONLY=c,d1 tests/e2e/run.sh    run a subset of scenarios
-#        KEEP=1 tests/e2e/run.sh       leave the stack running afterwards
-# Needs: root or the postgres user, PG16 at $PG_BIN, Chromium under
-# $PLAYWRIGHT_BROWSERS_PATH (revision 1194 -> playwright 1.56.1), network
-# for the first npm install / PostgREST download / next/font at build time.
+#   PostgreSQL (tests/sql/supabase-stub.sql + supabase/migrations/*.sql,
+#   real RLS) -> PostgREST v12 -> tests/e2e/gateway.mjs (REST proxy, minimal
+#   GoTrue, Storage that enforces the storage.objects RLS as the caller,
+#   fault injection) -> next start -> Playwright (tests/e2e/scenarios.mjs).
+#
+# Usage: npm run test:e2e              (= bash tests/e2e/run.sh)
+#        SKIP_BUILD=1 ...              reuse the .next build of a previous run
+#        ONLY=c,d1 ...                 run a subset of scenarios
+#        KEEP=1 ...                    leave the stack running afterwards
+#        HEADED=1 ...                  show the browser
+#        PG_PORT / PGRST_PORT / GW_PORT / APP_PORT, E2E_TMP, PG_BIN: see env.sh
+#
+# Needs: Node, PostgreSQL server binaries (initdb/pg_ctl/psql), curl, and a
+# Chromium for Playwright (`cd tests/e2e && npx playwright install chromium`).
+# Runs as root (server via `su postgres`) or as a normal user (CI).
+# Note: it builds the app into ./.next with the local stack's
+# NEXT_PUBLIC_* values — rebuild before deploying from the same checkout.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "$E2E_DIR"
@@ -18,12 +26,16 @@ mkdir -p "$STATE_DIR" "$ARTIFACTS"
 rm -rf "$STORAGE_DIR" && mkdir -p "$STORAGE_DIR"
 : > "$STATE_DIR/gateway.log"
 
-# --- dependencies (harness-local; the app's node_modules stay untouched)
-[ -e "$ROOT/node_modules" ] || { echo "app node_modules missing at $ROOT/node_modules (symlink it)"; exit 2; }
-[ -d node_modules/playwright ] || npm i --no-audit --no-fund >/dev/null
+# --- dependencies (harness-local; the app's own dependencies are untouched)
+[ -d "$ROOT/node_modules" ] || { echo "run 'npm ci' in $ROOT first"; exit 2; }
+[ -d node_modules/playwright ] || npm ci --no-audit --no-fund >/dev/null
+PGRST_VERSION=v12.2.3
+PGRST_SHA256=9f71269e61ac3a940281e93ff415760f5957e430e475ba4c3889f3ede7d5527c
 if [ ! -x .bin/postgrest ]; then
   mkdir -p .bin
-  curl -sSL -o .bin/pgrst.tar.xz https://github.com/PostgREST/postgrest/releases/download/v12.2.3/postgrest-v12.2.3-linux-static-x64.tar.xz
+  curl -fsSL -o .bin/pgrst.tar.xz \
+    "https://github.com/PostgREST/postgrest/releases/download/$PGRST_VERSION/postgrest-$PGRST_VERSION-linux-static-x64.tar.xz"
+  echo "$PGRST_SHA256  .bin/pgrst.tar.xz" | sha256sum -c --quiet - || { echo "PostgREST checksum mismatch"; exit 2; }
   tar -C .bin -xf .bin/pgrst.tar.xz && rm .bin/pgrst.tar.xz
 fi
 
@@ -38,7 +50,9 @@ cleanup() {
 trap cleanup EXIT
 free_port() { ! (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 wait_http() { for _ in $(seq 1 120); do curl -s -o /dev/null "$1" && return 0; sleep 0.5; done; echo "timeout waiting for $1"; return 1; }
-for p in "$PGRST_PORT" "$GW_PORT" "$APP_PORT"; do free_port "$p" || { echo "port $p busy (stale run? pkill -f ss75-e2e)"; exit 2; }; done
+for p in "$PG_PORT" "$PGRST_PORT" "$GW_PORT" "$APP_PORT"; do
+  free_port "$p" || { echo "port $p busy (stale run? set PG_PORT/PGRST_PORT/GW_PORT/APP_PORT)"; exit 2; }
+done
 
 # --- 1. database
 echo "[1/5] postgres: fresh cluster at $PG_DIR (port $PG_PORT)"
@@ -46,7 +60,7 @@ echo "[1/5] postgres: fresh cluster at $PG_DIR (port $PG_PORT)"
 
 # --- 2. PostgREST
 echo "[2/5] postgrest on :$PGRST_PORT"
-cat > "$STATE_DIR/pgrst.conf" <<EOF
+cat > "$STATE_DIR/pgrst.conf" <<CONF
 db-uri = "postgres://authenticator:authenticator@127.0.0.1:$PG_PORT/$PG_DB"
 db-schemas = "public"
 db-anon-role = "anon"
@@ -55,7 +69,7 @@ db-max-rows = 1000
 server-host = "127.0.0.1"
 server-port = $PGRST_PORT
 log-level = "error"
-EOF
+CONF
 setsid .bin/postgrest "$STATE_DIR/pgrst.conf" > "$STATE_DIR/pgrst.log" 2>&1 & PIDS+=($!)
 echo $! > "$STATE_DIR/pgrst.pid"  # scenario c stops/restarts it
 wait_http "http://127.0.0.1:$PGRST_PORT/"
@@ -69,13 +83,13 @@ wait_http "http://127.0.0.1:$GW_PORT/__ctl/health"
 export NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL_LOCAL" NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY"
 export SUPABASE_SERVICE_ROLE_KEY="$SERVICE_KEY" NEXT_PUBLIC_APP_URL="$APP_URL" NEXT_TELEMETRY_DISABLED=1
 STAMP="$ROOT/.next/.e2e-env"
-WANT="$SUPABASE_URL_LOCAL|$ANON_KEY"
+WANT="$SUPABASE_URL_LOCAL|$ANON_KEY|$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo nogit)"
 if [ "${SKIP_BUILD:-0}" != 1 ] || [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then
   echo "[4/5] next build"
-  (cd "$ROOT" && npx next build > "$STATE_DIR/build.log" 2>&1) || { tail -40 "$STATE_DIR/build.log"; exit 1; }
+  (cd "$ROOT" && node node_modules/next/dist/bin/next build > "$STATE_DIR/build.log" 2>&1) || { tail -40 "$STATE_DIR/build.log"; exit 1; }
   echo "$WANT" > "$STAMP"
 else
-  echo "[4/5] next build skipped (SKIP_BUILD=1)"
+  echo "[4/5] next build skipped (SKIP_BUILD=1, same commit and keys)"
 fi
 (cd "$ROOT" && exec setsid node node_modules/next/dist/bin/next start -p "$APP_PORT" > "$STATE_DIR/next.log" 2>&1) & PIDS+=($!)
 wait_http "$APP_URL/login"
@@ -86,5 +100,6 @@ set +e
 node scenarios.mjs 2>&1 | tee "$ARTIFACTS/run.log"
 RC=${PIPESTATUS[0]}
 set -e
+cp "$STATE_DIR"/*.log "$ARTIFACTS/" 2>/dev/null || true
 echo "artifacts: $ARTIFACTS"
 exit "$RC"
