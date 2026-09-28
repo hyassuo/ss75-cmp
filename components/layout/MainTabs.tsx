@@ -1,11 +1,31 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useShell } from "@/lib/context/ShellContext";
-import { Dashboard } from "@/components/dashboard/Dashboard";
-import { ZonesTab } from "@/components/items/ZonesTab";
-import { RiskMatrix } from "@/components/risk/RiskMatrix";
-import { ScheduleView } from "@/components/schedule/ScheduleView";
-import { ExportTab } from "@/components/export/ExportTab";
+import { DashboardSkeleton } from "@/components/ui/Skeleton";
+
+// One chunk per tab: the first load carries only the tab being shown.
+const loading = () => <DashboardSkeleton />;
+const Dashboard = dynamic(
+  () => import("@/components/dashboard/Dashboard").then((m) => m.Dashboard),
+  { loading }
+);
+const ZonesTab = dynamic(
+  () => import("@/components/items/ZonesTab").then((m) => m.ZonesTab),
+  { loading }
+);
+const RiskMatrix = dynamic(
+  () => import("@/components/risk/RiskMatrix").then((m) => m.RiskMatrix),
+  { loading }
+);
+const ScheduleView = dynamic(
+  () => import("@/components/schedule/ScheduleView").then((m) => m.ScheduleView),
+  { loading }
+);
+const ExportTab = dynamic(
+  () => import("@/components/export/ExportTab").then((m) => m.ExportTab),
+  { loading }
+);
 
 export function MainTabs() {
   const { tab } = useShell();

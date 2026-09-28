@@ -15,6 +15,7 @@ import {
   IdleLogout,
 } from "@/components/layout/SessionGuards";
 import { NewItemProvider } from "@/lib/context/NewItemContext";
+import { FeedbackProvider } from "@/lib/context/FeedbackContext";
 import { ItemModalHost } from "@/components/items/ItemModalHost";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
@@ -42,6 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const showAlerts = !onAdminRoute && tab !== "export";
 
   return (
+    <FeedbackProvider>
     <NewItemProvider>
       <IdleLogout />
       <DeployLogout />
@@ -137,5 +139,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Rendered outside #app-root: the modal marks #app-root inert. */}
       {!loading && <ItemModalHost />}
     </NewItemProvider>
+    </FeedbackProvider>
   );
 }

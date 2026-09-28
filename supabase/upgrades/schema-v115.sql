@@ -2,8 +2,8 @@
 -- SS-75 CMP — SCHEMA v1.15.0 (data integrity)
 -- =============================================================================
 -- In-place upgrade for databases created before v1.15. Idempotent — safe to
--- re-run. Already folded into supabase-setup.sql for fresh installs.
--- Requires supabase-hardening-5.sql.
+-- re-run. Already folded into supabase/migrations/20260928000000_baseline.sql for fresh installs.
+-- Requires supabase/upgrades/hardening-5.sql.
 --
 --   - readings.depth_mm must be >= 0. Added NOT VALID: enforced for every
 --     new/changed row without failing on legacy data; run

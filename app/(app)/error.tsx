@@ -44,7 +44,10 @@ export default function AppError({
           margin: "0 auto 20px",
         }}
       >
-        {error.message || "An unexpected error occurred while loading this view."}
+        {/* Raw error messages can carry internals (SQL, stack details):
+            show a generic line plus the digest the server log is keyed by. */}
+        An unexpected error occurred while loading this view.
+        {error.digest ? ` (ref ${error.digest})` : ""}
       </div>
       <button
         onClick={reset}

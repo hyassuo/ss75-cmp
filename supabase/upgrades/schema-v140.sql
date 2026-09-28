@@ -4,8 +4,8 @@
 -- Run once in Supabase SQL Editor. Idempotent — safe to re-run.
 -- Purely ADDITIVE and backward compatible with the running app: apply this
 -- BEFORE deploying the app build that uses the new fields.
--- Rollback path: supabase-rollback-v140.sql (take a data snapshot first —
--- supabase-backup-snapshot.sql).
+-- Rollback path: supabase/upgrades/rollback-v140.sql (take a data snapshot first —
+-- supabase/ops/backup-snapshot.sql).
 -- =============================================================================
 
 

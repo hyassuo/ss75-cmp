@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 
 import type { DictKey } from "@/lib/i18n/dict";
 import { useLang } from "@/lib/context/LangContext";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 interface TabItem {
   tab: MainTab;
@@ -41,6 +42,7 @@ export function Sidebar() {
   const { profile } = useData();
   const { openNewItem } = useNewItem();
   const { t } = useLang();
+  const { confirm } = useFeedback();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -75,7 +77,7 @@ export function Sidebar() {
   }
 
   async function signOut() {
-    if (!confirm(t("nav.signOutConfirm"))) return;
+    if (!(await confirm(t("nav.signOutConfirm")))) return;
     const supabase = createClient();
     // This device only — other devices keep their sessions.
     await supabase.auth.signOut({ scope: "local" });

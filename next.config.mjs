@@ -33,9 +33,18 @@ const securityHeaders = [
   },
 ];
 
+import { readFileSync } from "node:fs";
+
+// Only the version reaches the client bundle (importing package.json in a
+// client component would ship the whole dependency list).
+const { version } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8")
+);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  env: { NEXT_PUBLIC_APP_VERSION: version },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

@@ -8,6 +8,7 @@ import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import type { Reading } from "@/lib/types/domain";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 type Outcome = { ok: true } | { ok: false; error: string };
 
@@ -32,6 +33,7 @@ export function ReadingsPanel({
   canDelete = true,
 }: Props) {
   const { t } = useLang();
+  const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [depth, setDepth] = useState("");
   const [loc, setLoc] = useState("");
@@ -87,13 +89,22 @@ export function ReadingsPanel({
       setDepth("");
       setLoc("");
       setTech("");
+      toast(t("toast.readingSaved"));
     } finally {
       setBusy(false);
     }
   }
 
   async function remove(id: string) {
-    if (!confirm(t("readings.confirmDelete"))) return;
+    if (
+      !(await confirm({
+        message: t("readings.confirmDelete"),
+        confirmLabel: t("common.delete"),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setErr("");
     const res = await onRemove(id);
     if (!res.ok) setErr(t("common.deleteFailed") + " " + res.error);

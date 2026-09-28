@@ -7,7 +7,7 @@
 # the way PostgREST would (SET ROLE authenticated + JWT sub claim).
 #
 # Scenarios:
-#   fresh    supabase-setup.sql + supabase-ifs-schema.sql (run twice: idempotency)
+#   fresh    supabase/migrations/20260928000000_baseline.sql + supabase/migrations/20260928000100_ifs_register.sql (run twice: idempotency)
 #   upgrade  fresh install, then every in-place upgrade file in README order,
 #            ending with the latest hardening round
 #
@@ -247,28 +247,28 @@ scenario() { # scenario <name> <files...>
   suite
 }
 
-scenario fresh supabase-setup.sql supabase-ifs-schema.sql supabase-setup.sql supabase-ifs-schema.sql
+scenario fresh supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql
 echo " demo seed"
 REAL=$(as $I1 "INSERT INTO items (unit_id, zone_id, name, notes) VALUES ((SELECT id FROM units WHERE code = 'SS-75'), 'Z01', 'Imported', '[DEMO] imported by hand') RETURNING id")
 before=$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")
-load "$ROOT/supabase-demo-seed.sql"; load "$ROOT/supabase-demo-seed.sql"
+load "$ROOT/supabase/seed/demo.sql"; load "$ROOT/supabase/seed/demo.sql"
 check "re-running the demo seed leaves no orphaned history" "$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")" "$before"
 check "demo seed loads its items" "$(su_sql "SELECT count(*) > 20 FROM items WHERE notes LIKE '[DEMO]%'")" "t"
 check "demo seed never removes an unregistered item" "$(su_sql "SELECT count(*) FROM items WHERE id = '$REAL'")" "1"
-check "rollback-v140 refuses to run under round 5" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase-rollback-v140.sql" 2>&1 | grep -c 'not compatible with security round 5')" "1"
+check "rollback-v140 refuses to run under round 5" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/rollback-v140.sql" 2>&1 | grep -c 'not compatible with security round 5')" "1"
 
-scenario upgrade supabase-setup.sql supabase-ifs-schema.sql \
-  supabase-security-fixes.sql supabase-hardening.sql supabase-hardening-3.sql \
-  supabase-hardening-4.sql supabase-hardening-5.sql supabase-hardening-5.sql \
-  supabase-schema-v115.sql supabase-schema-v115.sql
+scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql \
+  supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
+  supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql supabase/upgrades/hardening-5.sql \
+  supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs
 "${PSQL[@]}" -d postgres -c "CREATE DATABASE $DB" >/dev/null
 load "$HERE/supabase-stub.sql"
-load "$ROOT/supabase-setup.sql"
-check "supabase-hardening-5.sql applies without ifs_objects" \
-  "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase-hardening-5.sql" >/dev/null 2>&1 && echo applied)" "applied"
+load "$ROOT/supabase/migrations/20260928000000_baseline.sql"
+check "supabase/upgrades/hardening-5.sql applies without ifs_objects" \
+  "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/hardening-5.sql" >/dev/null 2>&1 && echo applied)" "applied"
 
 echo
 echo "$PASSES passed, $FAILS failed"

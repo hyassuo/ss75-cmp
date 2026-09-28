@@ -7,7 +7,7 @@
 --
 -- Order:
 --   1. Run this file (schema + RLS).
---   2. Run supabase-ifs-data.sql (idempotent: TRUNCATE + INSERT 11k+ rows).
+--   2. Run supabase/seed/ifs-data.sql (idempotent: TRUNCATE + INSERT 11k+ rows).
 -- =============================================================================
 
 -- Trigram index makes ILIKE / similarity matching fast over 11k+ rows.
@@ -37,6 +37,6 @@ CREATE POLICY "ifs_objects_select_authenticated" ON public.ifs_objects
 
 -- No admin write policy (hardening round 5): the register is shared by all
 -- units, and an unscoped admin policy let any unit's admin rewrite it
--- (e.g. flip SECE flags). Refresh it via supabase-ifs-data.sql instead.
+-- (e.g. flip SECE flags). Refresh it via supabase/seed/ifs-data.sql instead.
 DROP POLICY IF EXISTS "ifs_objects_admin_all" ON public.ifs_objects;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.ifs_objects FROM authenticated, anon;

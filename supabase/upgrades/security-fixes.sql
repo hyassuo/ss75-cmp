@@ -1,7 +1,7 @@
 -- =============================================================================
 -- SS-75 CMP — SECURITY FIXES (run once in Supabase SQL Editor)
 -- =============================================================================
--- Applies on top of supabase-setup.sql. Idempotent — safe to re-run.
+-- Applies on top of supabase/migrations/20260928000000_baseline.sql. Idempotent — safe to re-run.
 --
 -- FIX 1  (CRITICAL) Privilege escalation via profiles_update_self:
 --        the self-update RLS policy allowed a user to UPDATE any column of

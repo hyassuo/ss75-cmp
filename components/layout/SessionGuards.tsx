@@ -4,9 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
 import { createClient } from "@/lib/supabase/client";
-import pkg from "@/package.json";
 
-const APP_VERSION = (pkg as { version: string }).version;
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
 const VERSION_KEY = "ss75-cmp.lastVersion";
 // Single-tab session that does not survive 30 min of zero interaction.
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;

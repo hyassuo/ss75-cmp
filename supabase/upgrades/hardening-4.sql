@@ -1,7 +1,7 @@
 -- =============================================================================
 -- SS-75 CMP — SECURITY HARDENING ROUND 4 (run once in Supabase SQL Editor)
 -- =============================================================================
--- Idempotent. Apply after supabase-hardening-3.sql.
+-- Idempotent. Apply after supabase/upgrades/hardening-3.sql.
 --
 -- FIX 1 (HIGH, multi-tenant) profiles RLS granted admins GLOBAL access. Two
 --       permissive policies let any admin reach every unit's profiles,

@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/compressImage";
 import { useLang } from "@/lib/context/LangContext";
 import type { AIAnalysis, Evidence } from "@/lib/types/domain";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 const BUCKET = "evidence-photos";
 // Gemini on a VSAT link can be slow, but a spinner must never hang forever.
@@ -53,6 +54,7 @@ export function EvidencePanel({
   onDirtyChange,
 }: Props) {
   const { t } = useLang();
+  const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -228,6 +230,7 @@ export function EvidencePanel({
         setSaveErr(t("evidence.saveFailed") + " " + res.error);
         return;
       }
+      toast(t("toast.evidenceSaved"));
       setDate(today());
       setDesc("");
       setFile(null);
@@ -248,7 +251,15 @@ export function EvidencePanel({
   }
 
   async function remove(id: string) {
-    if (!confirm(t("evidence.confirmDelete"))) return;
+    if (
+      !(await confirm({
+        message: t("evidence.confirmDelete"),
+        confirmLabel: t("common.delete"),
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     setListErr("");
     const res = await onRemove(id);
     if (!res.ok) setListErr(t("common.deleteFailed") + " " + res.error);

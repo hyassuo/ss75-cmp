@@ -2,10 +2,10 @@
 -- SS-75 CMP — SECURITY HARDENING, ROUND 5
 -- =============================================================================
 -- In-place upgrade for databases created before v1.14.1. Idempotent — safe to
--- re-run. Already folded into supabase-setup.sql / supabase-ifs-schema.sql
+-- re-run. Already folded into supabase/migrations/20260928000000_baseline.sql / supabase/migrations/20260928000100_ifs_register.sql
 -- for fresh installs.
 --
--- RUN THIS LAST: supabase-security-fixes.sql and supabase-hardening-4.sql
+-- RUN THIS LAST: supabase/upgrades/security-fixes.sql and supabase/upgrades/hardening-4.sql
 -- redefine some of the objects below with their older (weaker) versions. If
 -- you ever re-run one of those files, re-run this one afterwards.
 --
@@ -46,7 +46,7 @@
 --      API routes only.
 --   5. ifs_objects: the shared IFS register was writable by any admin of
 --      any unit (ifs_objects_admin_all, FOR ALL without unit scope). It is
---      now read-only at runtime; refresh it via supabase-ifs-data.sql in
+--      now read-only at runtime; refresh it via supabase/seed/ifs-data.sql in
 --      the SQL editor.
 --   6. Storage policies (CRITICAL, pre-existing since round 1): inside
 --      "EXISTS (SELECT … FROM public.items WHERE … foldername(name) …)" the
@@ -232,7 +232,7 @@ CREATE TRIGGER trg_history_snapshot
   FOR EACH ROW EXECUTE FUNCTION public.history_fill_snapshot();
 
 -- Descriptive fields the v1.4 audit trigger (audit_item_changes) does not
--- cover. Kept in a separate trigger so re-running supabase-schema-v130.sql /
+-- cover. Kept in a separate trigger so re-running supabase/upgrades/schema-v130.sql /
 -- v140.sql (which redefine audit_item_changes) cannot drop it.
 CREATE OR REPLACE FUNCTION public.audit_item_identity()
 RETURNS TRIGGER AS $$
@@ -363,7 +363,7 @@ REVOKE UPDATE ON public.profiles FROM anon;
 
 -- -----------------------------------------------------------------------------
 -- 5. ifs_objects: read-only at runtime (skipped if the IFS table isn't
---    installed yet — supabase-ifs-schema.sql carries the same rule)
+--    installed yet — supabase/migrations/20260928000100_ifs_register.sql carries the same rule)
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN
