@@ -30,7 +30,7 @@ idempotent — safe to re-run.
 
 | File | Purpose |
 |------|---------|
-| `supabase-setup.sql` | Tables (incl. `subareas` + all item columns through v1.4.0), RLS **(final hardened state, incl. rounds 1–4)**, triggers, storage bucket, 1 unit + 14 DROPS zones. The base. |
+| `supabase-setup.sql` | Tables (incl. `subareas` + all item columns through v1.4.0), RLS **(final hardened state, incl. rounds 1–5)**, triggers, storage bucket, 1 unit + 14 DROPS zones. The base. |
 | `supabase-schema-v130.sql` | Upgrade for pre-1.3.0 DBs: `drops_risk`, `structural`, `obs_source` on items + audit trigger update. |
 | `supabase-schema-v140.sql` | Upgrade for pre-1.14 DBs: `subareas` catalog, tratativa fields, assessment bands, line-accessory fields + audit/integrity triggers. |
 | `supabase-rollback-v140.sql` | Exact rollback of v140 (drops the new table/columns, restores the v130 audit trigger). Snapshot first. |
@@ -39,7 +39,7 @@ idempotent — safe to re-run.
 | `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
 | `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
 | `supabase-hardening-4.sql` | Round-4 hardening: per-unit scoping for admins — profiles RLS, admin DELETE on items/readings/evidences/storage, and the `units` policy no longer reach other units via direct PostgREST; the shared `zones` catalog becomes read-only at runtime. |
-| `supabase-hardening-5.sql` | Round-5 hardening: `created_by`/`created_at`/`unit_id` immutable on item updates; creators may delete only fresh `Untitled` drafts; the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged); no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
+| `supabase-hardening-5.sql` | Round-5 hardening: authorship/timestamps server-owned (`created_at` set on insert; `created_by`/`created_at`/`unit_id` frozen on update); non-admins may delete only *pristine drafts* (the untouched stub a cancelled "New Item" leaves); the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged, name/zone/notes/IFS changes audited, `by_user` → `SET NULL`); no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
 | `supabase-ifs-schema.sql` | IFS Equipment Register table (id, description, sece) with pg_trgm indexes for fast autocomplete. |
 | `supabase-ifs-data.sql` | TRUNCATE + INSERT of the 11,312-row IFS register. Refresh by re-running. |
 | `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. |
@@ -67,6 +67,13 @@ from a new export:
    `TRUNCATE` at the top wipes the previous rows; the inserts re-seed
    in seconds. The `sece` flag in each row is the source of truth that
    the item modal reads when an Object is selected.
+
+## Tests
+
+| Command | What it covers |
+|---------|----------------|
+| `npm test` | Vitest unit tests for the domain logic and utilities (`tests/*.test.ts`). |
+| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role — fresh install and the full upgrade chain. |
 
 ## Storage (evidence photos)
 

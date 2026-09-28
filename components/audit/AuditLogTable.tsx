@@ -6,6 +6,7 @@ import { DS } from "@/lib/design/tokens";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import { download } from "@/lib/utils/download";
+import { latestNameByRef } from "@/lib/utils/historyNames";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
@@ -31,13 +32,18 @@ export function AuditLogTable() {
         HistoryEntry & { items: { name: string } | null }
       >) ?? [];
       if (active) {
+        // item_id is NULL once the item is deleted; fall back to the name
+        // snapshots kept on the audit rows.
+        const names = latestNameByRef(raw);
         setRows(
           raw.map((r) => ({
             ...r,
-            // item_id is NULL once the item is deleted; fall back to the
-            // name snapshot kept on the audit row.
             itemName:
-              r.items?.name ?? r.item_name ?? r.item_ref ?? r.item_id ?? "—",
+              r.items?.name ??
+              (r.item_ref ? names.get(r.item_ref) : undefined) ??
+              r.item_name ??
+              r.item_ref ??
+              "—",
           }))
         );
         setLoading(false);

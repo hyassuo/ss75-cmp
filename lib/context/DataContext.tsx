@@ -314,10 +314,16 @@ export function DataProvider({
         await supabase.storage.from("evidence-photos").remove(storagePaths);
       }
 
-      const { error: e } = await supabase.from("items").delete().eq("id", id);
-      if (e) {
+      // RLS turns a disallowed DELETE into a silent 0-row no-op; ask for the
+      // deleted id back so that case is reported instead of "succeeding".
+      const { data: gone, error: e } = await supabase
+        .from("items")
+        .delete()
+        .eq("id", id)
+        .select("id");
+      if (e || !gone?.length) {
         setAllItems(prevItems);
-        setError(e.message);
+        setError(e?.message || "Delete not permitted");
         return false;
       }
       return true;

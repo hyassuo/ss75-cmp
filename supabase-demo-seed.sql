@@ -28,8 +28,15 @@ BEGIN
     RAISE EXCEPTION 'SS-75 unit not found; run supabase-setup.sql first';
   END IF;
 
-  -- Idempotency: drop previous demo rows. CASCADE clears children + history.
-  DELETE FROM public.items WHERE notes LIKE '[DEMO]%' AND unit_id = v_unit;
+  -- Idempotency: drop previous demo rows. CASCADE clears readings and
+  -- evidences; the audit trail outlives item deletion (hardening round 5),
+  -- so the demo items' history — including the 'deleted' events this
+  -- DELETE writes — is removed explicitly (this script runs as the table
+  -- owner, which history's append-only grants don't restrict).
+  CREATE TEMP TABLE demo_ids ON COMMIT DROP AS
+    SELECT id FROM public.items WHERE notes LIKE '[DEMO]%' AND unit_id = v_unit;
+  DELETE FROM public.items WHERE id IN (SELECT id FROM demo_ids);
+  DELETE FROM public.history WHERE item_ref IN (SELECT id FROM demo_ids);
 
   -- ── Z01 Crown Level ───────────────────────────────────────────────────────
   INSERT INTO public.items (unit_id, zone_id, name, mechanism, protection,

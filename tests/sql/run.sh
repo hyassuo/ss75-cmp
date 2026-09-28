@@ -85,10 +85,32 @@ suite() {
   check "viewer cannot update items" "$(rows $V1 "UPDATE items SET notes = 'x' WHERE id = '$IT' RETURNING 1")" "0"
   check "item cannot move to another unit" "$(as $A1 "UPDATE items SET unit_id = '00000000-0000-0000-0000-0000000000b2' WHERE id = '$IT' RETURNING unit_id")" "$U1|$DENIED"
 
+  local F; F=$(as $I1 "INSERT INTO items (unit_id, zone_id, name, created_at, updated_at) VALUES ('$U1', 'Z01', 'Forged', '2099-01-01', '2099-01-01') RETURNING id")
+  check "created_at/updated_at are server-set on insert" "$(su_sql "SELECT created_at > now() - interval '1 minute' AND updated_at > now() - interval '1 minute' FROM items WHERE id = '$F'")" "t"
+  check "created_at cannot be nulled on insert" "$(as $I1 "INSERT INTO items (unit_id, zone_id, name, created_at) VALUES ('$U1', 'Z01', 'Null ts', NULL) RETURNING created_at IS NOT NULL")" "t"
+  check "reading created_at is server-set" "$(as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm, created_at) VALUES ('$F', current_date, 0.1, '2001-01-01') RETURNING created_at > now() - interval '1 minute'")" "t"
+
   local D; D=$(new_item $I1 'Untitled')
-  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$D', current_date, 0.4) RETURNING 1" >/dev/null
-  check "creator can discard a fresh Untitled draft" "$(rows $I1 "DELETE FROM items WHERE id = '$D' RETURNING 1")" "1"
-  check "discarded draft leaves no audit noise" "$(su_sql "SELECT count(*) FROM history WHERE item_ref = '$D' OR item_id = '$D'")" "0"
+  check "creator can discard a pristine draft" "$(rows $I1 "DELETE FROM items WHERE id = '$D' RETURNING 1")" "1"
+  check "discarded pristine draft leaves no audit noise" "$(su_sql "SELECT count(*) FROM history WHERE item_ref = '$D' OR item_id = '$D'")" "0"
+
+  local DP; DP=$(new_item $I1 'Untitled')
+  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$DP', current_date, 0.4) RETURNING 1" >/dev/null
+  check "creator can cancel a draft that has a reading" "$(rows $I1 "DELETE FROM items WHERE id = '$DP' RETURNING 1")" "1"
+  check "...and that deletion is logged" "$(su_sql "SELECT note FROM history WHERE item_ref = '$DP' AND action = 'deleted'")" "Item deleted \(1 readings, 0 evidences removed\)"
+
+  local OLD; OLD=$(new_item $I1 'Untitled')
+  su_sql "UPDATE items SET created_at = now() - interval '30 days' WHERE id = '$OLD'" >/dev/null
+  check "abandoned draft older than 24h is still discardable" "$(rows $I1 "DELETE FROM items WHERE id = '$OLD' RETURNING 1")" "1"
+
+  local ATK; ATK=$(as $I1 "INSERT INTO items (unit_id, zone_id, name, status, prob, cons, priority, sece) VALUES ('$U1', 'Z07', 'Crane slew ring', 'Critical', 5, 5, 'Critical', true) RETURNING id")
+  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$ATK', current_date, 4.1) RETURNING 1" >/dev/null
+  as $I1 "UPDATE items SET name = 'Untitled' WHERE id = '$ATK' RETURNING 1" >/dev/null
+  check "rename is audited" "$(su_sql "SELECT prev_value || '>' || new_value FROM history WHERE item_ref = '$ATK' AND action = 'renamed'")" "Crane slew ring>Untitled"
+  check "real item renamed to Untitled is not deletable by creator" "$(rows $I1 "DELETE FROM items WHERE id = '$ATK' RETURNING 1")" "0"
+  local ATK2; ATK2=$(as $I1 "INSERT INTO items (unit_id, zone_id, name, status, prob, cons) VALUES ('$U1', 'Z07', 'Untitled', 'Critical', 5, 5) RETURNING id")
+  check "Untitled item created with content is not a draft" "$(rows $I1 "DELETE FROM items WHERE id = '$ATK2' RETURNING 1")" "0"
+  check "admin deleting it leaves a trail" "$(rows $A1 "DELETE FROM items WHERE id = '$ATK2' RETURNING 1")/$(su_sql "SELECT count(*) FROM history WHERE item_ref = '$ATK2' AND action = 'deleted'")" "1/1"
 
   echo " audit trail"
   local R; R=$(new_item $I1 'Riser clamp')
@@ -107,17 +129,23 @@ suite() {
   local X; X=$(new_item $I1 'Deck plate')
   as $I1 "UPDATE items SET status = 'Attention' WHERE id = '$X' RETURNING 1" >/dev/null
   as $I1 "UPDATE items SET name = 'Untitled' WHERE id = '$X' RETURNING 1" >/dev/null
-  rows $I1 "DELETE FROM items WHERE id = '$X' RETURNING 1" >/dev/null
-  check "renamed-to-Untitled item keeps its trail on delete" "$(su_sql "SELECT count(*) FILTER (WHERE action = 'deleted') || '/' || count(*) FROM history WHERE item_ref = '$X'")" "1/3"
+  check "renamed-to-Untitled item is not deletable by creator" "$(rows $I1 "DELETE FROM items WHERE id = '$X' RETURNING 1")" "0"
+  as $I1 "UPDATE items SET zone_id = 'Z05', notes = 'moved' WHERE id = '$X' RETURNING 1" >/dev/null
+  check "zone and notes changes are audited" "$(su_sql "SELECT string_agg(action, ',' ORDER BY action) FROM history WHERE item_ref = '$X' AND action IN ('zone_changed', 'notes_changed')")" "notes_changed,zone_changed"
 
   echo " profiles"
   check "admin cannot delete another admin's profile" "$(as $A1 "DELETE FROM profiles WHERE id = '$A2'")" "$DENIED"
   check "admin cannot delete own profile" "$(as $A1 "DELETE FROM profiles WHERE id = '$A1'")" "$DENIED"
   su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test') ON CONFLICT DO NOTHING" >/dev/null
+  local DU; DU=$(new_item $A2 'Temp item')
+  su_sql "UPDATE items SET created_by = NULL, updated_by = NULL WHERE id = '$DU'" >/dev/null
+  rows $A2 "DELETE FROM items WHERE id = '$DU' RETURNING 1" >/dev/null
+  check "a user who appears in the audit log can still be deleted" "$(su_sql "DELETE FROM auth.users WHERE id = '$A2' RETURNING 'deleted'")" "deleted"
+  check "...and the trail keeps the email" "$(su_sql "SELECT by_user IS NULL AND by_user_email = 'admin2@test' FROM history WHERE item_ref = '$DU' AND action = 'deleted'")" "t"
   check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
   su_sql "DELETE FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'" >/dev/null
   check "admin cannot insert profiles" "$(as $A1 "INSERT INTO profiles (id, email, role, unit_id, active) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test', 'admin', '$U1', true)")" "$DENIED"
-  check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "5"
+  check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "4"
   check "inspector sees only self" "$(as $I1 "SELECT count(*) FROM profiles")" "1"
   check "user can edit own full_name" "$(rows $I1 "UPDATE profiles SET full_name = 'Insp One' WHERE id = '$I1' RETURNING 1")" "1"
   check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
@@ -151,9 +179,23 @@ scenario() { # scenario <name> <files...>
 }
 
 scenario fresh supabase-setup.sql supabase-ifs-schema.sql supabase-setup.sql supabase-ifs-schema.sql
+echo " demo seed"
+before=$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")
+load "$ROOT/supabase-demo-seed.sql"; load "$ROOT/supabase-demo-seed.sql"
+check "re-running the demo seed leaves no orphaned history" "$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")" "$before"
+check "demo seed loads its items" "$(su_sql "SELECT count(*) > 20 FROM items WHERE notes LIKE '[DEMO]%'")" "t"
+
 scenario upgrade supabase-setup.sql supabase-ifs-schema.sql \
   supabase-security-fixes.sql supabase-hardening.sql supabase-hardening-3.sql \
   supabase-hardening-4.sql supabase-hardening-5.sql supabase-hardening-5.sql
+
+echo "== no-ifs (upgrade file on a database without the IFS table)"
+DB=noifs
+"${PSQL[@]}" -d postgres -c "CREATE DATABASE $DB" >/dev/null
+load "$HERE/supabase-stub.sql"
+load "$ROOT/supabase-setup.sql"
+check "supabase-hardening-5.sql applies without ifs_objects" \
+  "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase-hardening-5.sql" >/dev/null 2>&1 && echo applied)" "applied"
 
 echo
 echo "$PASSES passed, $FAILS failed"

@@ -9,6 +9,8 @@ import { useData } from "@/lib/context/DataContext";
 import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/supabase/fetchAll";
+import { latestNameByRef } from "@/lib/utils/historyNames";
 import { download } from "@/lib/utils/download";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
@@ -200,27 +202,31 @@ export function ExportTab() {
     setBusy("xlsx");
     try {
       const supabase = createClient();
-      const itemIds = flat.map((i) => i.id);
-      let history: HistoryEntry[] = [];
-      if (itemIds.length) {
-        // The only export query with a network dependency — time it out so
-        // a stalled request errors visibly instead of hanging the button
-        // on "Generating…" forever.
-        const { data, error } = await withTimeout(
-          Promise.resolve(
-            supabase
-              .from("history")
-              .select("*")
-              .in("item_id", itemIds)
-              .order("event_date", { ascending: false })
-          ),
-          15_000,
-          "history fetch"
-        );
-        if (error) throw new Error(`history fetch: ${error.message}`);
-        history = (data as HistoryEntry[]) ?? [];
-      }
+      const itemIds = new Set(flat.map((i) => i.id));
+      // The unit's whole audit trail (RLS scopes it to the unit), paged past
+      // the 1000-row response cap, then narrowed to the exported items plus
+      // deleted ones (item_id NULL) so deletions stay on the record. The
+      // only export query with a network dependency — time it out so a
+      // stalled request errors visibly instead of hanging the button on
+      // "Generating…" forever.
+      const res = await withTimeout(
+        fetchAll<HistoryEntry>((from, to) =>
+          supabase
+            .from("history")
+            .select("*")
+            .order("event_date", { ascending: false })
+            .order("id")
+            .range(from, to)
+        ),
+        60_000,
+        "history fetch"
+      );
+      if (res.error) throw new Error(`history fetch: ${res.error}`);
+      const history = res.data.filter(
+        (h) => h.item_id === null || itemIds.has(h.item_id)
+      );
       const nameById = new Map(flat.map((i) => [i.id, i]));
+      const deletedNames = latestNameByRef(history);
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(
@@ -267,9 +273,11 @@ export function ExportTab() {
         XLSX.utils.json_to_sheet(
           history.map((h) => ({
             Item:
-              (h.item_id && nameById.get(h.item_id)?.name) ??
+              (h.item_id ? nameById.get(h.item_id)?.name : undefined) ??
+              (h.item_ref ? deletedNames.get(h.item_ref) : undefined) ??
               h.item_name ??
-              h.item_id,
+              h.item_ref ??
+              "",
             Date: h.event_date,
             Action: h.action,
             Field: h.field_changed ?? "",
