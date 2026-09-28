@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import * as XLSX from "@e965/xlsx";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
@@ -20,6 +19,7 @@ import type { HistoryEntry } from "@/lib/types/domain";
 // exportPDF so the dashboard chunk stays light for users who never export.
 import type { PdfItem, PdfPhoto } from "@/components/export/PdfDocument";
 import { effectivePriority } from "@/lib/domain/calcPriority";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 // Cap per item to keep PDF size sane (~250 KB per JPEG => 1 MB max per item).
 const MAX_PHOTOS_PER_ITEM = 4;
@@ -123,6 +123,7 @@ export function ExportTab() {
   const { lang, t, tPriority, tStatus } = useLang();
   // Excel in pt-BR expects ";" (the comma is the decimal separator).
   const csvSep = lang === "pt" ? ";" : ",";
+  const { toast } = useFeedback();
   const { zones, itemsByZone, subareas } = useData();
   const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
   const [busy, setBusy] = useState<string | null>(null);
@@ -229,6 +230,9 @@ export function ExportTab() {
       const nameById = new Map(flat.map((i) => [i.id, i]));
       const deletedNames = latestNameByRef(history);
 
+      // SheetJS (~120 kB gz) loads only when someone exports, instead of
+      // riding in every dashboard visit's first load.
+      const XLSX = await import("@e965/xlsx");
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(
         wb,
@@ -303,7 +307,7 @@ export function ExportTab() {
       // Surface the failure — was previously silent, so a thrown error left
       // the button stuck in "Generating..." with no signal to the user.
       const msg = e instanceof Error ? e.message : String(e);
-      alert(`XLSX export failed:\n\n${msg}`);
+      toast(`${t("exp.xlsxFail")} ${msg}`, "error");
     }
     setBusy(null);
   }
@@ -474,10 +478,7 @@ export function ExportTab() {
         photoLoad.photos.size === 0 &&
         photoLoad.failed > 0
       ) {
-        alert(
-          "Note: this report's photos could not be loaded, so the PDF is " +
-            "being generated without thumbnails."
-        );
+        toast(t("exp.photosUnavailable"), "error");
       }
       // Lazy-load the PDF chunk only when an export actually runs — keeps
       // it out of the dashboard's first-load bundle.
@@ -532,7 +533,7 @@ export function ExportTab() {
     } catch (e) {
       if (win && !win.closed) win.close();
       const msg = e instanceof Error ? e.message : String(e);
-      alert(`${t("exp.pdfFail")}\n\n${msg}`);
+      toast(`${t("exp.pdfFail")} ${msg}`, "error");
     }
     setBusy(null);
   }

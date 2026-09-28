@@ -6,19 +6,36 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege: CI only reads the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to commit SHAs (tags can be moved); Dependabot keeps
+# them current (.github/dependabot.yml).
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+  checks:
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # Fail on known high/critical vulnerabilities in what ships.
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: nextjs-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx', '**/*.css') }}
+          restore-keys: nextjs-${{ hashFiles('package-lock.json') }}-
       - run: npm run build
         env:
           # Placeholders — the build only needs syntactically valid values.
@@ -26,3 +43,28 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
           NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+  # Date logic must not depend on the viewer's time zone (DST bugs).
+  unit-timezones:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        tz: [America/Sao_Paulo, America/New_York, Europe/Oslo, Asia/Tokyo]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+        env:
+          TZ: ${{ matrix.tz }}
+
+  # RLS / trigger regression suite against a throwaway PostgreSQL (the
+  # ubuntu-24.04 runner image ships the PostgreSQL 16 server binaries).
+  database:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: npm run test:sql

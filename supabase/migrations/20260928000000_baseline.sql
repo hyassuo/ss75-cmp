@@ -514,7 +514,7 @@ CREATE TRIGGER trg_history_snapshot
   FOR EACH ROW EXECUTE FUNCTION public.history_fill_snapshot();
 
 -- Descriptive fields the v1.4 audit trigger (audit_item_changes) does not
--- cover. Kept in a separate trigger so re-running supabase-schema-v130.sql /
+-- cover. Kept in a separate trigger so re-running supabase/upgrades/schema-v130.sql /
 -- v140.sql (which redefine audit_item_changes) cannot drop it.
 CREATE OR REPLACE FUNCTION public.audit_item_identity()
 RETURNS TRIGGER AS $$
@@ -1186,5 +1186,5 @@ UNION ALL SELECT 'history',   count(*)::text FROM public.history;
 --   UPDATE public.zones SET system = 'Third Party' WHERE zid = 'Z14';
 --
 -- If the schema was provisioned before the security review, run
--- supabase-security-fixes.sql (idempotent) to apply the RLS hardening.
+-- supabase/upgrades/security-fixes.sql (idempotent) to apply the RLS hardening.
 -- =============================================================================

@@ -2,10 +2,9 @@
 
 import { DS } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
-import pkg from "@/package.json";
 
 // Single source of truth for the displayed version. Bump package.json.
-const VERSION = (pkg as { version: string }).version;
+const VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "";
 
 export function Footer() {
   const { t } = useLang();

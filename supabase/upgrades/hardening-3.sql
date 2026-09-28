@@ -1,7 +1,7 @@
 -- =============================================================================
 -- SS-75 CMP — SECURITY HARDENING ROUND 3 (run once in Supabase SQL Editor)
 -- =============================================================================
--- Idempotent. Apply after supabase-hardening.sql.
+-- Idempotent. Apply after supabase/upgrades/hardening.sql.
 --
 -- FIX 1  (HIGH) items UPDATE had USING but no WITH CHECK. An inspector could
 --        change unit_id on their own item to another unit's id — silently

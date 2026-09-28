@@ -32,7 +32,7 @@ BEGIN
   SELECT id INTO v_admin FROM public.profiles
     WHERE email = 'hyassuo@gmail.com' LIMIT 1;
   IF v_unit IS NULL THEN
-    RAISE EXCEPTION 'SS-75 unit not found; run supabase-setup.sql first';
+    RAISE EXCEPTION 'SS-75 unit not found; run supabase/migrations/20260928000000_baseline.sql first';
   END IF;
 
   -- Idempotency: drop previous demo rows. CASCADE clears readings and

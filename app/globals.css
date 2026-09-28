@@ -427,6 +427,21 @@ body {
   }
 }
 
+/* Compact dialogs (confirmations): a small centred card on every screen,
+   including phones where the regular modal goes full-screen. */
+.modal-overlay--compact {
+  align-items: center !important;
+  padding: 16px !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+}
+.modal-card--compact {
+  max-width: 420px;
+  min-height: 0 !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--ds-bord) !important;
+}
+
 /* Keep a focused field clear of the sticky modal footer when tabbing. */
 .modal-overlay {
   scroll-padding-bottom: 120px;

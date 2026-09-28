@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { fmt } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, UserRole } from "@/lib/types/domain";
+import { useFeedback } from "@/lib/context/FeedbackContext";
 
 const ROLES: UserRole[] = ["admin", "inspector", "viewer"];
 const ROLE_COLOR: Record<UserRole, string> = {
@@ -16,6 +17,7 @@ const ROLE_COLOR: Record<UserRole, string> = {
 };
 
 export function UserTable({ currentUserId }: { currentUserId: string }) {
+  const { confirm } = useFeedback();
   const [rows, setRows] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
@@ -310,11 +312,13 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                         )}
                         {!isSelf && (
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (
-                                confirm(
-                                  `Delete user ${u.email}? This permanently removes the account and cannot be undone.`
-                                )
+                                await confirm({
+                                  message: `Delete user ${u.email}? This permanently removes the account and cannot be undone.`,
+                                  confirmLabel: "Delete",
+                                  danger: true,
+                                })
                               ) {
                                 void call(
                                   "/api/users/delete",
