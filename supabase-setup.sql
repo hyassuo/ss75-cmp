@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS public.subareas (
   zone_id       text NOT NULL REFERENCES public.zones(zid),
   name          text NOT NULL,
   display_order int,
-  created_by    uuid REFERENCES public.profiles(id),
+  created_by    uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at    timestamptz DEFAULT now(),
   UNIQUE (unit_id, zone_id, name)
 );
@@ -146,8 +146,8 @@ CREATE TABLE IF NOT EXISTS public.items (
   is_accessory    boolean NOT NULL DEFAULT false,
   accessory_type  text,
   notes           text,
-  created_by      uuid REFERENCES public.profiles(id),
-  updated_by      uuid REFERENCES public.profiles(id),
+  created_by      uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  updated_by      uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at      timestamptz DEFAULT now(),
   updated_at      timestamptz DEFAULT now()
 );
@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS public.readings (
   depth_mm     numeric(6,3) NOT NULL,
   location     text,
   checked_by   text,
-  created_by   uuid REFERENCES public.profiles(id),
+  created_by   uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at   timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_readings_item ON public.readings(item_id);
@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS public.evidences (
   file_type     text,
   file_size     int,
   ai_analysis   jsonb,
-  created_by    uuid REFERENCES public.profiles(id),
+  created_by    uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at    timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_evidences_item ON public.evidences(item_id);
@@ -234,6 +234,30 @@ ALTER TABLE public.history DROP CONSTRAINT IF EXISTS history_by_user_fkey;
 ALTER TABLE public.history
   ADD CONSTRAINT history_by_user_fkey
   FOREIGN KEY (by_user) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+-- Authorship FKs SET NULL (hardening round 5) on pre-existing databases,
+-- so a user who authored rows can still be deleted.
+DO $$
+DECLARE
+  fk record;
+BEGIN
+  FOR fk IN
+    SELECT * FROM (VALUES
+      ('items',     'created_by'),
+      ('items',     'updated_by'),
+      ('readings',  'created_by'),
+      ('evidences', 'created_by'),
+      ('subareas',  'created_by')
+    ) AS t(tbl, col)
+  LOOP
+    EXECUTE format('ALTER TABLE public.%I DROP CONSTRAINT IF EXISTS %I',
+                   fk.tbl, fk.tbl || '_' || fk.col || '_fkey');
+    EXECUTE format(
+      'ALTER TABLE public.%I ADD CONSTRAINT %I FOREIGN KEY (%I) '
+      'REFERENCES public.profiles(id) ON DELETE SET NULL',
+      fk.tbl, fk.tbl || '_' || fk.col || '_fkey', fk.col);
+  END LOOP;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_history_item ON public.history(item_id);
 CREATE INDEX IF NOT EXISTS idx_history_date ON public.history(event_date DESC);
@@ -447,7 +471,13 @@ RETURNS boolean AS $$
     SELECT 1 FROM public.history h
     WHERE h.item_id = p_item AND h.action <> 'created'
   )
-$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+$$ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public;
+-- INVOKER: called from the RLS policy it runs as the querying user, so the
+-- items/history RLS limits it to the user's unit — exposed as
+-- /rpc/is_pristine_draft it can't probe other units' rows. Triggers call it
+-- from SECURITY DEFINER code and see everything.
+REVOKE EXECUTE ON FUNCTION public.is_pristine_draft(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.is_pristine_draft(uuid) TO authenticated, service_role;
 
 
 -- Snapshot the item's identity on every audit row so it stays attributable
@@ -500,6 +530,10 @@ BEGIN
     INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
     VALUES (NEW.id, 'ifs_object_changed', 'ifs_obj_id', OLD.ifs_obj_id, NEW.ifs_obj_id, NEW.updated_by, user_email);
   END IF;
+  IF OLD.ifs_obj_desc IS DISTINCT FROM NEW.ifs_obj_desc THEN
+    INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
+    VALUES (NEW.id, 'ifs_desc_changed', 'ifs_obj_desc', OLD.ifs_obj_desc, NEW.ifs_obj_desc, NEW.updated_by, user_email);
+  END IF;
   IF OLD.ifs_wo IS DISTINCT FROM NEW.ifs_wo THEN
     INSERT INTO public.history (item_id, action, field_changed, prev_value, new_value, by_user, by_user_email)
     VALUES (NEW.id, 'ifs_wo_changed', 'ifs_wo', OLD.ifs_wo, NEW.ifs_wo, NEW.updated_by, user_email);
@@ -534,13 +568,24 @@ DECLARE
   user_email text;
   n_readings int;
   n_evidences int;
+  pristine   boolean := public.is_pristine_draft(OLD.id);
 BEGIN
+  -- Belt and braces for items_delete_creator: its policy check can race a
+  -- concurrent UPDATE (it sees the pre-update row). Here the row is final.
+  IF uid IS NOT NULL
+     AND public.current_user_role() IS DISTINCT FROM 'admin'
+     AND NOT pristine
+  THEN
+    RAISE EXCEPTION 'only an administrator can delete item %', OLD.id
+      USING ERRCODE = '42501';
+  END IF;
+
   SELECT count(*) INTO n_readings  FROM public.readings  WHERE item_id = OLD.id;
   SELECT count(*) INTO n_evidences FROM public.evidences WHERE item_id = OLD.id;
 
   -- A cancelled "New Item" that never held anything: drop its 'created'
   -- event instead of logging noise.
-  IF n_readings = 0 AND n_evidences = 0 AND public.is_pristine_draft(OLD.id) THEN
+  IF n_readings = 0 AND n_evidences = 0 AND pristine THEN
     DELETE FROM public.history WHERE item_id = OLD.id;
     RETURN OLD;
   END IF;
@@ -560,6 +605,64 @@ DROP TRIGGER IF EXISTS trg_audit_items_delete ON public.items;
 CREATE TRIGGER trg_audit_items_delete
   BEFORE DELETE ON public.items
   FOR EACH ROW EXECUTE FUNCTION public.audit_item_delete();
+
+-- Deleting a reading or an evidence is audited (hardening round 5); the
+-- abandoned-draft sweep runs server-side.
+CREATE OR REPLACE FUNCTION public.audit_child_delete()
+RETURNS TRIGGER AS $$
+DECLARE
+  uid        uuid := auth.uid();
+  user_email text;
+BEGIN
+  -- Rows removed by an item deletion's cascade: the parent is already gone
+  -- and its 'deleted' event carries the counts.
+  IF NOT EXISTS (SELECT 1 FROM public.items WHERE id = OLD.item_id) THEN
+    RETURN OLD;
+  END IF;
+  SELECT email INTO user_email FROM public.profiles WHERE id = uid;
+  IF TG_TABLE_NAME = 'readings' THEN
+    INSERT INTO public.history
+      (item_id, action, field_changed, prev_value, by_user, by_user_email, note)
+    VALUES
+      (OLD.item_id, 'reading_deleted', 'depth_mm', OLD.depth_mm::text, uid, user_email,
+       format('Reading removed: %s mm on %s%s', OLD.depth_mm, OLD.reading_date,
+              COALESCE(' at ' || OLD.location, '')));
+  ELSE
+    INSERT INTO public.history
+      (item_id, action, field_changed, prev_value, by_user, by_user_email, note)
+    VALUES
+      (OLD.item_id, 'evidence_deleted', 'file_path', OLD.file_path, uid, user_email,
+       format('Evidence removed: %s — %s', OLD.evidence_date,
+              COALESCE(OLD.description, '')));
+  END IF;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_audit_readings_delete ON public.readings;
+CREATE TRIGGER trg_audit_readings_delete
+  AFTER DELETE ON public.readings
+  FOR EACH ROW EXECUTE FUNCTION public.audit_child_delete();
+DROP TRIGGER IF EXISTS trg_audit_evidences_delete ON public.evidences;
+CREATE TRIGGER trg_audit_evidences_delete
+  AFTER DELETE ON public.evidences
+  FOR EACH ROW EXECUTE FUNCTION public.audit_child_delete();
+
+-- The caller's own "New Item" stubs abandoned for 30+ minutes (tab closed,
+-- idle logout). The server decides what is a draft; the client only hides
+-- the ids this returns. INVOKER: runs under the caller's RLS.
+CREATE OR REPLACE FUNCTION public.discard_my_abandoned_drafts()
+RETURNS SETOF uuid AS $$
+  DELETE FROM public.items i
+  WHERE i.created_by = auth.uid()
+    AND i.created_at < now() - interval '30 minutes'
+    AND public.is_pristine_draft(i.id)
+    AND NOT EXISTS (SELECT 1 FROM public.readings r WHERE r.item_id = i.id)
+    AND NOT EXISTS (SELECT 1 FROM public.evidences e WHERE e.item_id = i.id)
+  RETURNING i.id
+$$ LANGUAGE sql VOLATILE SECURITY INVOKER SET search_path = public;
+REVOKE EXECUTE ON FUNCTION public.discard_my_abandoned_drafts() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.discard_my_abandoned_drafts() TO authenticated;
 
 -- Server-enforced authorship: created_by/updated_by always reflect the JWT,
 -- never a client-supplied value (service-role writes pass through unchanged).
@@ -863,6 +966,9 @@ CREATE POLICY "history_select_unit" ON public.history
     OR EXISTS (SELECT 1 FROM public.items WHERE items.id = history.item_id AND items.unit_id = public.current_user_unit())
   );
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.history FROM authenticated, anon;
+-- TRUNCATE bypasses RLS and row triggers; PostgREST can't issue it, but
+-- no API role needs it (hardening round 5).
+REVOKE TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 
 
 -- =============================================================================
@@ -880,29 +986,30 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Photos are stored under {item_id}/... — readable only if the item belongs
--- to the user's unit.
+-- to the user's unit. storage.objects' `name` MUST be qualified inside the
+-- items subqueries: unqualified it resolves to items.name (hardening
+-- round 5 — the unqualified form denied real uploads and let an item named
+-- "<id>/x" open every unit's photos).
 DROP POLICY IF EXISTS "evidence_select_authenticated" ON storage.objects;
 CREATE POLICY "evidence_select_authenticated" ON storage.objects
   FOR SELECT TO authenticated USING (
     bucket_id = 'evidence-photos'
     AND EXISTS (
-      SELECT 1 FROM public.items
-      WHERE items.id::text = (storage.foldername(name))[1]
-        AND items.unit_id = public.current_user_unit()
+      SELECT 1 FROM public.items i
+      WHERE i.id::text = (storage.foldername(objects.name))[1]
+        AND i.unit_id = public.current_user_unit()
     )
   );
 
 DROP POLICY IF EXISTS "evidence_insert_inspector_admin" ON storage.objects;
--- Upload only into folders that map to an item in the user's unit. Path is
--- {item_id}/..., so storage.foldername(name)[1] gives the item id.
 CREATE POLICY "evidence_insert_inspector_admin" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (
     bucket_id = 'evidence-photos'
     AND public.current_user_role() IN ('admin', 'inspector')
     AND EXISTS (
-      SELECT 1 FROM public.items
-      WHERE items.id::text = (storage.foldername(name))[1]
-        AND items.unit_id = public.current_user_unit()
+      SELECT 1 FROM public.items i
+      WHERE i.id::text = (storage.foldername(objects.name))[1]
+        AND i.unit_id = public.current_user_unit()
     )
   );
 
@@ -912,9 +1019,63 @@ CREATE POLICY "evidence_delete_admin" ON storage.objects
     bucket_id = 'evidence-photos'
     AND public.current_user_role() = 'admin'
     AND EXISTS (
-      SELECT 1 FROM public.items
-      WHERE items.id::text = (storage.foldername(name))[1]
-        AND items.unit_id = public.current_user_unit()
+      SELECT 1 FROM public.items i
+      WHERE i.id::text = (storage.foldername(objects.name))[1]
+        AND i.unit_id = public.current_user_unit()
+    )
+  );
+
+-- Discarding a new item: its creator clears the photos attached to the
+-- draft (while the draft row still exists — the app deletes files first).
+DROP POLICY IF EXISTS "evidence_delete_draft_creator" ON storage.objects;
+CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
+  FOR DELETE TO authenticated USING (
+    bucket_id = 'evidence-photos'
+    AND public.current_user_role() IN ('admin', 'inspector')
+    AND EXISTS (
+      SELECT 1 FROM public.items i
+      WHERE i.id::text = (storage.foldername(objects.name))[1]
+        AND i.unit_id = public.current_user_unit()
+        AND i.created_by = auth.uid()
+        AND public.is_pristine_draft(i.id)
+    )
+  );
+
+-- Deleting a real item: the app deletes the row first, then its files —
+-- allowed to admins of the unit the audit trail says the item was in.
+DROP POLICY IF EXISTS "evidence_delete_admin_orphans" ON storage.objects;
+CREATE POLICY "evidence_delete_admin_orphans" ON storage.objects
+  FOR DELETE TO authenticated USING (
+    bucket_id = 'evidence-photos'
+    AND public.current_user_role() = 'admin'
+    AND NOT EXISTS (
+      SELECT 1 FROM public.items i
+      WHERE i.id::text = (storage.foldername(objects.name))[1]
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.history h
+      WHERE h.item_ref::text = (storage.foldername(objects.name))[1]
+        AND h.action = 'deleted'
+        AND h.unit_id = public.current_user_unit()
+    )
+  );
+
+-- A DELETE that filters/returns rows also needs SELECT visibility, so the
+-- admin must be able to see those leftover files too.
+DROP POLICY IF EXISTS "evidence_select_admin_orphans" ON storage.objects;
+CREATE POLICY "evidence_select_admin_orphans" ON storage.objects
+  FOR SELECT TO authenticated USING (
+    bucket_id = 'evidence-photos'
+    AND public.current_user_role() = 'admin'
+    AND NOT EXISTS (
+      SELECT 1 FROM public.items i
+      WHERE i.id::text = (storage.foldername(objects.name))[1]
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.history h
+      WHERE h.item_ref::text = (storage.foldername(objects.name))[1]
+        AND h.action = 'deleted'
+        AND h.unit_id = public.current_user_unit()
     )
   );
 

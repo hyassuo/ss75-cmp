@@ -33,8 +33,16 @@ BEGIN
   -- so the demo items' history — including the 'deleted' events this
   -- DELETE writes — is removed explicitly (this script runs as the table
   -- owner, which history's append-only grants don't restrict).
+  -- Only rows this seed created and nobody has touched since: the notes
+  -- marker alone is user-editable (anyone can type "[DEMO]" into a real
+  -- item's notes), so any audit event besides 'created' disqualifies it.
   CREATE TEMP TABLE demo_ids ON COMMIT DROP AS
-    SELECT id FROM public.items WHERE notes LIKE '[DEMO]%' AND unit_id = v_unit;
+    SELECT i.id FROM public.items i
+    WHERE i.notes LIKE '[DEMO]%' AND i.unit_id = v_unit
+      AND NOT EXISTS (
+        SELECT 1 FROM public.history h
+        WHERE h.item_id = i.id AND h.action <> 'created'
+      );
   DELETE FROM public.items WHERE id IN (SELECT id FROM demo_ids);
   DELETE FROM public.history WHERE item_ref IN (SELECT id FROM demo_ids);
 

@@ -138,9 +138,10 @@ suite() {
   check "admin cannot delete own profile" "$(as $A1 "DELETE FROM profiles WHERE id = '$A1'")" "$DENIED"
   su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test') ON CONFLICT DO NOTHING" >/dev/null
   local DU; DU=$(new_item $A2 'Temp item')
-  su_sql "UPDATE items SET created_by = NULL, updated_by = NULL WHERE id = '$DU'" >/dev/null
+  local KEEP; KEEP=$(new_item $A2 'Kept item')
   rows $A2 "DELETE FROM items WHERE id = '$DU' RETURNING 1" >/dev/null
-  check "a user who appears in the audit log can still be deleted" "$(su_sql "DELETE FROM auth.users WHERE id = '$A2' RETURNING 'deleted'")" "deleted"
+  check "a user who authored rows and audit events can still be deleted" "$(su_sql "DELETE FROM auth.users WHERE id = '$A2' RETURNING 'deleted'")" "deleted"
+  check "...their items stay, authorship cleared" "$(su_sql "SELECT created_by IS NULL FROM items WHERE id = '$KEEP'")" "t"
   check "...and the trail keeps the email" "$(su_sql "SELECT by_user IS NULL AND by_user_email = 'admin2@test' FROM history WHERE item_ref = '$DU' AND action = 'deleted'")" "t"
   check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
   su_sql "DELETE FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'" >/dev/null
@@ -151,14 +152,54 @@ suite() {
   check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
   check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
 
+  echo " storage (evidence-photos)"
+  local UB=00000000-0000-0000-0000-0000000000b2
+  local OI; OI=$(su_sql "INSERT INTO items (unit_id, zone_id, name) VALUES ('$UB', 'Z01', 'Other unit item') RETURNING id")
+  su_sql "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$OI/secret.jpg')" >/dev/null
+  local SI; SI=$(new_item $I1 'Pipe rack')
+  check "inspector uploads into own unit's item folder" "$(rows $I1 "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$SI/p1.jpg') RETURNING 1")" "1"
+  check "inspector reads own unit's photo" "$(as $I2 "SELECT count(*) FROM storage.objects WHERE name = '$SI/p1.jpg'")" "1"
+  check "viewer cannot upload" "$(as $V1 "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$SI/v.jpg')")" "$DENIED"
+  check "cannot upload into another unit's item folder" "$(as $I1 "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$OI/planted.jpg')")" "$DENIED"
+  local TRAP=00000000-0000-0000-0000-00000000f00d
+  as $I1 "INSERT INTO items (id, unit_id, zone_id, name) VALUES ('$TRAP', '$U1', 'Z01', '$TRAP/x') RETURNING 1" >/dev/null
+  check "item named like a folder does not open other units' photos" "$(as $I1 "SELECT count(*) FROM storage.objects WHERE name LIKE '$OI/%'")" "0"
+  check "...nor let an admin delete them" "$(rows $A1 "DELETE FROM storage.objects WHERE name LIKE '$OI/%' RETURNING 1")" "0"
+  check "inspector cannot delete a real item's photo" "$(rows $I1 "DELETE FROM storage.objects WHERE name = '$SI/p1.jpg' RETURNING 1")" "0"
+  local SD; SD=$(new_item $I1 'Untitled')
+  as $I1 "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$SD/d.jpg') RETURNING 1" >/dev/null
+  check "creator clears photos of a draft being discarded" "$(rows $I1 "DELETE FROM storage.objects WHERE name = '$SD/d.jpg' RETURNING 1")" "1"
+  check "a colleague cannot clear them" "$(as $I1 "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$SD/d2.jpg') RETURNING 1" >/dev/null; rows $I2 "DELETE FROM storage.objects WHERE name = '$SD/d2.jpg' RETURNING 1")" "0"
+  rows $A1 "DELETE FROM items WHERE id = '$SI' RETURNING 1" >/dev/null
+  check "other unit's admin cannot clear a deleted item's photos" "$(rows $AB "DELETE FROM storage.objects WHERE name = '$SI/p1.jpg' RETURNING 1")" "0"
+  check "admin clears photos a deleted item left behind" "$(rows $A1 "DELETE FROM storage.objects WHERE name = '$SI/p1.jpg' RETURNING 1")" "1"
+  check "is_pristine_draft is not callable anonymously" "$("${PSQL[@]}" -d "$DB" -At -c "SET ROLE anon; SELECT public.is_pristine_draft('$SD')" 2>&1 | tail -1 | sed 's/^ERROR: *//')" "$DENIED"
+  check "is_pristine_draft reveals nothing across units" "$(as $AB "SELECT public.is_pristine_draft('$SD')")" "f"
+
+  echo " child deletions & draft sweep"
+  local CI; CI=$(new_item $I1 'Hull plate')
+  local RID; RID=$(as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm, location) VALUES ('$CI', current_date, 1.2, 'FR-12') RETURNING id")
+  check "inspector cannot delete a reading" "$(rows $I1 "DELETE FROM readings WHERE id = '$RID' RETURNING 1")" "0"
+  rows $A1 "DELETE FROM readings WHERE id = '$RID' RETURNING 1" >/dev/null
+  check "deleting a reading is audited" "$(su_sql "SELECT note FROM history WHERE item_ref = '$CI' AND action = 'reading_deleted'")" "Reading removed: 1\.200 mm on .* at FR-12"
+  as $I1 "INSERT INTO evidences (item_id, evidence_date, description) VALUES ('$CI', current_date, 'photo') RETURNING 1" >/dev/null
+  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$CI', current_date, 1.3) RETURNING 1" >/dev/null
+  check "cascade on item delete doesn't double-log children" "$(rows $A1 "DELETE FROM items WHERE id = '$CI' RETURNING 1")/$(su_sql "SELECT count(*) FROM history WHERE item_ref = '$CI' AND action IN ('reading_deleted', 'evidence_deleted')")" "1/1"
+  local OLDD; OLDD=$(new_item $I1 'Untitled'); local OLDD2; OLDD2=$(new_item $I2 'Untitled'); local OLDR; OLDR=$(new_item $I1 'Untitled')
+  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$OLDR', current_date, 0.2) RETURNING 1" >/dev/null
+  su_sql "UPDATE items SET created_at = now() - interval '2 hours' WHERE id IN ('$OLDD', '$OLDD2', '$OLDR')" >/dev/null
+  check "draft sweep discards only the caller's abandoned pristine drafts" "$(as $I1 "SELECT string_agg(x::text, ',') FROM discard_my_abandoned_drafts() x")" "$OLDD"
+  check "...leaving colleagues' and non-empty drafts" "$(su_sql "SELECT count(*) FROM items WHERE id IN ('$OLDD2', '$OLDR')")" "2"
+  check "API roles cannot TRUNCATE" "$(as $A1 "TRUNCATE items")" "$DENIED"
+
   echo " reference data"
   check "admin of another unit cannot edit IFS register" "$(as $AB "UPDATE ifs_objects SET sece = false WHERE id = 'OBJ-1'")" "$DENIED"
   check "IFS register readable" "$(as $I1 "SELECT count(*) FROM ifs_objects")" "1"
   check "zones catalog read-only" "$(rows $A1 "UPDATE zones SET name = 'x' RETURNING 1")" "0|$DENIED"
 
   echo " unit isolation"
-  check "other unit's admin sees no items" "$(as $AB "SELECT count(*) FROM items")" "0"
-  check "other unit's admin cannot delete items" "$(rows $AB "DELETE FROM items RETURNING 1")" "0"
+  check "other unit's admin sees none of this unit's items" "$(as $AB "SELECT count(*) FROM items WHERE unit_id = '$U1'")" "0"
+  check "other unit's admin cannot delete this unit's items" "$(rows $AB "DELETE FROM items WHERE unit_id = '$U1' RETURNING 1")" "0"
 
   echo " normal workflow"
   local N; N=$(new_item $I1 'Untitled')

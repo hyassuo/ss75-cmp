@@ -39,7 +39,7 @@ idempotent — safe to re-run.
 | `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
 | `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
 | `supabase-hardening-4.sql` | Round-4 hardening: per-unit scoping for admins — profiles RLS, admin DELETE on items/readings/evidences/storage, and the `units` policy no longer reach other units via direct PostgREST; the shared `zones` catalog becomes read-only at runtime. |
-| `supabase-hardening-5.sql` | Round-5 hardening: authorship/timestamps server-owned (`created_at` set on insert; `created_by`/`created_at`/`unit_id` frozen on update); non-admins may delete only *pristine drafts* (the untouched stub a cancelled "New Item" leaves); the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged, name/zone/notes/IFS changes audited, `by_user` → `SET NULL`); no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
+| `supabase-hardening-5.sql` | Round-5 hardening: authorship/timestamps server-owned (`created_at` set on insert; `created_by`/`created_at`/`unit_id` frozen on update); non-admins may delete only *pristine drafts* (the untouched stub a cancelled "New Item" leaves); the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged, name/zone/notes/IFS changes audited, `by_user` → `SET NULL`); reading/evidence deletions audited; abandoned drafts swept server-side (`discard_my_abandoned_drafts()`); **storage policies fixed** (`objects.name` was resolving to `items.name`: real uploads were denied and a crafted item name exposed other units' photos) plus narrow delete rules for discarded drafts / deleted items' files; authorship FKs `ON DELETE SET NULL`; no TRUNCATE for API roles; no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
 | `supabase-ifs-schema.sql` | IFS Equipment Register table (id, description, sece) with pg_trgm indexes for fast autocomplete. |
 | `supabase-ifs-data.sql` | TRUNCATE + INSERT of the 11,312-row IFS register. Refresh by re-running. |
 | `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. |
@@ -84,8 +84,9 @@ Supabase Storage bucket `evidence-photos`. Path convention:
 {item_id}/{uuid}_{filename}
 ```
 
-RLS scopes both SELECT and INSERT to the owning item's unit, so
-photos never leak across units. Files are displayed in the modal via
+RLS scopes SELECT, INSERT and DELETE to the owning item's unit, so
+photos never leak across units (see hardening round 5 for the
+`objects.name` qualification this depends on). Files are displayed in the modal via
 short-lived signed URLs. The PDF export currently embeds only the
 inspection metadata, not the images themselves.
 
