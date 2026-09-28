@@ -11,7 +11,7 @@ export function Footer() {
   const { t } = useLang();
   return (
     <div
-      className="ft-bar"
+      className="ft-bar app-footer"
       style={{
         background: DS.sbBg,
         borderTop: "1px solid " + DS.sbBord,

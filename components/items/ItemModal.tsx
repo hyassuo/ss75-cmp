@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Section } from "@/components/ui/Section";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
+import { YesNoToggle } from "@/components/ui/YesNoToggle";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { EvidencePanel } from "@/components/items/EvidencePanel";
@@ -16,7 +17,7 @@ import { IfsObjectSearch } from "@/components/items/IfsObjectSearch";
 import { useData, type MutationResult } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
-import { calcPriority } from "@/lib/domain/calcPriority";
+import { calcPriority, effectivePriority } from "@/lib/domain/calcPriority";
 import { calcNextInspection } from "@/lib/domain/calcNextInspection";
 import { suggestActionDue } from "@/lib/domain/actionPlan";
 import { AI_READING_CHECKED_BY, AI_READING_LOCATION } from "@/lib/domain/calcRate";
@@ -60,6 +61,11 @@ interface Props {
   zoneName: string;
   isNew: boolean;
   onClose: () => void;
+  /**
+   * Receives the modal's "may I close?" check (confirm + discard a new
+   * draft) so history navigation (Back) goes through it too.
+   */
+  registerCloseGuard?: (fn: () => Promise<boolean>) => void;
 }
 
 type Form = {
@@ -126,7 +132,9 @@ function formFromItem(item: ItemWithRelations, isNew: boolean): Form {
     ifs_fl: item.ifs_fl ?? "",
     prob: item.prob ?? null,
     cons: item.cons ?? null,
-    priority: item.priority ?? null,
+    // Today's priority (overdue escalation included), not the stored
+    // snapshot — the modal must agree with the cards and the matrix.
+    priority: effectivePriority(item),
     status: item.status ?? "Pending",
     sece: item.sece ?? false,
     drops_risk: item.drops_risk ?? false,
@@ -202,12 +210,56 @@ function diffPatch(full: Partial<Item>, base: Item): Partial<Item> {
 
 const sameForm = (a: Form, b: Form) => JSON.stringify(a) === JSON.stringify(b);
 
+// Re-apply the user's edits (the fields where `edited` differs from
+// `editedFrom`) on top of the item's current version, then recompute the
+// derived fields (next inspection, priority) from the merged values. Used
+// when restoring a local draft and when saving over a conflict, so fields
+// the user never touched keep the other person's newer values.
+function rebase(
+  current: ItemWithRelations,
+  edited: Form,
+  editedFrom: Form
+): Form {
+  const next = formFromItem(current, false);
+  const out = next as unknown as Record<string, unknown>;
+  const src = edited as unknown as Record<string, unknown>;
+  const from = editedFrom as unknown as Record<string, unknown>;
+  const changed = new Set<string>();
+  for (const k of Object.keys(src)) {
+    if (k === "next_insp" || k === "priority") continue;
+    if (JSON.stringify(src[k]) !== JSON.stringify(from[k])) {
+      out[k] = src[k];
+      changed.add(k);
+    }
+  }
+  // Derived fields are recomputed only when the user changed one of their
+  // inputs; otherwise the current stored values stand.
+  if (changed.has("last_insp") || changed.has("freq_insp")) {
+    next.next_insp = calcNextInspection(next.last_insp, next.freq_insp);
+  }
+  if (
+    ["prob", "cons", "sece", "drops_risk", "structural", "last_insp", "freq_insp"]
+      .some((k) => changed.has(k))
+  ) {
+    next.priority = calcPriority(
+      next.prob,
+      next.cons,
+      next.sece,
+      next.next_insp,
+      next.drops_risk,
+      next.structural
+    );
+  }
+  return next;
+}
+
 function ItemModalInner({
   zoneName,
   isNew,
   onClose,
   item,
   gone,
+  registerCloseGuard,
 }: Props & { item: ItemWithRelations; gone: boolean }) {
   const {
     profile,
@@ -231,8 +283,18 @@ function ItemModalInner({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
-  const [restorable, setRestorable] = useState<ItemDraft<Form> | null>(null);
+  // Edits left unsaved by a previous session (dropped link, idle logout,
+  // closed tab), offered back — read synchronously so the mirroring effect
+  // below can't clear the stored copy before the user decides.
+  const [restorable, setRestorable] = useState<ItemDraft<Form> | null>(() => {
+    if (profile.role === "viewer") return null;
+    const d = loadItemDraft<Form>(profile.id, item.id);
+    return d && !sameForm(d.form, initial) ? d : null;
+  });
   const errorRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
+  const fid = useId(); // prefix for label/control ids below
   const [nameError, setNameError] = useState(false);
   // AI pit-depth estimate staged in the form — persisted only on Save, so
   // cancelling the modal never leaves an orphan reading in the DB.
@@ -248,24 +310,22 @@ function ItemModalInner({
   const isAdmin = profile.role === "admin";
   const dirty = !sameForm(f, initial) || pendingAiReading !== null;
 
-  // Offer edits left unsaved by a previous session (dropped link, idle
-  // logout, closed tab) — only if they differ from what's stored now.
+  // Mirror unsaved edits to local storage (debounced). While a previous
+  // draft is on offer, leave it alone until the user decides — or starts
+  // typing, which means they chose to start over.
   useEffect(() => {
-    if (isReadOnly || isNew) return;
-    const d = loadItemDraft<Form>(item.id);
-    if (d && !sameForm(d.form, initial)) setRestorable(d);
-    // Run once per opened item.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item.id]);
-
-  // Mirror unsaved edits to local storage (debounced).
-  useEffect(() => {
-    if (isReadOnly || restorable) return;
-    if (!sameForm(f, initial)) {
+    if (isReadOnly) return;
+    const edited = !sameForm(f, initial);
+    if (restorable) {
+      if (!edited) return;
+      setRestorable(null);
+    }
+    if (edited) {
       const h = setTimeout(
         () =>
-          saveItemDraft<Form>(item.id, {
+          saveItemDraft<Form>(profile.id, item.id, {
             form: f,
+            baseForm: initial,
             baseUpdatedAt: base.updated_at,
             savedAt: Date.now(),
           }),
@@ -273,8 +333,8 @@ function ItemModalInner({
       );
       return () => clearTimeout(h);
     }
-    clearItemDraft(item.id);
-  }, [f, initial, base.updated_at, item.id, isReadOnly, restorable]);
+    clearItemDraft(profile.id, item.id);
+  }, [f, initial, base.updated_at, item.id, isReadOnly, restorable, profile.id]);
 
   useEffect(() => {
     if (saveError || conflict) {
@@ -284,14 +344,18 @@ function ItemModalInner({
 
   function restoreDraft() {
     if (!restorable) return;
-    setF(restorable.form);
-    // Conflict detection relative to the version the draft was based on.
-    setBase((b) => ({ ...b, updated_at: restorable.baseUpdatedAt }));
+    // Only the fields the user changed come back; everything else stays at
+    // the current version. The version check still starts from the draft's
+    // base, so if the item moved on since, Save reports a conflict first.
+    const fresh = formFromItem(item, isNew);
+    setInitial(fresh);
+    setF(rebase(item, restorable.form, restorable.baseForm));
+    setBase({ ...item, updated_at: restorable.baseUpdatedAt });
     setRestorable(null);
   }
 
   function discardDraft() {
-    clearItemDraft(item.id);
+    clearItemDraft(profile.id, item.id);
     setRestorable(null);
   }
 
@@ -457,19 +521,45 @@ function ItemModalInner({
     }
   }
 
-  async function save(overwrite = false) {
+  // opts.form / opts.base: save a rebased form against the item's current
+  // version (used by "save mine on top" after a conflict).
+  async function save(
+    opts: { form?: Form; base?: ItemWithRelations; initialForm?: Form } = {}
+  ) {
+    const form = opts.form ?? f;
+    const against = opts.base ?? base;
     if (evidenceDirty && !confirm(t("modal.unsavedEvidence"))) return;
-    const trimmedName = f.name.trim();
+    const trimmedName = form.name.trim();
     if (!trimmedName) {
       setNameError(true);
+      // The field is at the top of a long form — take the user to it.
+      nameRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+      nameRef.current?.focus({ preventScroll: true });
       return;
     }
     setSaving(true);
     setSaveError(null);
     setConflict(false);
-    // Persist the staged AI pit-depth estimate first (re-check that no
-    // manual reading appeared since the AI apply). Cleared once stored so
-    // a retry after a failed item save can't add it twice.
+    const patch = diffPatch(patchFromForm(form, trimmedName), against);
+    if (Object.keys(patch).length > 0) {
+      const res = await updateItem(item.id, patch, {
+        expectedUpdatedAt: against.updated_at,
+      });
+      if (!res.ok) {
+        setSaving(false);
+        if (res.conflict) setConflict(true);
+        else setSaveError(describe(res));
+        return;
+      }
+      // Saved: this is the new baseline (a retry below mustn't re-send it).
+      const saved = { ...form, name: trimmedName };
+      setBase(res.data);
+      setInitial(saved);
+      setF(saved);
+    }
+    // The staged AI pit-depth estimate goes in only once the item itself is
+    // saved, so a failed save + Cancel never leaves the reading behind.
+    // Re-check that no manual reading appeared since the AI apply.
     if (pendingAiReading !== null && item.readings.length === 0) {
       const r = await addReading(item.id, {
         reading_date: today(),
@@ -478,33 +568,27 @@ function ItemModalInner({
         checked_by: AI_READING_CHECKED_BY,
       });
       if (!r.ok) {
-        setSaveError(describe(r));
         setSaving(false);
+        setSaveError(describe(r));
         return;
       }
       setPendingAiReading(null);
     }
-    const patch = diffPatch(patchFromForm(f, trimmedName), base);
-    if (Object.keys(patch).length === 0) {
-      clearItemDraft(item.id);
-      setSaving(false);
-      onClose();
-      return;
-    }
-    // overwrite: the user saw the conflict and chose to apply their changes
-    // on top of the current version (only the fields they changed).
-    const res = await updateItem(item.id, patch, {
-      expectedUpdatedAt: overwrite ? item.updated_at : base.updated_at,
-    });
     setSaving(false);
-    if (res.ok) {
-      clearItemDraft(item.id);
-      onClose();
-    } else if (res.conflict) {
-      setConflict(true);
-    } else {
-      setSaveError(describe(res));
-    }
+    clearItemDraft(profile.id, item.id);
+    onClose();
+  }
+
+  // "Save mine on top": re-apply only the fields this user changed onto the
+  // version that is in the database now (recomputing next inspection and
+  // priority from the merged values), then save against that version.
+  function saveOnTop() {
+    const merged = rebase(item, f, initial);
+    const fresh = formFromItem(item, false);
+    setBase(item);
+    setInitial(fresh);
+    setF(merged);
+    void save({ form: merged, base: item, initialForm: fresh });
   }
 
   // Throw the local edits away and start over from the current version.
@@ -516,7 +600,7 @@ function ItemModalInner({
     setPendingAiReading(null);
     setConflict(false);
     setSaveError(null);
-    clearItemDraft(item.id);
+    clearItemDraft(profile.id, item.id);
   }
 
   async function remove() {
@@ -526,7 +610,7 @@ function ItemModalInner({
       setSaveError(t("modal.deleteFailed") + " " + r.error);
       return;
     }
-    clearItemDraft(item.id);
+    clearItemDraft(profile.id, item.id);
     onClose();
   }
 
@@ -537,11 +621,14 @@ function ItemModalInner({
       setSaveError(describe(r));
       return;
     }
-    clearItemDraft(item.id);
+    clearItemDraft(profile.id, item.id);
     onClose();
   }
 
-  async function cancel() {
+  // May the modal close? Asks before throwing work away and, for a new
+  // item, deletes the draft row. Shared by Cancel, ×, Escape and Back.
+  async function confirmDiscard(): Promise<boolean> {
+    if (saving) return false;
     if (isNew) {
       // Readings and photos are stored the moment they're added, so
       // discarding a new item deletes them too — say so first.
@@ -550,20 +637,33 @@ function ItemModalInner({
         (dirty || evidenceDirty || attached) &&
         !confirm(t("modal.discardNew"))
       ) {
-        return;
+        return false;
       }
       if (!gone) {
         const r = await deleteItem(item.id, { discardDraft: true });
-        if (!r.ok) {
+        // Offline with an empty stub: close anyway — the server sweep
+        // removes untouched stubs later. With photos/readings attached the
+        // user must know they're still there.
+        if (!r.ok && attached) {
           setSaveError(t("modal.deleteFailed") + " " + r.error);
-          return;
+          return false;
         }
       }
     } else if ((dirty || evidenceDirty) && !confirm(t("modal.discardChanges"))) {
-      return;
+      return false;
     }
-    clearItemDraft(item.id);
-    onClose();
+    clearItemDraft(profile.id, item.id);
+    return true;
+  }
+
+  const guardRef = useRef(confirmDiscard);
+  guardRef.current = confirmDiscard;
+  useEffect(() => {
+    registerCloseGuard?.(() => guardRef.current());
+  }, [registerCloseGuard]);
+
+  async function cancel() {
+    if (await confirmDiscard()) onClose();
   }
 
   function toggleResolved() {
@@ -617,12 +717,13 @@ function ItemModalInner({
   const prClr = (f.priority && PRIORITY_COLOR[f.priority]) || DS.text3;
 
   return (
-    <Modal>
+    <Modal labelledBy={titleId} onEscape={() => void cancel()}>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-start",
+          gap: 12,
           marginBottom: 20,
         }}
       >
@@ -640,41 +741,31 @@ function ItemModalInner({
             {isNew ? t("modal.newItem") + " " : t("modal.editItem") + " "}
             {zones.find((z) => z.zid === f.zone_id)?.name ?? zoneName}
           </div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: DS.text }}>
-            {f.name || f.ifs_obj_desc || t("modal.untitled")}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {!isNew && isAdmin && (
-            <button
-              onClick={() => void remove()}
-              style={{
-                background: DS.redBg,
-                color: DS.red,
-                border: "1px solid " + DS.redBord,
-                borderRadius: 7,
-                padding: "6px 14px",
-                fontSize: 12,
-                cursor: "pointer",
-                fontWeight: 700,
-              }}
-            >{t("common.delete")}</button>
-          )}
-          <button
-            onClick={() => void cancel()}
-            style={{
-              background: "none",
-              border: "1px solid " + DS.bord,
-              color: DS.text3,
-              fontSize: 16,
-              cursor: "pointer",
-              borderRadius: 7,
-              padding: "6px 11px",
-            }}
+          <h2
+            id={titleId}
+            style={{ fontSize: 17, fontWeight: 800, color: DS.text, margin: 0 }}
           >
-            ×
-          </button>
+            {f.name || f.ifs_obj_desc || t("modal.untitled")}
+          </h2>
         </div>
+        <button
+          type="button"
+          onClick={() => void cancel()}
+          aria-label={t("common.close")}
+          style={{
+            background: "none",
+            border: "1px solid " + DS.bord,
+            color: DS.text3,
+            fontSize: 18,
+            cursor: "pointer",
+            borderRadius: 7,
+            minWidth: 40,
+            minHeight: 40,
+            flexShrink: 0,
+          }}
+        >
+          ×
+        </button>
       </div>
 
       {gone && (
@@ -720,15 +811,10 @@ function ItemModalInner({
       </Section>
 
       <Section title={t("sec.identification")} accent={DS.blu}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-          }}
-        >
+        <div className="form-grid-2">
           <div>
             <Input
+              ref={nameRef}
               label={t("f.itemName")}
               value={f.name}
               onChange={(v) => {
@@ -736,19 +822,8 @@ function ItemModalInner({
                 if (nameError && v.trim()) setNameError(false);
               }}
               placeholder="ex: Anode Row 3 Port, FR-22"
+              error={nameError ? t("modal.nameRequired") : null}
             />
-            {nameError && (
-              <div
-                style={{
-                  color: DS.red,
-                  fontSize: 11,
-                  marginTop: -6,
-                  marginBottom: 8,
-                }}
-              >
-                {t("modal.nameRequired")}
-              </div>
-            )}
           </div>
           <Select
             label={t("f.zone")}
@@ -898,7 +973,7 @@ function ItemModalInner({
             }}
           >
             <div>
-              <Label>Object ID</Label>
+              <Label>{t("f.objectIdShort")}</Label>
               <span
                 style={{
                   fontFamily: "monospace",
@@ -910,7 +985,7 @@ function ItemModalInner({
               </span>
             </div>
             <div>
-              <Label>Object Description</Label>
+              <Label>{t("f.objectDesc")}</Label>
               <span style={{ fontSize: 13, color: DS.text2 }}>
                 {f.ifs_obj_desc}
               </span>
@@ -974,12 +1049,8 @@ function ItemModalInner({
 
       <Section title={t("sec.risk")} accent={DS.vio}>
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            marginBottom: 12,
-          }}
+          className="form-grid-2"
+          style={{ marginBottom: 12 }}
         >
           <Select
             label={t("f.probability")}
@@ -999,15 +1070,11 @@ function ItemModalInner({
           />
         </div>
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 10,
-            marginBottom: 12,
-          }}
+          className="form-grid-3"
+          style={{ marginBottom: 12 }}
         >
           <div>
-            <Label>Priority (auto)</Label>
+            <Label>{t("f.priorityAuto")}</Label>
             <div
               style={{
                 background: prClr + "18",
@@ -1078,7 +1145,7 @@ function ItemModalInner({
           </span>
         </div>
         <div>
-          <Label>SECE (Safety &amp; Environmental Critical Element)</Label>
+          <Label>{t("ifs.seceNote")}</Label>
           {/* Auto-populated from the IFS Equipment Register. Not editable —
               select an IFS Object above and the flag flows from there. */}
           <div
@@ -1113,99 +1180,23 @@ function ItemModalInner({
             priority weight). Manually toggled, unlike SECE which is
             sourced from IFS. */}
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            marginTop: 12,
-          }}
+          className="form-grid-2"
+          style={{ marginTop: 12 }}
         >
-          <div>
-            <Label>{t("f.dropsRisk")}</Label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => recalcPriority({ drops_risk: true })}
-                style={{
-                  flex: 1,
-                  background: f.drops_risk ? DS.oraBg : DS.sur2,
-                  color: f.drops_risk ? DS.ora : DS.text3,
-                  border:
-                    "1px solid " +
-                    (f.drops_risk ? DS.oraBord : DS.bord),
-                  borderRadius: 6,
-                  padding: "7px 0",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                {t("sece.yes")}
-              </button>
-              <button
-                type="button"
-                onClick={() => recalcPriority({ drops_risk: false })}
-                style={{
-                  flex: 1,
-                  background: !f.drops_risk ? DS.grnBg : DS.sur2,
-                  color: !f.drops_risk ? DS.grn : DS.text3,
-                  border:
-                    "1px solid " +
-                    (!f.drops_risk ? DS.grnBord : DS.bord),
-                  borderRadius: 6,
-                  padding: "7px 0",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                {t("sece.no")}
-              </button>
-            </div>
-          </div>
-          <div>
-            <Label>{t("f.structural")}</Label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => recalcPriority({ structural: true })}
-                style={{
-                  flex: 1,
-                  background: f.structural ? DS.oraBg : DS.sur2,
-                  color: f.structural ? DS.ora : DS.text3,
-                  border:
-                    "1px solid " +
-                    (f.structural ? DS.oraBord : DS.bord),
-                  borderRadius: 6,
-                  padding: "7px 0",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                {t("sece.yes")}
-              </button>
-              <button
-                type="button"
-                onClick={() => recalcPriority({ structural: false })}
-                style={{
-                  flex: 1,
-                  background: !f.structural ? DS.grnBg : DS.sur2,
-                  color: !f.structural ? DS.grn : DS.text3,
-                  border:
-                    "1px solid " +
-                    (!f.structural ? DS.grnBord : DS.bord),
-                  borderRadius: 6,
-                  padding: "7px 0",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                }}
-              >
-                {t("sece.no")}
-              </button>
-            </div>
-          </div>
+          <YesNoToggle
+            label={t("f.dropsRisk")}
+            value={f.drops_risk}
+            onChange={(v) => recalcPriority({ drops_risk: v })}
+            yesLabel={t("sece.yes")}
+            noLabel={t("sece.no")}
+          />
+          <YesNoToggle
+            label={t("f.structural")}
+            value={f.structural}
+            onChange={(v) => recalcPriority({ structural: v })}
+            yesLabel={t("sece.yes")}
+            noLabel={t("sece.no")}
+          />
         </div>
 
         {/* Informative assessment bands (FM-116-OFF method). Handlers go
@@ -1213,12 +1204,8 @@ function ItemModalInner({
             suggestRiskFromBands(corr, loss) can swap `set` for
             recalcPriority to also suggest P×C. */}
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            marginTop: 12,
-          }}
+          className="form-grid-2"
+          style={{ marginTop: 12 }}
         >
           <Select
             label={t("f.corrExtent")}
@@ -1244,16 +1231,13 @@ function ItemModalInner({
 
       <Section title={t("sec.inspection")} accent={DS.ora}>
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 10,
-            alignItems: "end",
-          }}
+          className="form-grid-3"
+          style={{ alignItems: "end" }}
         >
           <div>
-            <Label>{t("f.frequency")}</Label>
+            <Label htmlFor={fid + "freq"}>{t("f.frequency")}</Label>
             <select
+              id={fid + "freq"}
               value={f.freq_insp ?? ""}
               onChange={(e) =>
                 onFreqOrLast({
@@ -1272,8 +1256,9 @@ function ItemModalInner({
             </select>
           </div>
           <div>
-            <Label>{t("f.lastInsp")}</Label>
+            <Label htmlFor={fid + "last"}>{t("f.lastInsp")}</Label>
             <input
+              id={fid + "last"}
               type="date"
               value={f.last_insp ?? ""}
               onChange={(e) =>
@@ -1307,12 +1292,8 @@ function ItemModalInner({
 
       <Section title={t("sec.action")} accent={DS.grn}>
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            marginBottom: 10,
-          }}
+          className="form-grid-2"
+          style={{ marginBottom: 10 }}
         >
           <Select
             label={t("f.actionType")}
@@ -1340,17 +1321,13 @@ function ItemModalInner({
           />
         </div>
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            alignItems: "end",
-            marginBottom: 4,
-          }}
+          className="form-grid-2"
+          style={{ alignItems: "end", marginBottom: 4 }}
         >
           <div>
-            <Label>{t("f.actionDue")}</Label>
+            <Label htmlFor={fid + "due"}>{t("f.actionDue")}</Label>
             <input
+              id={fid + "due"}
               type="date"
               value={f.action_due ?? ""}
               onChange={(e) => set("action_due", e.target.value || null)}
@@ -1445,6 +1422,9 @@ function ItemModalInner({
       </Section>
       </fieldset>
 
+      {/* Sticky action bar: Save stays reachable at the bottom of this long
+          form, and save errors/conflicts show right next to it. */}
+      <div className="modal-footer">
       <div ref={errorRef} aria-live="assertive">
         {conflict && (
           <div role="alert" style={banner(DS.oraBg, DS.oraBord, DS.ora)}>
@@ -1452,7 +1432,7 @@ function ItemModalInner({
             <button
               type="button"
               disabled={saving}
-              onClick={() => void save(true)}
+              onClick={saveOnTop}
               style={bannerBtn(DS.ora)}
             >
               {t("modal.conflictOverwrite")}
@@ -1483,14 +1463,32 @@ function ItemModalInner({
           gap: 10,
           justifyContent: "space-between",
           alignItems: "center",
-          paddingTop: 12,
-          borderTop: "1px solid " + DS.bord,
           flexWrap: "wrap",
         }}
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {/* Destructive action lives here, away from the close button. */}
           {!isNew && isAdmin && (
             <button
+              type="button"
+              onClick={() => void remove()}
+              style={{
+                background: DS.redBg,
+                color: DS.red,
+                border: "1px solid " + DS.redBord,
+                borderRadius: 8,
+                padding: "9px 14px",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              {t("common.delete")}
+            </button>
+          )}
+          {!isNew && isAdmin && (
+            <button
+              type="button"
               onClick={() => void toggleArchived()}
               style={{
                 background: DS.sur2,
@@ -1570,6 +1568,7 @@ function ItemModalInner({
             </button>
           )}
         </div>
+      </div>
       </div>
     </Modal>
   );

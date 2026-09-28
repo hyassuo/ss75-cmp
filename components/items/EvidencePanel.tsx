@@ -67,6 +67,18 @@ export function EvidencePanel({
   const [listErr, setListErr] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  // Local preview of the picked photo (revoked when replaced/unmounted).
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image")) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   useEffect(() => {
     onDirtyChange?.(!!file || !!desc.trim());
@@ -200,9 +212,19 @@ export function EvidencePanel({
         ai_analysis: aiResult,
       });
       if (!res.ok) {
-        // Keep the form for a retry; drop the blob we just uploaded
-        // (best-effort — the retry uploads a fresh copy).
-        if (filePath) await supabase.storage.from(BUCKET).remove([filePath]);
+        // Keep the form for a retry and drop the blob just uploaded (the
+        // retry uploads a fresh copy) — unless the insert did land and only
+        // its response was lost on the link: then the blob is in use.
+        if (filePath) {
+          const { data: landed } = await supabase
+            .from("evidences")
+            .select("id")
+            .eq("file_path", filePath)
+            .limit(1);
+          if (!landed?.length) {
+            await supabase.storage.from(BUCKET).remove([filePath]);
+          }
+        }
         setSaveErr(t("evidence.saveFailed") + " " + res.error);
         return;
       }
@@ -215,6 +237,7 @@ export function EvidencePanel({
       setAiResult(null);
       setAiErr("");
       if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
     } catch (e) {
       setSaveErr(
         t("evidence.saveFailed") + " " + (e instanceof Error ? e.message : String(e))
@@ -259,32 +282,82 @@ export function EvidencePanel({
         {/* Step 1 — attach */}
         <div style={{ marginBottom: 12 }}>
           <Label>{t("f.step1")}</Label>
+          {/* capture="environment" opens the rear camera straight away on
+              phones/tablets; the second input keeps gallery/PDF picking. */}
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFile}
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{ display: "none" }}
+          />
           <input
             ref={fileRef}
             type="file"
             accept="image/*,.pdf"
             onChange={handleFile}
+            tabIndex={-1}
+            aria-hidden="true"
             style={{ display: "none" }}
           />
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            style={{
-              ...S.inp,
-              width: "100%",
-              background: DS.sur,
-              color: file ? DS.text : DS.text3,
-              cursor: "pointer",
-              textAlign: "left",
-              fontWeight: file ? 600 : 400,
-              fontSize: 12,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {file ? file.name : t("f.choose")}
-          </button>
+          <div className="form-grid-2">
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              style={pickBtn(true)}
+            >
+              📷 {t("f.takePhoto")}
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              style={pickBtn(false)}
+            >
+              🖼 {t("f.fromGallery")}
+            </button>
+          </div>
+          {file && (
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                marginTop: 8,
+                fontSize: 12,
+                color: DS.text,
+                minWidth: 0,
+              }}
+            >
+              {preview && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={preview}
+                  alt={t("f.photoPreview")}
+                  style={{
+                    width: 72,
+                    height: 54,
+                    objectFit: "cover",
+                    borderRadius: 6,
+                    border: "1px solid " + DS.bord,
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  fontWeight: 600,
+                }}
+              >
+                {file.name}
+              </span>
+            </div>
+          )}
           {compressInfo && (
             <div style={{ fontSize: 10, color: DS.grn, marginTop: 6 }}>
               {compressInfo}
@@ -538,4 +611,18 @@ export function EvidencePanel({
       ))}
     </div>
   );
+}
+
+function pickBtn(primary: boolean): React.CSSProperties {
+  return {
+    background: primary ? DS.vio : DS.sur,
+    color: primary ? "#fff" : DS.text,
+    border: "1px solid " + (primary ? DS.vio : DS.bord),
+    borderRadius: 7,
+    minHeight: 44,
+    padding: "8px 10px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+  };
 }

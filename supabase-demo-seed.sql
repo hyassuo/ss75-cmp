@@ -9,10 +9,17 @@
 -- Includes pit-depth readings (with growth) and text evidence rows.
 -- No image files are uploaded — only metadata.
 --
--- Every row is tagged with the sentinel "[DEMO]" at the start of `notes`.
--- The block first removes anything carrying that tag (cascading to readings,
--- evidences and history) so the script is safe to re-run.
+-- Every row is tagged with the sentinel "[DEMO]" at the start of `notes`,
+-- and every item this script creates is registered in
+-- public.demo_seed_items. A re-run removes only registered items nobody has
+-- touched since (no audit event besides 'created', no reading/evidence by
+-- another user) — a real item can't be swept by typing "[DEMO]" into it.
 -- =============================================================================
+
+-- Registry of seeded items. Not exposed to the API (RLS on, no policies).
+CREATE TABLE IF NOT EXISTS public.demo_seed_items (id uuid PRIMARY KEY);
+ALTER TABLE public.demo_seed_items ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.demo_seed_items FROM anon, authenticated;
 
 DO $$
 DECLARE
@@ -33,18 +40,27 @@ BEGIN
   -- so the demo items' history — including the 'deleted' events this
   -- DELETE writes — is removed explicitly (this script runs as the table
   -- owner, which history's append-only grants don't restrict).
-  -- Only rows this seed created and nobody has touched since: the notes
-  -- marker alone is user-editable (anyone can type "[DEMO]" into a real
-  -- item's notes), so any audit event besides 'created' disqualifies it.
   CREATE TEMP TABLE demo_ids ON COMMIT DROP AS
     SELECT i.id FROM public.items i
-    WHERE i.notes LIKE '[DEMO]%' AND i.unit_id = v_unit
+    JOIN public.demo_seed_items d ON d.id = i.id
+    WHERE i.unit_id = v_unit
       AND NOT EXISTS (
         SELECT 1 FROM public.history h
         WHERE h.item_id = i.id AND h.action <> 'created'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM public.readings r
+        WHERE r.item_id = i.id AND r.created_by IS DISTINCT FROM v_admin
+          AND r.created_by IS NOT NULL
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM public.evidences e
+        WHERE e.item_id = i.id AND e.created_by IS DISTINCT FROM v_admin
+          AND e.created_by IS NOT NULL
       );
   DELETE FROM public.items WHERE id IN (SELECT id FROM demo_ids);
   DELETE FROM public.history WHERE item_ref IN (SELECT id FROM demo_ids);
+  DELETE FROM public.demo_seed_items WHERE id IN (SELECT id FROM demo_ids);
 
   -- ── Z01 Crown Level ───────────────────────────────────────────────────────
   INSERT INTO public.items (unit_id, zone_id, name, mechanism, protection,
@@ -407,6 +423,13 @@ BEGIN
     CURRENT_DATE - 130, CURRENT_DATE + 52,
     '[DEMO] ROV inspection. Umbilical termination in good condition.',
     v_admin, v_admin);
+
+  -- Register everything inserted above (created_at = this transaction's
+  -- now(), since the script runs without a JWT).
+  INSERT INTO public.demo_seed_items (id)
+  SELECT id FROM public.items
+   WHERE notes LIKE '[DEMO]%' AND unit_id = v_unit AND created_at = now()
+  ON CONFLICT DO NOTHING;
 END $$;
 
 -- Quick check

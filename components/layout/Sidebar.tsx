@@ -36,7 +36,7 @@ const ADMIN_LINKS: LinkItem[] = [
 ];
 
 export function Sidebar() {
-  const { sidebarCollapsed, tab, setTab } = useShell();
+  const { sidebarCollapsed, toggleSidebar, tab, setTab } = useShell();
   const { profile } = useData();
   const { openNewItem } = useNewItem();
   const { t } = useLang();
@@ -48,9 +48,17 @@ export function Sidebar() {
   const collapsed = sidebarCollapsed;
   const onMain = pathname === "/dashboard";
 
+  // On phones the expanded sidebar is an overlay drawer: close it once the
+  // user has picked a destination.
+  function closeDrawer() {
+    if (!collapsed && window.matchMedia("(max-width: 768px)").matches) {
+      toggleSidebar();
+    }
+  }
+
   function goTab(t: MainTab) {
     setTab(t);
-    if (!onMain) router.push("/dashboard");
+    closeDrawer();
   }
 
   async function signOut() {
@@ -103,7 +111,19 @@ export function Sidebar() {
   });
 
   return (
-    <div
+    <>
+    {!collapsed && (
+      <button
+        type="button"
+        className="sidebar-backdrop"
+        aria-label={t("common.close")}
+        onClick={toggleSidebar}
+      />
+    )}
+    <nav
+      className="app-sidebar"
+      data-collapsed={collapsed}
+      aria-label={t("nav.main")}
       style={{
         width: collapsed ? 56 : 196,
         background: DS.sbBg,
@@ -126,7 +146,9 @@ export function Sidebar() {
               key={nav.tab}
               onClick={() => goTab(nav.tab)}
               title={collapsed ? label : ""}
-              style={itemStyle(active)}
+              aria-label={collapsed ? label : undefined}
+              aria-current={active ? "page" : undefined}
+              style={{ ...itemStyle(active), minHeight: 44 }}
             >
               <span style={{ fontSize: 14, opacity: 0.85 }}>{nav.icon}</span>
               {!collapsed && <span>{label}</span>}
@@ -141,8 +163,11 @@ export function Sidebar() {
               <Link
                 key={n.href}
                 href={n.href}
+                onClick={closeDrawer}
                 title={collapsed ? label : ""}
-                style={itemStyle(active)}
+                aria-label={collapsed ? label : undefined}
+                aria-current={active ? "page" : undefined}
+                style={{ ...itemStyle(active), minHeight: 44 }}
               >
                 <span style={{ fontSize: 14, opacity: 0.85 }}>{n.icon}</span>
                 {!collapsed && <span>{label}</span>}
@@ -159,8 +184,12 @@ export function Sidebar() {
             }}
           >
             <button
-              onClick={openNewItem}
-              title={collapsed ? "New Item" : ""}
+              onClick={() => {
+                closeDrawer();
+                openNewItem();
+              }}
+              title={collapsed ? t("nav.newItem") : ""}
+              aria-label={collapsed ? t("nav.newItem") : undefined}
               style={{
                 display: "block",
                 textAlign: "center",
@@ -236,7 +265,8 @@ export function Sidebar() {
         )}
         <button
           onClick={() => void signOut()}
-          title={collapsed ? "Sign out" : ""}
+          title={collapsed ? t("nav.signOut") : ""}
+          aria-label={collapsed ? t("nav.signOut") : undefined}
           style={{
             background: "transparent",
             border: "1px solid " + DS.sbBord,
@@ -258,6 +288,7 @@ export function Sidebar() {
           {collapsed ? "⏻" : t("nav.signOut")}
         </button>
       </div>
-    </div>
+    </nav>
+    </>
   );
 }

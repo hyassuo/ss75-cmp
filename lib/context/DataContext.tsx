@@ -109,6 +109,10 @@ export function DataProvider({
   useEffect(() => {
     itemsRef.current = allItems;
   }, [allItems]);
+  // Bumped by every local write. A background refresh that started before
+  // a write would put pre-write rows back (resurrect a deleted item, drop a
+  // just-created draft, revert a save) — such a result is discarded.
+  const writeSeq = useRef(0);
 
   const replaceItem = useCallback(
     (id: string, next: ItemWithRelations | undefined) =>
@@ -129,6 +133,7 @@ export function DataProvider({
         setLoading(true);
         setError(null);
       }
+      const seqAtStart = writeSeq.current;
       const supabase = createClient();
       const [zoneRes, subareaRes, itemRes] = await Promise.all([
         supabase.from("zones").select("*").order("display_order"),
@@ -149,6 +154,9 @@ export function DataProvider({
       ]);
       const err =
         zoneRes.error?.message || subareaRes.error?.message || itemRes.error;
+      // Stale by the time it arrived: a local write happened meanwhile.
+      // (The next focus refresh will pick up remote changes.)
+      if (silent && writeSeq.current !== seqAtStart) return;
       if (err) {
         if (!silent) {
           setError(err);
@@ -178,11 +186,11 @@ export function DataProvider({
       }
       setAllItems(items);
       if (!silent) {
-        pruneItemDrafts(new Set(items.map((i) => i.id)));
+        pruneItemDrafts(profile.id, new Set(items.map((i) => i.id)));
         setLoading(false);
       }
     },
-    []
+    [profile.id]
   );
 
   useEffect(() => {
@@ -244,6 +252,7 @@ export function DataProvider({
     async (zoneId: string, name: string) => {
       const trimmed = name.trim();
       if (!trimmed) return null;
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("subareas")
@@ -274,6 +283,7 @@ export function DataProvider({
 
   const createItem = useCallback(
     async (zoneId: string, patch: Partial<Item>) => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("items")
@@ -334,7 +344,20 @@ export function DataProvider({
       patch: Partial<Item>,
       opts: { expectedUpdatedAt?: string } = {}
     ): Promise<MutationResult<ItemWithRelations>> => {
+      writeSeq.current++;
+      // Roll back only the keys this call changed: other state (a reading
+      // added a moment ago, a newer save) must survive a failed write.
       const before = itemsRef.current.find((i) => i.id === id);
+      const undo: Partial<Item> = {};
+      if (before) {
+        for (const k of Object.keys(patch) as Array<keyof Item>) {
+          (undo as Record<string, unknown>)[k] = before[k];
+        }
+      }
+      const revert = () =>
+        setAllItems((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, ...undo } : i))
+        );
       setAllItems((prev) =>
         prev.map((i) => (i.id === id ? { ...i, ...patch } : i))
       );
@@ -346,7 +369,7 @@ export function DataProvider({
       if (opts.expectedUpdatedAt) q = q.eq("updated_at", opts.expectedUpdatedAt);
       const { data, error: e } = await q.select(ITEM_SELECT);
       if (e) {
-        replaceItem(id, before);
+        revert();
         return { ok: false, error: e.message };
       }
       const rows = (data ?? []) as unknown as ItemWithRelations[];
@@ -361,7 +384,8 @@ export function DataProvider({
         const current = (cur ?? undefined) as unknown as
           | ItemWithRelations
           | undefined;
-        replaceItem(id, current ?? before);
+        // Gone: drop it from the lists (the open modal keeps its own copy).
+        replaceItem(id, current);
         if (!current) {
           return { ok: false, error: "Item not found", notFound: true };
         }
@@ -369,6 +393,19 @@ export function DataProvider({
           opts.expectedUpdatedAt &&
           current.updated_at !== opts.expectedUpdatedAt
         ) {
+          // Our own write may already have landed: on a flaky link the
+          // browser can retry a PATCH whose response was lost, and the retry
+          // then misses on the old updated_at. If the row holds exactly our
+          // values and we were the last writer, that's success, not a
+          // conflict with "someone else".
+          const mine =
+            current.updated_by === profile.id &&
+            Object.entries(patch).every(
+              ([k, v]) =>
+                JSON.stringify((current as unknown as Record<string, unknown>)[k] ?? null) ===
+                JSON.stringify(v ?? null)
+            );
+          if (mine) return { ok: true, data: current };
           return { ok: false, error: "Changed by someone else", conflict: true };
         }
         return { ok: false, error: "Update not permitted" };
@@ -392,6 +429,7 @@ export function DataProvider({
       opts: { discardDraft?: boolean } = {}
     ): Promise<MutationResult> => {
       const target = itemsRef.current.find((i) => i.id === id);
+      writeSeq.current++;
       const supabase = createClient();
       const paths = new Set<string>();
       for (const ev of target?.evidences ?? []) {
@@ -429,6 +467,7 @@ export function DataProvider({
 
   const addReading = useCallback(
     async (itemId: string, r: ReadingInput): Promise<MutationResult<Reading>> => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("readings")
@@ -451,6 +490,7 @@ export function DataProvider({
 
   const deleteReading = useCallback(
     async (id: string, itemId: string): Promise<MutationResult> => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data: gone, error: e } = await supabase
         .from("readings")
@@ -474,6 +514,7 @@ export function DataProvider({
 
   const addEvidence = useCallback(
     async (itemId: string, ev: EvidenceInput): Promise<MutationResult<Evidence>> => {
+      writeSeq.current++;
       const supabase = createClient();
       const { data, error: e } = await supabase
         .from("evidences")
@@ -503,6 +544,7 @@ export function DataProvider({
   // never leave an evidence row whose photo is already gone.
   const deleteEvidence = useCallback(
     async (id: string, itemId: string): Promise<MutationResult> => {
+      writeSeq.current++;
       const supabase = createClient();
       const evidence = itemsRef.current
         .find((i) => i.id === itemId)

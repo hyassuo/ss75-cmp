@@ -1,3 +1,4 @@
+import { DS } from "@/lib/design/tokens";
 import { describe, it, expect } from "vitest";
 import { itemScore, integrityColor, integrityLabel } from "@/lib/domain/itemScore";
 import { makeItem, makeReading } from "./helpers";
@@ -71,8 +72,8 @@ describe("integrity bands", () => {
   });
 
   it("color bands align with labels", () => {
-    expect(integrityColor(null)).toBe("#7a95b0");
-    expect(integrityColor(85)).toBe("#1e7e45");
-    expect(integrityColor(20)).toBe("#c0392b");
+    expect(integrityColor(null)).toBe(DS.text3);
+    expect(integrityColor(85)).toBe(DS.grn);
+    expect(integrityColor(20)).toBe(DS.red);
   });
 });

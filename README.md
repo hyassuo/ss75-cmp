@@ -39,11 +39,11 @@ idempotent — safe to re-run.
 | `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
 | `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
 | `supabase-hardening-4.sql` | Round-4 hardening: per-unit scoping for admins — profiles RLS, admin DELETE on items/readings/evidences/storage, and the `units` policy no longer reach other units via direct PostgREST; the shared `zones` catalog becomes read-only at runtime. |
-| `supabase-hardening-5.sql` | Round-5 hardening: authorship/timestamps server-owned (`created_at` set on insert; `created_by`/`created_at`/`unit_id` frozen on update); non-admins may delete only *pristine drafts* (the untouched stub a cancelled "New Item" leaves); the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged, name/zone/notes/IFS changes audited, `by_user` → `SET NULL`); reading/evidence deletions audited; abandoned drafts swept server-side (`discard_my_abandoned_drafts()`); **storage policies fixed** (`objects.name` was resolving to `items.name`: real uploads were denied and a crafted item name exposed other units' photos) plus narrow delete rules for discarded drafts / deleted items' files; authorship FKs `ON DELETE SET NULL`; no TRUNCATE for API roles; no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
-| `supabase-schema-v115.sql` | Upgrade for pre-1.15 DBs: `readings.depth_mm >= 0` check (added `NOT VALID`, so legacy rows don't block it). Run after `supabase-hardening-5.sql`. |
+| `supabase-hardening-5.sql` | Round-5 hardening: authorship/timestamps server-owned (`created_at` set on insert; `created_by`/`created_at`/`unit_id` frozen on update); non-admins may delete only *pristine drafts* (the untouched stub a cancelled "New Item" leaves); the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged, name/zone/notes/IFS changes audited, `by_user` → `SET NULL`); reading/evidence deletions audited; abandoned drafts swept server-side after 24 h (`discard_my_abandoned_drafts()`); item ids server-generated (no re-use of another unit's photo folder); **storage policies fixed** (`objects.name` was resolving to `items.name`: real uploads were denied and a crafted item name exposed other units' photos) plus narrow delete rules for discarded drafts / deleted items' files; authorship FKs `ON DELETE SET NULL`; no TRUNCATE for API roles; no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
+| `supabase-schema-v115.sql` | Upgrade for pre-1.15 DBs: `readings.depth_mm >= 0` and evidence photo must be in its own item's folder (both added `NOT VALID`, so legacy rows don't block them). Run after `supabase-hardening-5.sql`. |
 | `supabase-ifs-schema.sql` | IFS Equipment Register table (id, description, sece) with pg_trgm indexes for fast autocomplete. |
 | `supabase-ifs-data.sql` | TRUNCATE + INSERT of the 11,312-row IFS register. Refresh by re-running. |
-| `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. |
+| `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. Seeded ids are registered in `demo_seed_items`; a re-run only replaces registered items nobody has touched. |
 
 Fresh installs need only `supabase-setup.sql` + the IFS files — the
 `security-fixes`/`hardening*` files are already folded into it. They are
@@ -51,8 +51,11 @@ kept as the in-place upgrade path for older databases. They are idempotent,
 but the older rounds redefine some objects with weaker versions, so on an
 existing database apply them in order and finish with
 `supabase-hardening-5.sql` (re-run it whenever an older round is re-run).
-`supabase-rollback-v140.sql` is **not** part of the upgrade sequence — run
-it only to undo v140.
+`supabase-rollback-v140.sql` is **not** part of the upgrade sequence, and it
+refuses to run once round 5 is installed (round 5 depends on the v140
+columns) — restore a backup instead. Re-running `supabase-schema-v130.sql`
+reverts the v1.4 audit trigger: always re-run `supabase-schema-v140.sql`
+and then `supabase-hardening-5.sql` after it.
 
 First sign-in for `hyassuo@gmail.com` is auto-promoted to `admin`.
 All other accounts must be created by an admin via the **Users** page.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { S } from "@/lib/design/styles";
 import { Label } from "@/components/ui/Label";
 
@@ -8,15 +9,26 @@ interface TextareaProps {
   value: string;
   onChange: (v: string) => void;
   rows?: number;
+  /** Accessible name when there is no visible label. */
+  ariaLabel?: string;
 }
 
-export function Textarea({ label, value, onChange, rows = 3 }: TextareaProps) {
+export function Textarea({
+  label,
+  value,
+  onChange,
+  rows = 3,
+  ariaLabel,
+}: TextareaProps) {
+  const id = useId();
   return (
     <div style={{ marginBottom: 12 }}>
-      {label ? <Label>{label}</Label> : null}
+      {label ? <Label htmlFor={id}>{label}</Label> : null}
       <textarea
+        id={id}
         value={value || ""}
         rows={rows}
+        aria-label={label ? undefined : ariaLabel}
         onChange={(e) => onChange(e.target.value)}
         style={{
           ...S.inp,

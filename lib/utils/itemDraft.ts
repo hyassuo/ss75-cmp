@@ -3,24 +3,35 @@
 // that was typed but not saved. Per-browser convenience only — never the
 // source of truth. Every access is guarded: storage can be disabled or
 // full (private mode, quota), and the app must work without it.
+// Keyed per user: on a shared tablet one inspector must never be offered
+// (and save under their own name) another inspector's edits.
 const PREFIX = "ss75-cmp.itemDraft.";
+const key = (userId: string, itemId: string) => `${PREFIX}${userId}.${itemId}`;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ItemDraft<F> {
   form: F;
+  /** The form as loaded, before the user's edits — tells which fields
+   *  the user actually changed when the draft is restored later. */
+  baseForm: F;
   /** items.updated_at the edits were based on (for conflict detection). */
   baseUpdatedAt: string;
   savedAt: number;
 }
 
-export function loadItemDraft<F>(itemId: string): ItemDraft<F> | null {
+export function loadItemDraft<F>(
+  userId: string,
+  itemId: string
+): ItemDraft<F> | null {
   try {
-    const raw = window.localStorage.getItem(PREFIX + itemId);
+    const raw = window.localStorage.getItem(key(userId, itemId));
     if (!raw) return null;
     const d = JSON.parse(raw) as ItemDraft<F>;
-    if (!d || typeof d.savedAt !== "number" || !d.form) return null;
+    if (!d || typeof d.savedAt !== "number" || !d.form || !d.baseForm) {
+      return null;
+    }
     if (Date.now() - d.savedAt > MAX_AGE_MS) {
-      window.localStorage.removeItem(PREFIX + itemId);
+      window.localStorage.removeItem(key(userId, itemId));
       return null;
     }
     return d;
@@ -29,31 +40,41 @@ export function loadItemDraft<F>(itemId: string): ItemDraft<F> | null {
   }
 }
 
-export function saveItemDraft<F>(itemId: string, draft: ItemDraft<F>): void {
+export function saveItemDraft<F>(
+  userId: string,
+  itemId: string,
+  draft: ItemDraft<F>
+): void {
   try {
-    window.localStorage.setItem(PREFIX + itemId, JSON.stringify(draft));
+    window.localStorage.setItem(key(userId, itemId), JSON.stringify(draft));
   } catch {
     // quota / disabled — drafts are best-effort
   }
 }
 
-export function clearItemDraft(itemId: string): void {
+export function clearItemDraft(userId: string, itemId: string): void {
   try {
-    window.localStorage.removeItem(PREFIX + itemId);
+    window.localStorage.removeItem(key(userId, itemId));
   } catch {
     // ignore
   }
 }
 
-// Drop drafts for items that no longer exist (or are too old).
-export function pruneItemDrafts(liveIds: Set<string>): void {
+// Drop this user's drafts for items that no longer exist (or are too old).
+export function pruneItemDrafts(userId: string, liveIds: Set<string>): void {
   try {
     const ls = window.localStorage;
+    const mine = `${PREFIX}${userId}.`;
     const doomed: string[] = [];
     for (let i = 0; i < ls.length; i++) {
       const k = ls.key(i);
       if (!k || !k.startsWith(PREFIX)) continue;
-      const id = k.slice(PREFIX.length);
+      // Pre-v1.15.1 keys had no user segment: drop them.
+      if (!k.startsWith(mine)) {
+        if (k.slice(PREFIX.length).split(".").length === 1) doomed.push(k);
+        continue;
+      }
+      const id = k.slice(mine.length);
       let stale = !liveIds.has(id);
       if (!stale) {
         try {

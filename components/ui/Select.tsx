@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { S } from "@/lib/design/styles";
 import { Label } from "@/components/ui/Label";
 
@@ -16,10 +17,12 @@ interface SelectProps {
 }
 
 export function Select({ label, value, onChange, options }: SelectProps) {
+  const id = useId();
   return (
     <div style={{ marginBottom: 12 }}>
-      {label ? <Label>{label}</Label> : null}
+      {label ? <Label htmlFor={id}>{label}</Label> : null}
       <select
+        id={id}
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
         style={S.inp}

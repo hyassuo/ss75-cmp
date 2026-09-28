@@ -32,7 +32,9 @@ export function AuditLogTable() {
   const [user, setUser] = useState("");
   const [truncated, setTruncated] = useState(false);
   const [loadErr, setLoadErr] = useState("");
-  const { t } = useLang();
+  const { lang, t } = useLang();
+  // Excel in pt-BR expects ";" (the comma is the decimal separator).
+  const csvSep = lang === "pt" ? ";" : ",";
 
   // Date filtering runs server-side (on the user's local calendar days), so
   // older events are reachable instead of silently cut off by a row cap.
@@ -111,7 +113,7 @@ export function AuditLogTable() {
       "User",
     ];
     const csv = [
-      csvRow(headers),
+      csvRow(headers, csvSep),
       ...filtered.map((r) =>
         csvRow([
           r.event_date,
@@ -122,7 +124,7 @@ export function AuditLogTable() {
           r.new_value,
           r.note,
           r.by_user_email,
-        ])
+        ], csvSep)
       ),
     ].join("\n");
     download(

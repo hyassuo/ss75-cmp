@@ -12,6 +12,7 @@ import { isActionOpen, isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 import { effectivePriority } from "@/lib/domain/calcPriority";
+import { pressable } from "@/lib/utils/a11y";
 
 export function ItemCard({
   item,
@@ -29,7 +30,7 @@ export function ItemCard({
 
   return (
     <div
-      onClick={onClick}
+      {...pressable(onClick)}
       style={{
         background: DS.sur2,
         borderRadius: 8,
@@ -56,7 +57,7 @@ export function ItemCard({
             whiteSpace: "nowrap",
           }}
         >
-          {item.name || "(unnamed)"}
+          {item.name || t("modal.untitled")}
         </div>
         {item.ifs_obj_id && (
           <div
@@ -129,7 +130,7 @@ export function ItemCard({
           }}
         >
           {isOverdue(item.next_insp)
-            ? "OVERDUE "
+            ? tStatus("Overdue").toUpperCase() + " "
             : dd !== null && dd <= 30
               ? dd + "d → "
               : ""}

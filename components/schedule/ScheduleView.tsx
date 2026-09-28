@@ -10,13 +10,119 @@ import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
+import { useShell } from "@/lib/context/ShellContext";
 import type { ItemWithRelations } from "@/lib/types/domain";
 import { effectivePriority } from "@/lib/domain/calcPriority";
 
 type Row = ItemWithRelations & { zid: string; zname: string };
 
+function RowItem({ it, isOd }: { it: Row; isOd: boolean }) {
+const { tPriority } = useLang();
+const { openItem } = useShell();
+  const dd = daysUntil(it.next_insp) ?? 0;
+  const rt = calcRate(it.readings);
+  const rowColor = isOd
+    ? DS.red
+    : dd <= 14
+      ? DS.ora
+      : dd <= 30
+        ? DS.yel
+        : DS.text3;
+  // The whole row opens the item (drill-down from the schedule).
+  return (
+    <button
+      type="button"
+      onClick={() => openItem(it.id)}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        font: "inherit",
+        color: "inherit",
+        cursor: "pointer",
+        background: DS.sur2,
+        borderRadius: 8,
+        padding: "11px 14px",
+        marginBottom: 7,
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        flexWrap: "wrap",
+        borderLeft: "3px solid " + rowColor,
+      }}
+    >
+      <div
+        style={{
+          fontFamily: "monospace",
+          fontSize: 11,
+          color: rowColor,
+          minWidth: 80,
+        }}
+      >
+        {isOd ? `-${-dd}d` : `${dd}d`}
+      </div>
+      <div
+        style={{
+          fontFamily: "monospace",
+          fontSize: 11,
+          color: DS.blu,
+          minWidth: 34,
+        }}
+      >
+        {it.zid}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div
+          style={{ fontSize: 13, fontWeight: 700, color: DS.text }}
+        >
+          {it.name || it.id}
+        </div>
+        <div style={{ fontSize: 11, color: DS.text3 }}>
+          {it.zname} | {it.freq_insp || "-"}
+        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        {effectivePriority(it) && (
+          <Badge
+            text={tPriority(effectivePriority(it))}
+            color={PRIORITY_COLOR[effectivePriority(it)!]}
+            sm
+          />
+        )}
+        {it.sece && <Badge text="SECE" color={DS.red} sm />}
+        {it.ifs_wo && <Badge text={it.ifs_wo} color={DS.grn} sm />}
+        {rt !== null && (
+          <Badge
+            text={rt.toFixed(2) + " mm/yr"}
+            color={rateColor(rt)}
+            sm
+          />
+        )}
+      </div>
+      <div
+        style={{
+          fontFamily: "monospace",
+          fontSize: 11,
+          color: DS.text3,
+          minWidth: 72,
+          textAlign: "right",
+        }}
+      >
+        {fmt(it.next_insp)}
+      </div>
+    </button>
+  );
+}
+
 export function ScheduleView() {
-  const { t, tPriority } = useLang();
+  const { t } = useLang();
   const { zones, itemsByZone } = useData();
   const [horizon, setHorizon] = useState(90);
 
@@ -44,99 +150,6 @@ export function ScheduleView() {
     .filter((i) => isActionOverdue(i, today()))
     .sort((a, b) => (a.action_due || "").localeCompare(b.action_due || ""));
 
-  function RowItem({ it, isOd }: { it: Row; isOd: boolean }) {
-    const dd = daysUntil(it.next_insp) ?? 0;
-    const rt = calcRate(it.readings);
-    const rowColor = isOd
-      ? DS.red
-      : dd <= 14
-        ? DS.ora
-        : dd <= 30
-          ? DS.yel
-          : DS.text3;
-    return (
-      <div
-        style={{
-          background: DS.sur2,
-          borderRadius: 8,
-          padding: "11px 14px",
-          marginBottom: 7,
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
-          flexWrap: "wrap",
-          borderLeft: "3px solid " + rowColor,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "monospace",
-            fontSize: 11,
-            color: rowColor,
-            minWidth: 80,
-          }}
-        >
-          {isOd ? `-${-dd}d` : `${dd}d`}
-        </div>
-        <div
-          style={{
-            fontFamily: "monospace",
-            fontSize: 11,
-            color: DS.blu,
-            minWidth: 34,
-          }}
-        >
-          {it.zid}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div
-            style={{ fontSize: 13, fontWeight: 700, color: DS.text }}
-          >
-            {it.name || it.id}
-          </div>
-          <div style={{ fontSize: 11, color: DS.text3 }}>
-            {it.zname} | {it.freq_insp || "-"}
-          </div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 6,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          {effectivePriority(it) && (
-            <Badge
-              text={tPriority(effectivePriority(it))}
-              color={PRIORITY_COLOR[effectivePriority(it)!]}
-              sm
-            />
-          )}
-          {it.sece && <Badge text="SECE" color={DS.red} sm />}
-          {it.ifs_wo && <Badge text={it.ifs_wo} color={DS.grn} sm />}
-          {rt !== null && (
-            <Badge
-              text={rt.toFixed(2) + " mm/yr"}
-              color={rateColor(rt)}
-              sm
-            />
-          )}
-        </div>
-        <div
-          style={{
-            fontFamily: "monospace",
-            fontSize: 11,
-            color: DS.text3,
-            minWidth: 72,
-            textAlign: "right",
-          }}
-        >
-          {fmt(it.next_insp)}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -165,7 +178,7 @@ export function ScheduleView() {
               fontWeight: 600,
             }}
           >
-            {h} days
+            {h} {t("sched.days")}
           </button>
         ))}
         <div style={{ fontSize: 11, color: DS.text3, marginLeft: 8 }}>

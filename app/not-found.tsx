@@ -25,7 +25,7 @@ export default function NotFound() {
         >
           404
         </div>
-        <div style={{ fontSize: 14, color: "#7a95b0", margin: "8px 0 20px" }}>
+        <div style={{ fontSize: 14, color: "#4f677f", margin: "8px 0 20px" }}>
           Page not found
         </div>
         <Link

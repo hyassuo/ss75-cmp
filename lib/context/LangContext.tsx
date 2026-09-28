@@ -20,6 +20,9 @@ import {
 import type { EffectiveStatus, ItemPriority, ItemStatus } from "@/lib/types/domain";
 
 const STORAGE_KEY = "ss75-cmp.lang";
+// Also mirrored to a cookie so the server renders the right language (and
+// <html lang>) on the first paint — see lib/i18n/serverLang.ts.
+export const LANG_COOKIE = "ss75-cmp.lang";
 
 interface LangState {
   lang: Lang;
@@ -38,27 +41,47 @@ interface LangState {
 
 const LangContext = createContext<LangState | null>(null);
 
-export function LangProvider({ children }: { children: ReactNode }) {
-  // Initialise from localStorage so the choice survives reloads. SSR-safe
-  // because we only touch localStorage in the effect.
-  const [lang, setLangState] = useState<Lang>("en");
+function persist(l: Lang) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, l);
+  } catch {
+    // ignore
+  }
+  document.cookie = `${LANG_COOKIE}=${l}; path=/; max-age=31536000; samesite=lax`;
+}
 
+export function LangProvider({
+  children,
+  initialLang,
+}: {
+  children: ReactNode;
+  /** From the cookie, read on the server (no EN→PT flash). */
+  initialLang?: Lang | null;
+}) {
+  const [lang, setLangState] = useState<Lang>(initialLang ?? "en");
+
+  // Browsers from before the cookie existed only have localStorage.
   useEffect(() => {
+    if (initialLang) return;
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored === "en" || stored === "pt") setLangState(stored);
+      if (stored === "en" || stored === "pt") {
+        setLangState(stored);
+        persist(stored);
+      }
     } catch {
       // Storage disabled (private mode) — just stick with the EN default.
     }
-  }, []);
+  }, [initialLang]);
+
+  // Keep <html lang> in sync for screen readers, hyphenation and spelling.
+  useEffect(() => {
+    document.documentElement.lang = lang === "pt" ? "pt-BR" : "en";
+  }, [lang]);
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, l);
-    } catch {
-      // ignore
-    }
+    persist(l);
   }, []);
 
   const t = useCallback(
