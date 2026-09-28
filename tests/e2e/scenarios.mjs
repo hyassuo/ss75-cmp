@@ -1575,7 +1575,7 @@ async function main() {
     });
     c.step(`alertdialog: ${JSON.stringify(a)}`);
     c.expect(a.role === "alertdialog" && a.modal === "true", "role=alertdialog, aria-modal=true", a);
-    c.expect(a.name === "Discard your unsaved changes?" && a.desc === a.name, "accessible name/description = the message", a);
+    c.expect(a.name === "Confirm" && a.desc === "Discard your unsaved changes?", "accessible name = title, description = the message", a);
     c.expect(a.focusInside && a.focus === "Cancel", "focus starts on Cancel", a.focus);
     c.expect(JSON.stringify(a.buttons) === JSON.stringify(["Cancel", "Discard"]), "buttons Cancel / Discard", a.buttons);
     const onTop = await page.evaluate(() => {
@@ -1651,26 +1651,30 @@ async function main() {
     await page.context().close();
   });
 
-  await run("v3", "Export tab (lazy chunk) + XLSX with lazy SheetJS; failure -> error toast, no alert()", async (c) => {
+  await run("v3", "Export tab + SheetJS prefetched when idle (usable offline); failure -> error toast, no alert()", async (c) => {
     const page = await newPage(c, "admin1");
     const js = [];
     page.on("request", (r) => { if (r.url().includes("/_next/static/chunks/")) js.push({ t: Date.now(), u: r.url().replace(APP, "") }); });
     await login(page, "admin1@test.local");
-    await page.waitForTimeout(1000);
+    const tIdle = Date.now();
+    await page.waitForTimeout(4000);
+    const idleChunks = js.filter((x) => x.t >= tIdle).map((x) => x.u);
+    c.step(`chunks prefetched after the first screen: ${idleChunks.length}`);
+    c.expect(idleChunks.length > 0, "tab chunks + SheetJS are prefetched after the first screen", idleChunks);
     const t0 = Date.now();
     await gotoTab(page, "Export");
     const xbtn = page.getByRole("button", { name: /Export XLSX/ }).first();
     await xbtn.waitFor({ timeout: 15000 });
     const tabChunks = js.filter((x) => x.t >= t0).map((x) => x.u);
     c.step(`chunks loaded on opening Export: ${tabChunks.length}`);
-    c.expect(tabChunks.length > 0, "Export tab code is loaded on demand", tabChunks);
+    c.expect(tabChunks.length === 0, "opening Export needs no download (prefetched)", tabChunks);
     const t1 = Date.now();
     const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), xbtn.click()]);
     const x = path.join(ART, "v3-export.xlsx");
     await dl.saveAs(x);
     const clickChunks = js.filter((q2) => q2.t >= t1).map((q2) => q2.u);
     c.step(`chunks loaded on clicking Export XLSX: ${JSON.stringify(clickChunks)}`);
-    c.expect(clickChunks.length > 0, "SheetJS chunk fetched only when exporting", clickChunks);
+    c.expect(clickChunks.length === 0, "exporting needs no download (SheetJS prefetched)", clickChunks);
     const wb = XLSX.read(fs.readFileSync(x));
     c.expect(["Items", "Readings", "Evidences", "Change Log"].every((n) => wb.SheetNames.includes(n)), "workbook has all 4 sheets", wb.SheetNames);
     // Failure path: history query rejected -> error toast (was window.alert).
