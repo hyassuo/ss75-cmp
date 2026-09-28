@@ -2,6 +2,7 @@
 
 import { DS } from "@/lib/design/tokens";
 import type { AIAnalysis } from "@/lib/types/domain";
+import { useLang } from "@/lib/context/LangContext";
 
 interface Props {
   result: AIAnalysis;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function AIResultCard({ result: r, onApply }: Props) {
+  const { t } = useLang();
   const actClr =
     r.immediateAction === "Urgent Treatment Required"
       ? DS.red
@@ -73,13 +75,13 @@ export function AIResultCard({ result: r, onApply }: Props) {
         style={{ marginBottom: 10 }}
       >
         <div style={tile(DS.bord)}>
-          <div style={cap}>Type</div>
+          <div style={cap}>{t("ai.type")}</div>
           <div style={{ fontSize: 12, fontWeight: 700, color: DS.text }}>
             {r.corrosionType}
           </div>
         </div>
         <div style={tile(DS.bord)}>
-          <div style={cap}>Prob</div>
+          <div style={cap}>{t("ai.prob")}</div>
           <div
             style={{
               fontSize: 16,
@@ -92,7 +94,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
           </div>
         </div>
         <div style={tile(DS.bord)}>
-          <div style={cap}>Cons</div>
+          <div style={cap}>{t("ai.cons")}</div>
           <div
             style={{
               fontSize: 16,
@@ -105,7 +107,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
           </div>
         </div>
         <div style={tile(actClr + "50")}>
-          <div style={cap}>Action</div>
+          <div style={cap}>{t("ai.action")}</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: actClr }}>
             {r.immediateAction}
           </div>
@@ -116,7 +118,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
         style={{ marginBottom: 10 }}
       >
         <div style={tile(DS.bord)}>
-          <div style={cap}>Area Affected</div>
+          <div style={cap}>{t("ai.area")}</div>
           <div
             style={{
               fontSize: 18,
@@ -131,7 +133,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
         </div>
         {r.pitDepthEstMM > 0 && (
           <div style={tile(DS.bord)}>
-            <div style={cap}>Est. Pit Depth</div>
+            <div style={cap}>{t("ai.pitDepth")}</div>
             <div
               style={{
                 fontSize: 18,

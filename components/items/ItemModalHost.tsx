@@ -19,21 +19,24 @@ export function ItemModalHost() {
     closeItem,
     closingIntentionally,
   } = useShell();
-  const { allItems, zones, loading } = useData();
+  const { allItems, zones, loading, profile } = useData();
   const [shown, setShown] = useState<Shown | null>(null);
   const guard = useRef<(() => Promise<boolean>) | null>(null);
   const seen = useRef(new Set<string>());
 
   useEffect(() => {
     if (openItemId) {
-      setShown((s) =>
-        s && s.id === openItemId ? s : { id: openItemId, isNew: openItemIsNew }
-      );
+      setShown((s) => {
+        if (s && s.id === openItemId) return s;
+        seen.current = new Set(); // "seen" is per opening
+        return { id: openItemId, isNew: openItemIsNew };
+      });
       return;
     }
     if (!shown) return;
     if (closingIntentionally.current) {
       closingIntentionally.current = false;
+      guard.current = null;
       setShown(null);
       return;
     }
@@ -41,8 +44,12 @@ export function ItemModalHost() {
     const current = shown;
     void (async () => {
       const ok = guard.current ? await guard.current() : true;
-      if (ok) setShown(null);
-      else openItem(current.id, { isNew: current.isNew });
+      if (ok) {
+        guard.current = null;
+        setShown(null);
+      } else {
+        openItem(current.id, { isNew: current.isNew });
+      }
     })();
     // React only to URL changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,6 +68,14 @@ export function ItemModalHost() {
   }, [shown, loading, item, closeItem, closingIntentionally]);
 
   if (!shown) return null;
+  // "&new=1" in the URL is only a hint (it survives in history and in
+  // copied links). Only a stub that is still unnamed and ours is treated as
+  // a new draft — Cancel on a *saved* item must never delete it.
+  const isNew =
+    shown.isNew &&
+    !!item &&
+    item.name === "Untitled" &&
+    item.created_by === profile.id;
   const zoneName =
     zones.find((z) => z.zid === item?.zone_id)?.name ?? item?.zone_id ?? "";
   return (
@@ -68,7 +83,7 @@ export function ItemModalHost() {
       key={shown.id}
       itemId={shown.id}
       zoneName={zoneName}
-      isNew={shown.isNew}
+      isNew={isNew}
       onClose={closeItem}
       registerCloseGuard={(fn) => {
         guard.current = fn;

@@ -357,7 +357,7 @@ export function RiskMatrix() {
             return (
               <div
                 key={it.id}
-                {...pressable(() => openItem(it.id), it.name)}
+                {...pressable(() => openItem(it.id))}
                 style={{
                   background: DS.sur2,
                   borderRadius: 8,

@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { safeNext } from "@/lib/utils/safeNext";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
@@ -11,6 +12,7 @@ import { useLang } from "@/lib/context/LangContext";
 
 export function LoginForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
@@ -40,13 +42,13 @@ export function LoginForm() {
       setErr(
         /invalid login credentials/i.test(error.message)
           ? t("login.invalid")
-          : /fetch|network/i.test(error.message)
+          : /fetch|network|load failed/i.test(error.message)
             ? t("login.network")
             : error.message || t("login.invalid")
       );
       return;
     }
-    router.replace("/dashboard");
+    router.replace(safeNext(params.get("next")));
     router.refresh();
   }
 

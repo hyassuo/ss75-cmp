@@ -627,8 +627,18 @@ function ItemModalInner({
 
   // May the modal close? Asks before throwing work away and, for a new
   // item, deletes the draft row. Shared by Cancel, ×, Escape and Back.
+  const closing = useRef(false);
   async function confirmDiscard(): Promise<boolean> {
-    if (saving) return false;
+    // One close at a time: Cancel still deleting a draft while Back fires
+    // must not run the checks (and the navigation) twice.
+    if (saving || closing.current) return false;
+    closing.current = true;
+    const ok = await confirmDiscardOnce();
+    closing.current = false;
+    return ok;
+  }
+
+  async function confirmDiscardOnce(): Promise<boolean> {
     if (isNew) {
       // Readings and photos are stored the moment they're added, so
       // discarding a new item deletes them too — say so first.
@@ -1384,7 +1394,7 @@ function ItemModalInner({
             <button
               type="button"
               onClick={() => setPendingAiReading(null)}
-              aria-label="Discard AI reading"
+              aria-label={t("modal.discardAiReading")}
               style={{
                 background: "none",
                 border: "none",

@@ -204,7 +204,7 @@ export function AuditLogTable() {
           onChange={(e) => setAction(e.target.value)}
           style={filterStyle}
         >
-          <option value="">All actions</option>
+          <option value="">{t("audit.allActions")}</option>
           {actions.map((a) => (
             <option key={a} value={a}>
               {a.replace(/_/g, " ")}
@@ -216,7 +216,7 @@ export function AuditLogTable() {
           onChange={(e) => setUser(e.target.value)}
           style={filterStyle}
         >
-          <option value="">All users</option>
+          <option value="">{t("audit.allUsers")}</option>
           {users.map((u) => (
             <option key={u} value={u}>
               {u}
