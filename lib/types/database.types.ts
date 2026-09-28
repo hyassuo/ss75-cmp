@@ -254,7 +254,10 @@ export interface Database {
       history: {
         Row: {
           id: string;
-          item_id: string;
+          item_id: string | null;
+          item_ref: string | null;
+          item_name: string | null;
+          unit_id: string | null;
           event_date: string;
           action: string;
           field_changed: string | null;
@@ -266,7 +269,10 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          item_id: string;
+          item_id?: string | null;
+          item_ref?: string | null;
+          item_name?: string | null;
+          unit_id?: string | null;
           event_date?: string;
           action: string;
           field_changed?: string | null;

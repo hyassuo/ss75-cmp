@@ -193,10 +193,17 @@ CREATE TABLE IF NOT EXISTS public.evidences (
 );
 CREATE INDEX IF NOT EXISTS idx_evidences_item ON public.evidences(item_id);
 
--- history: granular audit log
+-- history: granular, append-only audit log. It must outlive the items it
+-- describes (hardening round 5): item_id is SET NULL when the item is
+-- deleted, while item_ref / item_name / unit_id keep a snapshot of the item's
+-- identity so the rows stay attributable and visible to their unit.
 CREATE TABLE IF NOT EXISTS public.history (
   id            uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-  item_id       uuid NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
+  item_id       uuid REFERENCES public.items(id) ON DELETE SET NULL,
+  item_ref      uuid,
+  item_name     text,
+  -- No ON DELETE action: a unit that still has audit history can't be deleted.
+  unit_id       uuid REFERENCES public.units(id),
   event_date    timestamptz DEFAULT now(),
   action        text NOT NULL,
   field_changed text,
@@ -206,8 +213,27 @@ CREATE TABLE IF NOT EXISTS public.history (
   by_user       uuid REFERENCES public.profiles(id),
   by_user_email text
 );
+-- Upgrade path for pre-round-5 databases (no-ops on a fresh install).
+ALTER TABLE public.history ADD COLUMN IF NOT EXISTS item_ref  uuid;
+ALTER TABLE public.history ADD COLUMN IF NOT EXISTS item_name text;
+ALTER TABLE public.history ADD COLUMN IF NOT EXISTS unit_id   uuid REFERENCES public.units(id);
+UPDATE public.history h
+SET item_ref  = COALESCE(h.item_ref, h.item_id),
+    item_name = COALESCE(h.item_name, i.name),
+    unit_id   = COALESCE(h.unit_id, i.unit_id)
+FROM public.items i
+WHERE i.id = h.item_id
+  AND (h.item_ref IS NULL OR h.item_name IS NULL OR h.unit_id IS NULL);
+ALTER TABLE public.history ALTER COLUMN item_id DROP NOT NULL;
+ALTER TABLE public.history DROP CONSTRAINT IF EXISTS history_item_id_fkey;
+ALTER TABLE public.history
+  ADD CONSTRAINT history_item_id_fkey
+  FOREIGN KEY (item_id) REFERENCES public.items(id) ON DELETE SET NULL;
+
 CREATE INDEX IF NOT EXISTS idx_history_item ON public.history(item_id);
 CREATE INDEX IF NOT EXISTS idx_history_date ON public.history(event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_history_unit ON public.history(unit_id);
+CREATE INDEX IF NOT EXISTS idx_history_item_ref ON public.history(item_ref);
 
 
 -- =============================================================================
@@ -379,8 +405,75 @@ CREATE TRIGGER trg_audit_items
   AFTER INSERT OR UPDATE ON public.items
   FOR EACH ROW EXECUTE FUNCTION public.audit_item_changes();
 
+-- Snapshot the item's identity on every audit row so it stays attributable
+-- (and visible to its unit) after the item is gone.
+CREATE OR REPLACE FUNCTION public.history_fill_snapshot()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.item_ref := COALESCE(NEW.item_ref, NEW.item_id);
+  IF NEW.item_id IS NOT NULL AND (NEW.unit_id IS NULL OR NEW.item_name IS NULL) THEN
+    SELECT COALESCE(NEW.unit_id, i.unit_id), COALESCE(NEW.item_name, i.name)
+      INTO NEW.unit_id, NEW.item_name
+      FROM public.items i
+     WHERE i.id = NEW.item_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_history_snapshot ON public.history;
+CREATE TRIGGER trg_history_snapshot
+  BEFORE INSERT ON public.history
+  FOR EACH ROW EXECUTE FUNCTION public.history_fill_snapshot();
+
+-- Record every item deletion (hardening round 5). Runs BEFORE DELETE so the
+-- row (and its readings/evidences) still exist to be counted and referenced.
+CREATE OR REPLACE FUNCTION public.audit_item_delete()
+RETURNS TRIGGER AS $$
+DECLARE
+  uid        uuid := auth.uid();
+  user_email text;
+  n_readings int;
+  n_evidences int;
+BEGIN
+  -- A cancelled "New Item" draft: never named, fresh, and nothing but the
+  -- 'created' event on record. Drop that event instead of logging noise.
+  -- created_at is immutable (enforce_author), so an old item cannot be
+  -- made to look like a draft.
+  IF OLD.name = 'Untitled'
+     AND OLD.created_at > now() - interval '24 hours'
+     AND NOT EXISTS (
+       SELECT 1 FROM public.history
+       WHERE item_id = OLD.id AND action <> 'created'
+     )
+  THEN
+    DELETE FROM public.history WHERE item_id = OLD.id;
+    RETURN OLD;
+  END IF;
+
+  SELECT email INTO user_email FROM public.profiles WHERE id = uid;
+  SELECT count(*) INTO n_readings  FROM public.readings  WHERE item_id = OLD.id;
+  SELECT count(*) INTO n_evidences FROM public.evidences WHERE item_id = OLD.id;
+
+  INSERT INTO public.history
+    (item_id, item_ref, item_name, unit_id, action, by_user, by_user_email, note)
+  VALUES
+    (OLD.id, OLD.id, OLD.name, OLD.unit_id, 'deleted', uid, user_email,
+     format('Item deleted (%s readings, %s evidences removed)',
+            n_readings, n_evidences));
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS trg_audit_items_delete ON public.items;
+CREATE TRIGGER trg_audit_items_delete
+  BEFORE DELETE ON public.items
+  FOR EACH ROW EXECUTE FUNCTION public.audit_item_delete();
+
 -- Server-enforced authorship: created_by/updated_by always reflect the JWT,
 -- never a client-supplied value (service-role writes pass through unchanged).
+-- On UPDATE, created_by/created_at/unit_id are frozen (hardening round 5):
+-- otherwise an inspector could claim any item and pass items_delete_creator.
 CREATE OR REPLACE FUNCTION public.enforce_author()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -390,6 +483,11 @@ BEGIN
     END IF;
     IF TG_TABLE_NAME = 'items' THEN
       NEW.updated_by := auth.uid();
+      IF TG_OP = 'UPDATE' THEN
+        NEW.created_by := OLD.created_by;
+        NEW.created_at := OLD.created_at;
+        NEW.unit_id    := OLD.unit_id;
+      END IF;
     END IF;
   END IF;
   RETURN NEW;
@@ -526,22 +624,18 @@ CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
 DROP POLICY IF EXISTS "profiles_update_self" ON public.profiles;
 CREATE POLICY "profiles_update_self" ON public.profiles
   FOR UPDATE TO authenticated USING (id = auth.uid());
+-- No admin write policy (hardening round 5): a FOR ALL admin policy let an
+-- admin INSERT/DELETE profiles via direct PostgREST, bypassing the "last
+-- admin" / "no self-delete" guards of the /api/users routes. Admin
+-- visibility comes from profiles_select_self_or_admin above.
 DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
-CREATE POLICY "profiles_admin_all" ON public.profiles
-  FOR ALL TO authenticated
-  USING (
-    public.current_user_role() = 'admin'
-    AND unit_id = public.current_user_unit()
-  )
-  WITH CHECK (
-    public.current_user_role() = 'admin'
-    AND unit_id = public.current_user_unit()
-  );
 
 -- Column-level guard: without this, profiles_update_self would let any user
--- set their own role/active (privilege escalation). role/active/unit_id are
--- managed only via the admin API routes (service role).
-REVOKE UPDATE ON public.profiles FROM authenticated;
+-- set their own role/active (privilege escalation). role/active/unit_id —
+-- and creating/deleting profiles — are managed only via the admin API
+-- routes (service role).
+REVOKE UPDATE ON public.profiles FROM authenticated, anon;
+REVOKE INSERT, DELETE, TRUNCATE ON public.profiles FROM authenticated, anon;
 GRANT UPDATE (full_name, dept) ON public.profiles TO authenticated;
 
 -- zones
@@ -600,11 +694,14 @@ CREATE POLICY "items_delete_admin" ON public.items
     public.current_user_role() = 'admin'
     AND unit_id = public.current_user_unit()
   );
--- Creators may delete their own items (needed for discarding new-item drafts).
+-- Creators may delete only their own fresh, never-named drafts (needed for
+-- discarding a cancelled "New Item"). Deleting a real item is admin-only.
 DROP POLICY IF EXISTS "items_delete_creator" ON public.items;
 CREATE POLICY "items_delete_creator" ON public.items
   FOR DELETE TO authenticated USING (
     created_by = auth.uid()
+    AND name = 'Untitled'
+    AND created_at > now() - interval '24 hours'
     AND public.current_user_role() IN ('admin', 'inspector')
     AND unit_id = public.current_user_unit()
   );
@@ -663,12 +760,15 @@ CREATE POLICY "evidences_delete_admin" ON public.evidences
     )
   );
 
--- history (read-only audit; written only by trigger)
+-- history (read-only audit; written only by triggers). Scoped by the unit
+-- snapshot so events of deleted items stay visible to their unit.
 DROP POLICY IF EXISTS "history_select_unit" ON public.history;
 CREATE POLICY "history_select_unit" ON public.history
   FOR SELECT TO authenticated USING (
-    EXISTS (SELECT 1 FROM public.items WHERE items.id = history.item_id AND items.unit_id = public.current_user_unit())
+    unit_id = public.current_user_unit()
+    OR EXISTS (SELECT 1 FROM public.items WHERE items.id = history.item_id AND items.unit_id = public.current_user_unit())
   );
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.history FROM authenticated, anon;
 
 
 -- =============================================================================

@@ -266,7 +266,10 @@ export function ExportTab() {
         wb,
         XLSX.utils.json_to_sheet(
           history.map((h) => ({
-            Item: nameById.get(h.item_id)?.name ?? h.item_id,
+            Item:
+              (h.item_id && nameById.get(h.item_id)?.name) ??
+              h.item_name ??
+              h.item_id,
             Date: h.event_date,
             Action: h.action,
             Field: h.field_changed ?? "",

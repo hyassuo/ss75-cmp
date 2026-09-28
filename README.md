@@ -39,14 +39,19 @@ idempotent — safe to re-run.
 | `supabase-hardening.sql` | Round-2 hardening: rogue-signup neutralisation (new profiles inactive); profiles SELECT limited to self + admins. |
 | `supabase-hardening-3.sql` | Round-3 hardening: `WITH CHECK` on item updates (no silent unit transfers); storage uploads must target an item in the user's unit. |
 | `supabase-hardening-4.sql` | Round-4 hardening: per-unit scoping for admins — profiles RLS, admin DELETE on items/readings/evidences/storage, and the `units` policy no longer reach other units via direct PostgREST; the shared `zones` catalog becomes read-only at runtime. |
+| `supabase-hardening-5.sql` | Round-5 hardening: `created_by`/`created_at`/`unit_id` immutable on item updates; creators may delete only fresh `Untitled` drafts; the audit trail survives item deletion (`history.item_id` → `ON DELETE SET NULL` + `item_ref`/`item_name`/`unit_id` snapshot, `deleted` events logged); no INSERT/DELETE on `profiles` via PostgREST; shared `ifs_objects` read-only at runtime. **Run it last** — re-running `security-fixes` / `hardening-4` reverts part of it. |
 | `supabase-ifs-schema.sql` | IFS Equipment Register table (id, description, sece) with pg_trgm indexes for fast autocomplete. |
 | `supabase-ifs-data.sql` | TRUNCATE + INSERT of the 11,312-row IFS register. Refresh by re-running. |
 | `supabase-demo-seed.sql` *(optional)* | ~25 demo items tagged `[DEMO]` for showcasing the dashboard / risk matrix / schedule. |
 
 Fresh installs need only `supabase-setup.sql` + the IFS files — the
 `security-fixes`/`hardening*` files are already folded into it. They are
-kept as the in-place upgrade path for databases created before v1.13 and
-re-run safely (idempotent).
+kept as the in-place upgrade path for older databases. They are idempotent,
+but the older rounds redefine some objects with weaker versions, so on an
+existing database apply them in order and finish with
+`supabase-hardening-5.sql` (re-run it whenever an older round is re-run).
+`supabase-rollback-v140.sql` is **not** part of the upgrade sequence — run
+it only to undo v140.
 
 First sign-in for `hyassuo@gmail.com` is auto-promoted to `admin`.
 All other accounts must be created by an admin via the **Users** page.

@@ -32,7 +32,13 @@ export function AuditLogTable() {
       >) ?? [];
       if (active) {
         setRows(
-          raw.map((r) => ({ ...r, itemName: r.items?.name ?? r.item_id }))
+          raw.map((r) => ({
+            ...r,
+            // item_id is NULL once the item is deleted; fall back to the
+            // name snapshot kept on the audit row.
+            itemName:
+              r.items?.name ?? r.item_name ?? r.item_ref ?? r.item_id ?? "—",
+          }))
         );
         setLoading(false);
       }

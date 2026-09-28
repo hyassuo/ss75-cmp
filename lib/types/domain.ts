@@ -131,7 +131,13 @@ export interface Evidence {
 
 export interface HistoryEntry {
   id: string;
-  item_id: string;
+  /** NULL once the item has been deleted — see item_ref / item_name. */
+  item_id: string | null;
+  /** Original item id, kept after the item is deleted. */
+  item_ref: string | null;
+  /** Item name at the time of the event. */
+  item_name: string | null;
+  unit_id: string | null;
   event_date: string;
   action: string;
   field_changed: string | null;
