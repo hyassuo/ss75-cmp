@@ -8,6 +8,7 @@ import { fmt } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, UserRole } from "@/lib/types/domain";
 import { useFeedback } from "@/lib/context/FeedbackContext";
+import { useLang } from "@/lib/context/LangContext";
 
 const ROLES: UserRole[] = ["admin", "inspector", "viewer"];
 const ROLE_COLOR: Record<UserRole, string> = {
@@ -18,6 +19,7 @@ const ROLE_COLOR: Record<UserRole, string> = {
 
 export function UserTable({ currentUserId }: { currentUserId: string }) {
   const { confirm } = useFeedback();
+  const { t } = useLang();
   const [rows, setRows] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
@@ -316,7 +318,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                               if (
                                 await confirm({
                                   message: `Delete user ${u.email}? This permanently removes the account and cannot be undone.`,
-                                  confirmLabel: "Delete",
+                                  confirmLabel: t("common.delete"),
                                   danger: true,
                                 })
                               ) {

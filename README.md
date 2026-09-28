@@ -59,26 +59,36 @@ bootstrap account); every other account is created by an admin on the
 
 ### Existing database (created before the baseline)
 
-Run, in the SQL Editor, after downloading a snapshot
-(`supabase/ops/backup-snapshot.sql`):
+Download a snapshot first (`supabase/ops/backup-snapshot.sql`), then run
+the files of `supabase/upgrades/` in the SQL Editor, starting from the
+version the database is at (all idempotent):
 
-1. `supabase/upgrades/hardening-5.sql` — security round 5 (authorship,
-   audit trail that survives deletion, storage-policy fix, server-side
-   draft sweep, …; details in its header). If you ever re-run an older
-   round (`security-fixes`, `hardening*`, `schema-v130/140`), re-run this
-   one afterwards — older rounds redefine some objects with weaker
-   versions.
-2. `supabase/upgrades/schema-v115.sql` — data checks (non-negative pit
-   depth, evidence photo in its own item folder).
-3. `supabase/migrations/20260928000100_ifs_register.sql` — re-run to make
-   the IFS register read-only at runtime.
+| From | Run, in order |
+|------|---------------|
+| before v1.3 | `schema-v130.sql` → `schema-v140.sql` → `security-fixes.sql` → `hardening.sql` → `hardening-3.sql` → `hardening-4.sql` → `hardening-5.sql` → `schema-v115.sql` |
+| v1.3 – v1.13 | `schema-v140.sql` → `security-fixes.sql` → `hardening.sql` → `hardening-3.sql` → `hardening-4.sql` → `hardening-5.sql` → `schema-v115.sql` |
+| v1.14 (this repo before v1.14.1) | `hardening-5.sql` → `schema-v115.sql` |
+
+then re-run `supabase/migrations/20260928000100_ifs_register.sql` (makes the
+IFS register read-only at runtime).
+
+- `hardening-5.sql` is security round 5 (authorship, an audit trail that
+  survives deletion, the storage-policy fix, the server-side draft sweep —
+  details in its header). It depends on the v1.4 columns. If you ever
+  re-run an older file (`security-fixes`, `hardening*`, `schema-v130/140`),
+  re-run `hardening-5.sql` afterwards: older rounds redefine some objects
+  with weaker versions.
+- `rollback-v140.sql` refuses to run under round 5 — restore a backup
+  instead.
 
 Then adopt the migration history once, so `supabase db push` only applies
-future migrations:
-`supabase migration repair --status applied 20260928000000 20260928000100`.
+future migrations, and check for drift:
 
-`supabase/upgrades/rollback-v140.sql` refuses to run under round 5 (round 5
-depends on the v1.4 columns) — restore a backup instead.
+```
+supabase link --project-ref <ref>
+supabase migration repair --status applied 20260928000000 20260928000100
+supabase db diff --linked   # should report no schema differences
+```
 
 ### Schema changes from now on
 
@@ -100,14 +110,26 @@ item modal copies when an Object is selected.
 - **Point-in-time recovery**: enable PITR in Supabase (paid add-on) for
   minute-level restores of the database.
 - **Daily off-site copy** — `.github/workflows/backup.yml` runs
-  `scripts/backup.sh`: `pg_dump` (public, auth, storage schemas) plus every
-  file of the `evidence-photos` bucket, packed and encrypted with
-  [age](https://age-encryption.org) and kept as a workflow artifact for 30
+  `scripts/backup.sh`: a restorable data dump (`data.sql`), a full
+  custom-format dump (`database.dump`, forensic) and every file of the
+  `evidence-photos` bucket, packed and encrypted with
+  [age](https://age-encryption.org), kept as a workflow artifact for 30
   days. It is off until you set the repository variable
-  `BACKUP_ENABLED=true` and the secrets `SUPABASE_DB_URL`, `SUPABASE_URL`,
-  `SUPABASE_SERVICE_ROLE_KEY` and `BACKUP_AGE_RECIPIENT` (an age *public*
-  key — keep the private key offline; it is the only way to restore:
-  `age -d -i key.txt backup.tar.gz.age | tar xz`, then `pg_restore`).
+  `BACKUP_ENABLED=true` and the secrets `SUPABASE_DB_URL` (the **session
+  pooler** connection string — the direct `db.<ref>` host is IPv6-only and
+  GitHub runners have no IPv6), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+  and `BACKUP_AGE_RECIPIENT` (an age *public* key — keep the private key
+  offline; it is the only way to restore).
+
+**Restore** (into a new or emptied project; rehearse it once):
+
+1. `age -d -i key.txt ss75-backup-….tar.gz.age | tar xz`
+2. Create the schema: `supabase link --project-ref <ref> && supabase db push`.
+3. `psql "<session pooler URL>" -f ss75-backup-…/data.sql` — data only,
+   loaded with triggers off (`session_replication_role = replica`), so
+   authorship/audit triggers neither rewrite nor duplicate history.
+4. `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/restore-storage.mjs ss75-backup-…/storage`
+   re-uploads the photos to the same paths.
 
 ## Tests
 

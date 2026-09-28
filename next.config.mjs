@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 // CSP tuned for Next.js App Router + Supabase + Gemini:
 // - inline styles are used throughout the design system -> style-src allows them
 // - Next injects inline bootstrap scripts -> script-src allows 'unsafe-inline'
@@ -32,8 +34,6 @@ const securityHeaders = [
     value: "camera=(), microphone=(), geolocation=()",
   },
 ];
-
-import { readFileSync } from "node:fs";
 
 // Only the version reaches the client bundle (importing package.json in a
 // client component would ship the whole dependency list).

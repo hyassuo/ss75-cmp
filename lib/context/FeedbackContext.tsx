@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -69,6 +70,18 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setToasts((ts) => ts.filter((x) => x.id !== id)), 4000);
   }, []);
 
+  // A pending question is answered "no" when the page navigates (Back on
+  // a phone closes the item modal the question was about) or the provider
+  // unmounts (idle sign-out) — never left open over a different screen or
+  // awaited forever.
+  useEffect(() => {
+    if (!pending) return;
+    const cancel = () => answer(false);
+    window.addEventListener("popstate", cancel);
+    return () => window.removeEventListener("popstate", cancel);
+  }, [pending, answer]);
+  useEffect(() => () => resolver.current?.(false), []);
+
   const value = useMemo(() => ({ confirm, toast }), [confirm, toast]);
 
   return (
@@ -122,15 +135,19 @@ function ConfirmDialog({
 }) {
   const { t } = useLang();
   const msgId = useId();
+  const titleId = useId();
   // Escape means "no".
   return (
     <Modal
       size="compact"
       role="alertdialog"
-      labelledBy={msgId}
+      labelledBy={titleId}
       describedBy={msgId}
       onEscape={() => onAnswer(false)}
     >
+      <h2 id={titleId} className="sr-only">
+        {t("common.confirm")}
+      </h2>
       <p
         id={msgId}
         style={{ fontSize: 15, color: DS.text, margin: "4px 0 20px", lineHeight: 1.5 }}

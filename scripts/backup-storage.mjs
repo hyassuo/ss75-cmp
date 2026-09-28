@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Downloads every object of the evidence-photos bucket into <outDir>,
-// preserving the {item_id}/{file} layout. Used by scripts/backup.sh.
-// Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Node 20+ (global fetch).
+// preserving paths (normally {item_id}/{file}; any depth is handled).
+// Used by scripts/backup.sh. Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -15,14 +15,30 @@ if (!outDir || !base || !key) {
 }
 const headers = { apikey: key, Authorization: `Bearer ${key}` };
 
+// Transient 5xx / network errors are retried; anything else fails the run.
+async function withRetry(what, fn) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const r = await fn();
+      if (r.ok || (r.status < 500 && r.status !== 429)) return r;
+      if (attempt >= 4) return r;
+    } catch (e) {
+      if (attempt >= 4) throw new Error(`${what}: ${e.message}`);
+    }
+    await new Promise((res) => setTimeout(res, 1000 * 2 ** attempt));
+  }
+}
+
 async function list(prefix) {
   const out = [];
   for (let offset = 0; ; offset += 1000) {
-    const r = await fetch(`${base}/storage/v1/object/list/${BUCKET}`, {
-      method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify({ prefix, limit: 1000, offset, sortBy: { column: "name", order: "asc" } }),
-    });
+    const r = await withRetry(`list ${prefix}`, () =>
+      fetch(`${base}/storage/v1/object/list/${BUCKET}`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix, limit: 1000, offset, sortBy: { column: "name", order: "asc" } }),
+      })
+    );
     if (!r.ok) throw new Error(`list ${prefix}: ${r.status} ${await r.text()}`);
     const page = await r.json();
     out.push(...page);
@@ -32,15 +48,16 @@ async function list(prefix) {
 
 let files = 0;
 let bytes = 0;
-// Top level holds one folder per item (entries without an id are folders).
-for (const folder of await list("")) {
-  if (folder.id) continue;
-  for (const obj of await list(folder.name + "/")) {
-    if (!obj.id) continue;
-    const rel = `${folder.name}/${obj.name}`;
-    const r = await fetch(
-      `${base}/storage/v1/object/${BUCKET}/${rel.split("/").map(encodeURIComponent).join("/")}`,
-      { headers }
+// Entries without an id are folders: walk them recursively.
+async function walk(prefix) {
+  for (const e of await list(prefix)) {
+    const rel = prefix + e.name;
+    if (!e.id) {
+      await walk(rel + "/");
+      continue;
+    }
+    const r = await withRetry(`download ${rel}`, () =>
+      fetch(`${base}/storage/v1/object/${BUCKET}/${rel.split("/").map(encodeURIComponent).join("/")}`, { headers })
     );
     if (!r.ok) throw new Error(`download ${rel}: ${r.status}`);
     const buf = Buffer.from(await r.arrayBuffer());
@@ -51,4 +68,5 @@ for (const folder of await list("")) {
     bytes += buf.length;
   }
 }
+await walk("");
 console.log(`storage: ${files} files, ${(bytes / 1048576).toFixed(1)} MiB`);

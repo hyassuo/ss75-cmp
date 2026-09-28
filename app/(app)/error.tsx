@@ -15,6 +15,12 @@ export default function AppError({
     console.error(error);
   }, [error]);
 
+  // A screen's code that couldn't be downloaded: "Try again" would re-throw
+  // the same cached failure, so reload the page instead.
+  const chunk =
+    error.name === "ChunkLoadError" ||
+    /Loading (CSS )?chunk|dynamically imported module/i.test(error.message);
+
   return (
     <div
       style={{
@@ -33,7 +39,7 @@ export default function AppError({
           marginBottom: 6,
         }}
       >
-        Something went wrong
+        {chunk ? "This screen couldn't be downloaded" : "Something went wrong"}
       </div>
       <div
         style={{
@@ -46,11 +52,13 @@ export default function AppError({
       >
         {/* Raw error messages can carry internals (SQL, stack details):
             show a generic line plus the digest the server log is keyed by. */}
-        An unexpected error occurred while loading this view.
-        {error.digest ? ` (ref ${error.digest})` : ""}
+        {chunk
+          ? "Check the connection, then reload."
+          : "An unexpected error occurred while loading this view."}
+        {!chunk && error.digest ? ` (ref ${error.digest})` : ""}
       </div>
       <button
-        onClick={reset}
+        onClick={chunk ? () => window.location.reload() : reset}
         style={{
           background: DS.blu,
           color: "#fff",
@@ -62,7 +70,7 @@ export default function AppError({
           fontSize: 13,
         }}
       >
-        Try again
+        {chunk ? "Reload" : "Try again"}
       </button>
     </div>
   );

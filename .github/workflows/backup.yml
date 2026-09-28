@@ -21,11 +21,18 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
-      - name: Install age
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      # pg_dump must be at least the server's major version (Supabase runs
+      # 15 or 17); the PGDG 17 client dumps both.
+      - name: Install age and the PostgreSQL 17 client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-17
       - name: Back up
         run: scripts/backup.sh backup-out
         env:
+          PG_DUMP: /usr/lib/postgresql/17/bin/pg_dump
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

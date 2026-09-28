@@ -4,6 +4,7 @@
 -- Run AFTER supabase/migrations/20260928000100_ifs_register.sql. Safe to re-run: TRUNCATEs
 -- the table first.
 
+BEGIN;
 TRUNCATE TABLE public.ifs_objects;
 
 INSERT INTO public.ifs_objects (id, description, sece) VALUES
@@ -11363,3 +11364,5 @@ INSERT INTO public.ifs_objects (id, description, sece) VALUES
   ('SHORE-MANAGED', 'SHORE-MANAGED', false),
   ('STORE', 'STORE on RIG', false),
   ('VENDOR', 'VENDOR on RIG', false);
+
+COMMIT;

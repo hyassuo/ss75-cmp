@@ -1,4 +1,4 @@
-// Hand-authored from supabase-setup.sql. Mirrors the provisioned schema.
+// Hand-authored from supabase/migrations/20260928000000_baseline.sql. Mirrors the provisioned schema.
 import type {
   AccessoryType,
   ActionStatus,
