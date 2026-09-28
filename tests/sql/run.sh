@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# RLS / trigger regression tests for the Supabase schema.
+#
+# Spins up a throwaway PostgreSQL cluster (needs the server binaries, e.g.
+# `apt install postgresql`), loads a minimal Supabase stand-in
+# (supabase-stub.sql), applies the schema files and then acts as each role
+# the way PostgREST would (SET ROLE authenticated + JWT sub claim).
+#
+# Scenarios:
+#   fresh    supabase-setup.sql + supabase-ifs-schema.sql (run twice: idempotency)
+#   upgrade  fresh install, then every in-place upgrade file in README order,
+#            ending with the latest hardening round
+#
+# Usage: tests/sql/run.sh            (from the repo root or anywhere)
+# Env:   PG_BIN       directory with initdb/pg_ctl (auto-detected)
+#        SQL_TEST_DIR parent directory for the throwaway cluster (default: $TMPDIR)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+HERE="$ROOT/tests/sql"
+PG_BIN="${PG_BIN:-$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1)}"
+[ -x "$PG_BIN/initdb" ] || { echo "initdb not found (set PG_BIN)"; exit 2; }
+
+BASE="${SQL_TEST_DIR:-${TMPDIR:-/tmp}}"
+WORK="$(mktemp -d "$BASE/ss75-sqltest.XXXXXX")"
+PORT="${SQL_TEST_PORT:-54329}"
+RUN_AS=()
+if [ "$(id -u)" = 0 ]; then
+  # initdb refuses to run as root.
+  chown -R postgres "$WORK"
+  RUN_AS=(su postgres -c)
+fi
+pgrun() {
+  if [ ${#RUN_AS[@]} -gt 0 ]; then "${RUN_AS[@]}" "$*"; else bash -c "$*"; fi
+}
+
+pgrun "'$PG_BIN/initdb' -D '$WORK/data' -A trust -U postgres >/dev/null"
+pgrun "'$PG_BIN/pg_ctl' -D '$WORK/data' -o \"-p $PORT -k '$WORK' -c listen_addresses=''\" -l '$WORK/log' -w start >/dev/null"
+cleanup() {
+  pgrun "'$PG_BIN/pg_ctl' -D '$WORK/data' -m immediate stop >/dev/null" || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+PSQL=(psql -h "$WORK" -p "$PORT" -U postgres -X -q -v ON_ERROR_STOP=1)
+DB=""
+FAILS=0
+PASSES=0
+
+load() { "${PSQL[@]}" -d "$DB" -f "$1" >/dev/null 2>"$WORK/load.err" || { cat "$WORK/load.err"; exit 1; }; }
+su_sql() { "${PSQL[@]}" -d "$DB" -At -c "$1" 2>&1 | tail -1; }
+# as <uid> <sql>: run as the authenticated API role with that JWT subject.
+as() {
+  "${PSQL[@]}" -d "$DB" -At \
+    -c "SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', '$1', false);" \
+    -c "$2" 2>&1 | tail -n +2 | grep -v '^$' | head -1 | sed 's/^ERROR: *//'
+}
+# rows <uid> <DML ... RETURNING 1>: number of rows the statement touched.
+rows() { as "$1" "WITH x AS ($2) SELECT count(*) FROM x"; }
+check() { # check <description> <actual> <expected (grep -E)>
+  if printf '%s' "$2" | grep -Eq -- "^($3)\$"; then
+    PASSES=$((PASSES + 1)); printf '  ok   %s\n' "$1"
+  else
+    FAILS=$((FAILS + 1)); printf '  FAIL %s\n       got: %s\n       expected: %s\n' "$1" "$2" "$3"
+  fi
+}
+
+A1=00000000-0000-0000-0000-00000000a001; A2=00000000-0000-0000-0000-00000000a002
+I1=00000000-0000-0000-0000-00000000c001; I2=00000000-0000-0000-0000-00000000c002
+V1=00000000-0000-0000-0000-00000000e001; AB=00000000-0000-0000-0000-00000000b001
+DENIED='permission denied.*|new row violates row-level security.*'
+
+suite() {
+  local U1; U1=$(su_sql "SELECT id FROM units WHERE code = 'SS-75'")
+  new_item() { as "$1" "INSERT INTO items (unit_id, zone_id, name) VALUES ('$U1', 'Z01', '$2') RETURNING id"; }
+
+  echo " authorship & deletion"
+  local IT; IT=$(new_item $I2 'Pump P-101')
+  as $I2 "UPDATE items SET status = 'Critical' WHERE id = '$IT' RETURNING 1" >/dev/null
+  as $I1 "UPDATE items SET created_by = '$I1', created_at = now() - interval '1 year', unit_id = unit_id WHERE id = '$IT' RETURNING 1" >/dev/null
+  check "created_by is immutable on update" "$(su_sql "SELECT created_by FROM items WHERE id = '$IT'")" "$I2"
+  check "created_at is immutable on update" "$(su_sql "SELECT created_at > now() - interval '1 day' FROM items WHERE id = '$IT'")" "t"
+  check "inspector cannot delete a colleague's item" "$(rows $I1 "DELETE FROM items WHERE id = '$IT' RETURNING 1")" "0"
+  check "creator cannot delete own named item" "$(rows $I2 "DELETE FROM items WHERE id = '$IT' RETURNING 1")" "0"
+  check "viewer cannot update items" "$(rows $V1 "UPDATE items SET notes = 'x' WHERE id = '$IT' RETURNING 1")" "0"
+  check "item cannot move to another unit" "$(as $A1 "UPDATE items SET unit_id = '00000000-0000-0000-0000-0000000000b2' WHERE id = '$IT' RETURNING unit_id")" "$U1|$DENIED"
+
+  local D; D=$(new_item $I1 'Untitled')
+  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$D', current_date, 0.4) RETURNING 1" >/dev/null
+  check "creator can discard a fresh Untitled draft" "$(rows $I1 "DELETE FROM items WHERE id = '$D' RETURNING 1")" "1"
+  check "discarded draft leaves no audit noise" "$(su_sql "SELECT count(*) FROM history WHERE item_ref = '$D' OR item_id = '$D'")" "0"
+
+  echo " audit trail"
+  local R; R=$(new_item $I1 'Riser clamp')
+  as $I1 "UPDATE items SET status = 'Attention' WHERE id = '$R' RETURNING 1" >/dev/null
+  as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$R', current_date, 0.4) RETURNING 1" >/dev/null
+  check "admin can delete a real item" "$(rows $A1 "DELETE FROM items WHERE id = '$R' RETURNING 1")" "1"
+  check "history survives deletion" "$(su_sql "SELECT string_agg(action, ',' ORDER BY event_date, action) FROM history WHERE item_ref = '$R'")" "created,(deleted,status_changed|status_changed,deleted)"
+  check "deletion event records what went with it" "$(su_sql "SELECT note FROM history WHERE item_ref = '$R' AND action = 'deleted'")" "Item deleted \(1 readings, 0 evidences removed\)"
+  check "deletion event keeps item name" "$(su_sql "SELECT item_name FROM history WHERE item_ref = '$R' AND action = 'deleted'")" "Riser clamp"
+  check "deleted item's history visible to its unit" "$(as $I2 "SELECT count(*) FROM history WHERE item_ref = '$R'")" "3"
+  check "deleted item's history hidden from other units" "$(as $AB "SELECT count(*) FROM history WHERE item_ref = '$R'")" "0"
+  check "history is append-only (delete)" "$(as $A1 "DELETE FROM history WHERE item_ref = '$R'")" "$DENIED"
+  check "history is append-only (update)" "$(as $A1 "UPDATE history SET note = 'x' WHERE item_ref = '$R'")" "$DENIED"
+  check "history is append-only (insert)" "$(as $A1 "INSERT INTO history (item_id, action) VALUES (NULL, 'forged')")" "$DENIED"
+
+  local X; X=$(new_item $I1 'Deck plate')
+  as $I1 "UPDATE items SET status = 'Attention' WHERE id = '$X' RETURNING 1" >/dev/null
+  as $I1 "UPDATE items SET name = 'Untitled' WHERE id = '$X' RETURNING 1" >/dev/null
+  rows $I1 "DELETE FROM items WHERE id = '$X' RETURNING 1" >/dev/null
+  check "renamed-to-Untitled item keeps its trail on delete" "$(su_sql "SELECT count(*) FILTER (WHERE action = 'deleted') || '/' || count(*) FROM history WHERE item_ref = '$X'")" "1/3"
+
+  echo " profiles"
+  check "admin cannot delete another admin's profile" "$(as $A1 "DELETE FROM profiles WHERE id = '$A2'")" "$DENIED"
+  check "admin cannot delete own profile" "$(as $A1 "DELETE FROM profiles WHERE id = '$A1'")" "$DENIED"
+  su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test') ON CONFLICT DO NOTHING" >/dev/null
+  check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
+  su_sql "DELETE FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'" >/dev/null
+  check "admin cannot insert profiles" "$(as $A1 "INSERT INTO profiles (id, email, role, unit_id, active) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test', 'admin', '$U1', true)")" "$DENIED"
+  check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "5"
+  check "inspector sees only self" "$(as $I1 "SELECT count(*) FROM profiles")" "1"
+  check "user can edit own full_name" "$(rows $I1 "UPDATE profiles SET full_name = 'Insp One' WHERE id = '$I1' RETURNING 1")" "1"
+  check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
+  check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
+
+  echo " reference data"
+  check "admin of another unit cannot edit IFS register" "$(as $AB "UPDATE ifs_objects SET sece = false WHERE id = 'OBJ-1'")" "$DENIED"
+  check "IFS register readable" "$(as $I1 "SELECT count(*) FROM ifs_objects")" "1"
+  check "zones catalog read-only" "$(rows $A1 "UPDATE zones SET name = 'x' RETURNING 1")" "0|$DENIED"
+
+  echo " unit isolation"
+  check "other unit's admin sees no items" "$(as $AB "SELECT count(*) FROM items")" "0"
+  check "other unit's admin cannot delete items" "$(rows $AB "DELETE FROM items RETURNING 1")" "0"
+
+  echo " normal workflow"
+  local N; N=$(new_item $I1 'Untitled')
+  check "inspector names and saves a new item" "$(as $I1 "UPDATE items SET name = 'Flange F-7', prob = 3, cons = 4 WHERE id = '$N' RETURNING name")" "Flange F-7"
+  check "inspector adds a reading" "$(rows $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$N', current_date, 0.5) RETURNING 1")" "1"
+  check "inspector sees the item history" "$(as $I1 "SELECT count(*) > 0 FROM history WHERE item_id = '$N'")" "t"
+  check "audit rows snapshot unit and name" "$(su_sql "SELECT count(*) FROM history WHERE unit_id IS NULL OR item_ref IS NULL OR item_name IS NULL")" "0"
+}
+
+scenario() { # scenario <name> <files...>
+  DB="$1"; shift
+  echo "== $DB"
+  "${PSQL[@]}" -d postgres -c "CREATE DATABASE $DB" >/dev/null
+  load "$HERE/supabase-stub.sql"
+  for f in "$@"; do load "$ROOT/$f"; done
+  load "$HERE/seed.sql"
+  suite
+}
+
+scenario fresh supabase-setup.sql supabase-ifs-schema.sql supabase-setup.sql supabase-ifs-schema.sql
+scenario upgrade supabase-setup.sql supabase-ifs-schema.sql \
+  supabase-security-fixes.sql supabase-hardening.sql supabase-hardening-3.sql \
+  supabase-hardening-4.sql supabase-hardening-5.sql supabase-hardening-5.sql
+
+echo
+echo "$PASSES passed, $FAILS failed"
+[ "$FAILS" -eq 0 ]
