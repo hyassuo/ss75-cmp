@@ -12,6 +12,19 @@
 -- (supabase-backup-snapshot.sql) if that data matters.
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- Security round 5 (supabase-hardening-5.sql) and later reference the v140
+-- columns (is_pristine_draft, audit_item_identity, sweep). Dropping them
+-- under those functions would make every item UPDATE/DELETE fail. Refuse;
+-- restore a backup instead, or drop round 5 deliberately first.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'rollback-v140 is not compatible with security round 5 (is_pristine_draft exists). Restore from backup instead.';
+  END IF;
+END $$;
+
 -- 1) Subarea integrity trigger ------------------------------------------------
 DROP TRIGGER IF EXISTS trg_items_validate_subarea ON public.items;
 DROP FUNCTION IF EXISTS public.validate_item_subarea();

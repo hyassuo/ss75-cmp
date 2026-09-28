@@ -46,13 +46,19 @@ export function ReadingsPanel({
 
   async function add() {
     if (busy || !depth.trim()) return;
-    // Accept a decimal comma too ("1,5") — the norm on pt-BR keyboards.
-    const mm = Number(depth.trim().replace(",", "."));
-    if (!Number.isFinite(mm) || mm < 0) {
+    // Plain decimal only — Number() would also take "0x10" or "1e2".
+    // Accept a decimal comma too ("1,5"), the norm on pt-BR keyboards.
+    const txt = depth.trim();
+    if (!/^\d+([.,]\d+)?$/.test(txt)) {
       setErr(t("readings.invalidDepth"));
       return;
     }
-    if (!date || date > today()) {
+    const mm = Number(txt.replace(",", "."));
+    if (!date) {
+      setErr(t("readings.missingDate"));
+      return;
+    }
+    if (date > today()) {
       setErr(t("readings.futureDate"));
       return;
     }

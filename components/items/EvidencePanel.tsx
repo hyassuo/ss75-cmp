@@ -200,9 +200,19 @@ export function EvidencePanel({
         ai_analysis: aiResult,
       });
       if (!res.ok) {
-        // Keep the form for a retry; drop the blob we just uploaded
-        // (best-effort — the retry uploads a fresh copy).
-        if (filePath) await supabase.storage.from(BUCKET).remove([filePath]);
+        // Keep the form for a retry and drop the blob just uploaded (the
+        // retry uploads a fresh copy) — unless the insert did land and only
+        // its response was lost on the link: then the blob is in use.
+        if (filePath) {
+          const { data: landed } = await supabase
+            .from("evidences")
+            .select("id")
+            .eq("file_path", filePath)
+            .limit(1);
+          if (!landed?.length) {
+            await supabase.storage.from(BUCKET).remove([filePath]);
+          }
+        }
         setSaveErr(t("evidence.saveFailed") + " " + res.error);
         return;
       }

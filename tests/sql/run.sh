@@ -142,6 +142,7 @@ suite() {
   rows $A2 "DELETE FROM items WHERE id = '$DU' RETURNING 1" >/dev/null
   check "a user who authored rows and audit events can still be deleted" "$(su_sql "DELETE FROM auth.users WHERE id = '$A2' RETURNING 'deleted'")" "deleted"
   check "...their items stay, authorship cleared" "$(su_sql "SELECT created_by IS NULL FROM items WHERE id = '$KEEP'")" "t"
+  check "...without bumping updated_at (no false edit conflicts)" "$(su_sql "SELECT updated_at = created_at FROM items WHERE id = '$KEEP'")" "t"
   check "...and the trail keeps the email" "$(su_sql "SELECT by_user IS NULL AND by_user_email = 'admin2@test' FROM history WHERE item_ref = '$DU' AND action = 'deleted'")" "t"
   check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
   su_sql "DELETE FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'" >/dev/null
@@ -153,6 +154,16 @@ suite() {
   check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
 
   local N0; N0=$(new_item $I1 'Depth check')
+  echo " server-owned ids & folder squatting"
+  check "client-chosen item id is ignored" "$(as $I1 "INSERT INTO items (id, unit_id, zone_id, name) VALUES ('00000000-0000-0000-0000-0000000000aa', '$U1', 'Z01', 'Chosen id') RETURNING id <> '00000000-0000-0000-0000-0000000000aa'")" "t"
+  local GONE; GONE=$(su_sql "INSERT INTO items (unit_id, zone_id, name) VALUES ('00000000-0000-0000-0000-0000000000b2', 'Z01', 'Other unit, soon deleted') RETURNING id")
+  su_sql "INSERT INTO storage.objects (bucket_id, name) VALUES ('evidence-photos', '$GONE/secret-b.jpg')" >/dev/null
+  su_sql "DELETE FROM items WHERE id = '$GONE'" >/dev/null
+  as $I1 "INSERT INTO items (id, unit_id, zone_id, name) VALUES ('$GONE', '$U1', 'Z01', 'Untitled') RETURNING 1" >/dev/null
+  check "cannot re-occupy another unit's deleted item folder" "$(su_sql "SELECT count(*) FROM items WHERE id = '$GONE'")/$(as $I1 "SELECT count(*) FROM storage.objects WHERE name LIKE '$GONE/%'")" "0/0"
+  check "this unit's admin cannot see another unit's orphans" "$(as $A1 "SELECT count(*) FROM storage.objects WHERE name LIKE '$GONE/%'")" "0"
+  check "the owning unit's admin can" "$(as $AB "SELECT count(*) FROM storage.objects WHERE name LIKE '$GONE/%'")" "1"
+
   echo " storage (evidence-photos)"
   local UB=00000000-0000-0000-0000-0000000000b2
   local OI; OI=$(su_sql "INSERT INTO items (unit_id, zone_id, name) VALUES ('$UB', 'Z01', 'Other unit item') RETURNING id")
@@ -188,12 +199,19 @@ suite() {
   check "cascade on item delete doesn't double-log children" "$(rows $A1 "DELETE FROM items WHERE id = '$CI' RETURNING 1")/$(su_sql "SELECT count(*) FROM history WHERE item_ref = '$CI' AND action IN ('reading_deleted', 'evidence_deleted')")" "1/1"
   local OLDD; OLDD=$(new_item $I1 'Untitled'); local OLDD2; OLDD2=$(new_item $I2 'Untitled'); local OLDR; OLDR=$(new_item $I1 'Untitled')
   as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$OLDR', current_date, 0.2) RETURNING 1" >/dev/null
-  su_sql "UPDATE items SET created_at = now() - interval '2 hours' WHERE id IN ('$OLDD', '$OLDD2', '$OLDR')" >/dev/null
+  local YOUNG; YOUNG=$(new_item $I1 'Untitled')
+  su_sql "UPDATE items SET created_at = now() - interval '2 hours' WHERE id = '$YOUNG'" >/dev/null
+  su_sql "UPDATE items SET created_at = now() - interval '25 hours' WHERE id IN ('$OLDD', '$OLDD2', '$OLDR')" >/dev/null
   check "draft sweep discards only the caller's abandoned pristine drafts" "$(as $I1 "SELECT string_agg(x::text, ',') FROM discard_my_abandoned_drafts() x")" "$OLDD"
   check "...leaving colleagues' and non-empty drafts" "$(su_sql "SELECT count(*) FROM items WHERE id IN ('$OLDD2', '$OLDR')")" "2"
+  check "...and drafts younger than a day (idle logout survivors)" "$(su_sql "SELECT count(*) FROM items WHERE id = '$YOUNG'")" "1"
   check "API roles cannot TRUNCATE" "$(as $A1 "TRUNCATE items")" "$DENIED"
 
   check "negative pit depth is rejected" "$(as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$N0', current_date, -1)")" "new row .* violates check constraint .*readings_depth_nonneg.*"
+
+  local FP; FP=$(new_item $I1 'File path check')
+  check "evidence cannot point at another item's photo" "$(as $I1 "INSERT INTO evidences (item_id, evidence_date, file_path) VALUES ('$FP', current_date, '$N0/real.jpg')")" "new row .* violates check constraint .*evidences_file_in_item_folder.*"
+  check "evidence in its own folder is fine" "$(rows $I1 "INSERT INTO evidences (item_id, evidence_date, file_path) VALUES ('$FP', current_date, '$FP/ok.jpg') RETURNING 1")" "1"
 
   echo " reference data"
   check "admin of another unit cannot edit IFS register" "$(as $AB "UPDATE ifs_objects SET sece = false WHERE id = 'OBJ-1'")" "$DENIED"
@@ -224,10 +242,13 @@ scenario() { # scenario <name> <files...>
 
 scenario fresh supabase-setup.sql supabase-ifs-schema.sql supabase-setup.sql supabase-ifs-schema.sql
 echo " demo seed"
+REAL=$(as $I1 "INSERT INTO items (unit_id, zone_id, name, notes) VALUES ((SELECT id FROM units WHERE code = 'SS-75'), 'Z01', 'Imported', '[DEMO] imported by hand') RETURNING id")
 before=$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")
 load "$ROOT/supabase-demo-seed.sql"; load "$ROOT/supabase-demo-seed.sql"
 check "re-running the demo seed leaves no orphaned history" "$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")" "$before"
 check "demo seed loads its items" "$(su_sql "SELECT count(*) > 20 FROM items WHERE notes LIKE '[DEMO]%'")" "t"
+check "demo seed never removes an unregistered item" "$(su_sql "SELECT count(*) FROM items WHERE id = '$REAL'")" "1"
+check "rollback-v140 refuses to run under round 5" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase-rollback-v140.sql" 2>&1 | grep -c 'not compatible with security round 5')" "1"
 
 scenario upgrade supabase-setup.sql supabase-ifs-schema.sql \
   supabase-security-fixes.sql supabase-hardening.sql supabase-hardening-3.sql \

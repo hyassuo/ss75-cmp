@@ -189,7 +189,10 @@ CREATE TABLE IF NOT EXISTS public.evidences (
   file_size     int,
   ai_analysis   jsonb,
   created_by    uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
-  created_at    timestamptz DEFAULT now()
+  created_at    timestamptz DEFAULT now(),
+  -- The photo must live in this evidence's own item folder (v1.15).
+  CONSTRAINT evidences_file_in_item_folder
+    CHECK (file_path IS NULL OR file_path LIKE item_id::text || '/%')
 );
 CREATE INDEX IF NOT EXISTS idx_evidences_item ON public.evidences(item_id);
 
@@ -272,10 +275,19 @@ CREATE INDEX IF NOT EXISTS idx_history_item_ref ON public.history(item_ref);
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- An authorship-only change (created_by/updated_by nulled because a user
+  -- was deleted) is not an edit: keep updated_at, or every open editor of
+  -- those items would hit a spurious optimistic-lock conflict.
+  IF TG_TABLE_NAME = 'items'
+     AND (to_jsonb(NEW) - 'created_by' - 'updated_by' - 'updated_at')
+       = (to_jsonb(OLD) - 'created_by' - 'updated_by' - 'updated_at')
+  THEN
+    RETURN NEW;
+  END IF;
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_profiles_updated_at ON public.profiles;
 CREATE TRIGGER trg_profiles_updated_at
@@ -648,19 +660,34 @@ CREATE TRIGGER trg_audit_evidences_delete
   AFTER DELETE ON public.evidences
   FOR EACH ROW EXECUTE FUNCTION public.audit_child_delete();
 
--- The caller's own "New Item" stubs abandoned for 30+ minutes (tab closed,
+-- The caller's own "New Item" stubs abandoned for 24+ hours (tab closed,
 -- idle logout). The server decides what is a draft; the client only hides
 -- the ids this returns. INVOKER: runs under the caller's RLS.
 CREATE OR REPLACE FUNCTION public.discard_my_abandoned_drafts()
 RETURNS SETOF uuid AS $$
-  DELETE FROM public.items i
-  WHERE i.created_by = auth.uid()
-    AND i.created_at < now() - interval '30 minutes'
-    AND public.is_pristine_draft(i.id)
-    AND NOT EXISTS (SELECT 1 FROM public.readings r WHERE r.item_id = i.id)
-    AND NOT EXISTS (SELECT 1 FROM public.evidences e WHERE e.item_id = i.id)
-  RETURNING i.id
-$$ LANGUAGE sql VOLATILE SECURITY INVOKER SET search_path = public;
+DECLARE
+  d uuid;
+BEGIN
+  -- Row-locked one by one, and re-checked after the lock, so a draft that
+  -- is being saved right now (concurrent UPDATE) is skipped, never swept.
+  -- 24 h — well past the 30 min idle sign-out, so an inspector who gets
+  -- logged out can still come back to the stub (and its local draft).
+  FOR d IN
+    SELECT i.id FROM public.items i
+     WHERE i.created_by = auth.uid()
+       AND i.created_at < now() - interval '24 hours'
+     FOR UPDATE SKIP LOCKED
+  LOOP
+    IF public.is_pristine_draft(d)
+       AND NOT EXISTS (SELECT 1 FROM public.readings r WHERE r.item_id = d)
+       AND NOT EXISTS (SELECT 1 FROM public.evidences e WHERE e.item_id = d)
+    THEN
+      DELETE FROM public.items WHERE id = d;
+      IF FOUND THEN RETURN NEXT d; END IF;
+    END IF;
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql VOLATILE SECURITY INVOKER SET search_path = public;
 REVOKE EXECUTE ON FUNCTION public.discard_my_abandoned_drafts() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.discard_my_abandoned_drafts() TO authenticated;
 
@@ -680,9 +707,18 @@ BEGIN
     IF TG_TABLE_NAME = 'items' THEN
       NEW.updated_by := auth.uid();
       IF TG_OP = 'INSERT' THEN
+        -- Server-chosen id: the evidence-photos folder is keyed by item id,
+        -- so a client-chosen id could re-occupy another unit's old folder.
+        NEW.id := gen_random_uuid();
         NEW.updated_at := now();
       ELSE
-        NEW.created_by := OLD.created_by;
+        -- Frozen — except when the author's profile is being deleted
+        -- (ON DELETE SET NULL cascade), which must be allowed through.
+        IF NEW.created_by IS NOT NULL
+           OR EXISTS (SELECT 1 FROM public.profiles WHERE id = OLD.created_by)
+        THEN
+          NEW.created_by := OLD.created_by;
+        END IF;
         NEW.created_at := OLD.created_at;
         NEW.unit_id    := OLD.unit_id;
       END IF;
@@ -1043,21 +1079,33 @@ CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
 
 -- Deleting a real item: the app deletes the row first, then its files —
 -- allowed to admins of the unit the audit trail says the item was in.
+-- Unit that owns a *deleted* item's leftover folder, decided with a view
+-- of every unit (SECURITY DEFINER): NULL while an item with that id exists
+-- anywhere, or if the audit trail ties the id to more than one unit.
+CREATE OR REPLACE FUNCTION public.orphan_folder_unit(p_folder text)
+RETURNS uuid AS $$
+  SELECT CASE
+    WHEN EXISTS (SELECT 1 FROM public.items WHERE id::text = p_folder) THEN NULL
+    ELSE (
+      SELECT CASE WHEN count(DISTINCT h.unit_id) = 1
+                  THEN (array_agg(h.unit_id))[1] END
+        FROM public.history h
+       WHERE h.item_ref::text = p_folder
+         AND EXISTS (SELECT 1 FROM public.history d
+                      WHERE d.item_ref = h.item_ref AND d.action = 'deleted')
+    )
+  END
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+REVOKE EXECUTE ON FUNCTION public.orphan_folder_unit(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.orphan_folder_unit(text) TO authenticated, service_role;
+
 DROP POLICY IF EXISTS "evidence_delete_admin_orphans" ON storage.objects;
 CREATE POLICY "evidence_delete_admin_orphans" ON storage.objects
   FOR DELETE TO authenticated USING (
     bucket_id = 'evidence-photos'
     AND public.current_user_role() = 'admin'
-    AND NOT EXISTS (
-      SELECT 1 FROM public.items i
-      WHERE i.id::text = (storage.foldername(objects.name))[1]
-    )
-    AND EXISTS (
-      SELECT 1 FROM public.history h
-      WHERE h.item_ref::text = (storage.foldername(objects.name))[1]
-        AND h.action = 'deleted'
-        AND h.unit_id = public.current_user_unit()
-    )
+    AND public.orphan_folder_unit((storage.foldername(objects.name))[1])
+        = public.current_user_unit()
   );
 
 -- A DELETE that filters/returns rows also needs SELECT visibility, so the
@@ -1067,16 +1115,8 @@ CREATE POLICY "evidence_select_admin_orphans" ON storage.objects
   FOR SELECT TO authenticated USING (
     bucket_id = 'evidence-photos'
     AND public.current_user_role() = 'admin'
-    AND NOT EXISTS (
-      SELECT 1 FROM public.items i
-      WHERE i.id::text = (storage.foldername(objects.name))[1]
-    )
-    AND EXISTS (
-      SELECT 1 FROM public.history h
-      WHERE h.item_ref::text = (storage.foldername(objects.name))[1]
-        AND h.action = 'deleted'
-        AND h.unit_id = public.current_user_unit()
-    )
+    AND public.orphan_folder_unit((storage.foldername(objects.name))[1])
+        = public.current_user_unit()
   );
 
 
