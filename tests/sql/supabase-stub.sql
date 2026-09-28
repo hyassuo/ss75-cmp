@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS storage.buckets (
 );
 CREATE TABLE IF NOT EXISTS storage.objects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  bucket_id text, name text, owner uuid
+  bucket_id text, name text, owner uuid, owner_id text
 );
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 CREATE OR REPLACE FUNCTION storage.foldername(name text) RETURNS text[]

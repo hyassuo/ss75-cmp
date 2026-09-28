@@ -188,6 +188,13 @@ suite() {
   check "is_pristine_draft is not callable anonymously" "$("${PSQL[@]}" -d "$DB" -At -c "SET ROLE anon; SELECT public.is_pristine_draft('$SD')" 2>&1 | tail -1 | sed 's/^ERROR: *//')" "$DENIED"
   check "is_pristine_draft reveals nothing across units" "$(as $AB "SELECT public.is_pristine_draft('$SD')")" "f"
 
+  local UP; UP=$(new_item $I1 'Upload cleanup')
+  as $I1 "INSERT INTO storage.objects (bucket_id, name, owner_id) VALUES ('evidence-photos', '$UP/orphan.jpg', '$I1'), ('evidence-photos', '$UP/used.jpg', '$I1') RETURNING 1" >/dev/null
+  as $I1 "INSERT INTO evidences (item_id, evidence_date, file_path) VALUES ('$UP', current_date, '$UP/used.jpg') RETURNING 1" >/dev/null
+  check "a colleague cannot remove someone else's upload" "$(rows $I2 "DELETE FROM storage.objects WHERE name = '$UP/orphan.jpg' RETURNING 1")" "0"
+  check "uploader removes their unreferenced upload (failed insert)" "$(rows $I1 "DELETE FROM storage.objects WHERE name = '$UP/orphan.jpg' RETURNING 1")" "1"
+  check "...but not one an evidence uses" "$(rows $I1 "DELETE FROM storage.objects WHERE name = '$UP/used.jpg' RETURNING 1")" "0"
+
   echo " child deletions & draft sweep"
   local CI; CI=$(new_item $I1 'Hull plate')
   local RID; RID=$(as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm, location) VALUES ('$CI', current_date, 1.2, 'FR-12') RETURNING id")

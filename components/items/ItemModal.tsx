@@ -224,19 +224,32 @@ function rebase(
   const out = next as unknown as Record<string, unknown>;
   const src = edited as unknown as Record<string, unknown>;
   const from = editedFrom as unknown as Record<string, unknown>;
+  const changed = new Set<string>();
   for (const k of Object.keys(src)) {
     if (k === "next_insp" || k === "priority") continue;
-    if (JSON.stringify(src[k]) !== JSON.stringify(from[k])) out[k] = src[k];
+    if (JSON.stringify(src[k]) !== JSON.stringify(from[k])) {
+      out[k] = src[k];
+      changed.add(k);
+    }
   }
-  next.next_insp = calcNextInspection(next.last_insp, next.freq_insp);
-  next.priority = calcPriority(
-    next.prob,
-    next.cons,
-    next.sece,
-    next.next_insp,
-    next.drops_risk,
-    next.structural
-  );
+  // Derived fields are recomputed only when the user changed one of their
+  // inputs; otherwise the current stored values stand.
+  if (changed.has("last_insp") || changed.has("freq_insp")) {
+    next.next_insp = calcNextInspection(next.last_insp, next.freq_insp);
+  }
+  if (
+    ["prob", "cons", "sece", "drops_risk", "structural", "last_insp", "freq_insp"]
+      .some((k) => changed.has(k))
+  ) {
+    next.priority = calcPriority(
+      next.prob,
+      next.cons,
+      next.sece,
+      next.next_insp,
+      next.drops_risk,
+      next.structural
+    );
+  }
   return next;
 }
 

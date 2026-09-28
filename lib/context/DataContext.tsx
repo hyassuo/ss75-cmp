@@ -384,8 +384,8 @@ export function DataProvider({
         const current = (cur ?? undefined) as unknown as
           | ItemWithRelations
           | undefined;
-        if (current) replaceItem(id, current);
-        else revert();
+        // Gone: drop it from the lists (the open modal keeps its own copy).
+        replaceItem(id, current);
         if (!current) {
           return { ok: false, error: "Item not found", notFound: true };
         }
@@ -393,6 +393,19 @@ export function DataProvider({
           opts.expectedUpdatedAt &&
           current.updated_at !== opts.expectedUpdatedAt
         ) {
+          // Our own write may already have landed: on a flaky link the
+          // browser can retry a PATCH whose response was lost, and the retry
+          // then misses on the old updated_at. If the row holds exactly our
+          // values and we were the last writer, that's success, not a
+          // conflict with "someone else".
+          const mine =
+            current.updated_by === profile.id &&
+            Object.entries(patch).every(
+              ([k, v]) =>
+                JSON.stringify((current as unknown as Record<string, unknown>)[k] ?? null) ===
+                JSON.stringify(v ?? null)
+            );
+          if (mine) return { ok: true, data: current };
           return { ok: false, error: "Changed by someone else", conflict: true };
         }
         return { ok: false, error: "Update not permitted" };

@@ -55,6 +55,12 @@ export function ReadingsPanel({
       return;
     }
     const mm = Number(txt.replace(",", "."));
+    // depth_mm is numeric(6,3): anything ≥ 1000 mm would be rejected by the
+    // database with a raw overflow error.
+    if (mm >= 1000) {
+      setErr(t("readings.invalidDepth"));
+      return;
+    }
     if (!date) {
       setErr(t("readings.missingDate"));
       return;

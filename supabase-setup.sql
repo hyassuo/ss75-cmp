@@ -1077,6 +1077,19 @@ CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
     )
   );
 
+-- The uploader may remove their own file that no evidence row uses — the
+-- cleanup after an evidence insert that failed right after its upload.
+DROP POLICY IF EXISTS "evidence_delete_own_unreferenced" ON storage.objects;
+CREATE POLICY "evidence_delete_own_unreferenced" ON storage.objects
+  FOR DELETE TO authenticated USING (
+    bucket_id = 'evidence-photos'
+    AND owner_id = auth.uid()::text
+    AND public.current_user_role() IN ('admin', 'inspector')
+    AND NOT EXISTS (
+      SELECT 1 FROM public.evidences e WHERE e.file_path = objects.name
+    )
+  );
+
 -- Deleting a real item: the app deletes the row first, then its files —
 -- allowed to admins of the unit the audit trail says the item was in.
 -- Unit that owns a *deleted* item's leftover folder, decided with a view
