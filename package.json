@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:sql": "bash tests/sql/run.sh"
+    "test:sql": "bash tests/sql/run.sh",
+    "test:e2e": "bash tests/e2e/run.sh"
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",

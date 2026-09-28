@@ -137,6 +137,7 @@ item modal copies when an Object is selected.
 |---------|----------------|
 | `npm test` | Vitest unit tests: domain logic (priority, dates across time zones, corrosion rate…), the item-form diff/rebase logic, CSV escaping, paging, redirects (`tests/*.test.ts`). |
 | `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role — fresh install, the full upgrade chain, demo seed and rollback guard. |
+| `npm run test:e2e` | End-to-end suite (`tests/e2e/`): builds the app and drives it in Chromium (Playwright) against a local Supabase stand-in — see below. |
 
 CI (`.github/workflows/ci.yml`, least-privilege, actions pinned by SHA)
 runs lint, typecheck, unit tests (also under four time zones), a
@@ -144,6 +145,45 @@ production build, `npm audit` (fails on high/critical in shipped
 dependencies) and the SQL suite. Dependabot proposes dependency and action
 updates (`.github/dependabot.yml`).
 
+
+### End-to-end tests (`tests/e2e/`)
+
+`npm run test:e2e` runs the production build of the app in Chromium against
+a throwaway local stack — no Supabase project, Docker or secrets needed:
+
+- **PostgreSQL** (`tests/sql/supabase-stub.sql` + `supabase/migrations/*.sql`,
+  i.e. the real schema, triggers and RLS) plus the fixtures in
+  `tests/e2e/sql/` (4 users, 1200+ items to exercise paging past the
+  1000-row cap);
+- **PostgREST v12** (downloaded once into `tests/e2e/.bin/`, checksum
+  verified);
+- **`tests/e2e/gateway.mjs`**, playing the Supabase API: proxies `/rest/v1`,
+  implements the parts of GoTrue (`/auth/v1`) and Storage (`/storage/v1`)
+  the app uses — Storage writes/reads/deletes `storage.objects` *as the
+  caller*, so the real storage policies decide — and offers fault injection
+  (HTTP errors, dropped connections, "commit then lose the response",
+  delays) for the offline/concurrency scenarios;
+- `next build` + `next start` with the local keys, then
+  `tests/e2e/scenarios.mjs` (plain Playwright; results in
+  `tests/e2e/artifacts/`: `results.json`, screenshots, logs, exports).
+
+Scenarios cover the data-integrity flows (failed/lost saves, conflicts,
+local drafts, cancel/delete guards and the audit trail, evidence upload and
+cleanup under RLS, audit-log/CSV/XLSX exports), URL navigation and Back,
+the accessible dialogs and confirmations, phone layout, offline, idle
+sign-out, language and contrast.
+
+Setup: `npm ci`, then `cd tests/e2e && npm ci && npx playwright install
+chromium` (Playwright and `pg` are harness-only dependencies with their own
+lockfile, so the app's install stays lean). Needs the PostgreSQL server
+binaries (`initdb`/`pg_ctl`, e.g. `apt install postgresql`); works as a
+normal user or as root. Useful variables: `ONLY=c,d1` (subset),
+`SKIP_BUILD=1`, `KEEP=1` (leave the stack up), `HEADED=1`, and
+`PG_PORT`/`PGRST_PORT`/`GW_PORT`/`APP_PORT`/`E2E_TMP` (see
+`tests/e2e/env.sh`). The run builds `.next` with the local stack's
+`NEXT_PUBLIC_*` values — rebuild before deploying from the same checkout.
+CI runs it on every pull request (`.github/workflows/e2e.yml`) and uploads
+`tests/e2e/artifacts/` when it fails.
 ## Storage (evidence photos)
 
 Inspection photos uploaded from the item modal go to the **private**

@@ -1,0 +1,47 @@
+name: E2E
+
+# The real app (production build) in Chromium against a local Supabase
+# stand-in: PostgreSQL 16 with the real schema/RLS, PostgREST, and a small
+# gateway (tests/e2e/gateway.mjs) for Auth + Storage. See tests/e2e/run.sh.
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: the job only reads the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    # ubuntu-24.04 ships the PostgreSQL 16 server binaries (initdb/pg_ctl).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            tests/e2e/package-lock.json
+      - run: npm ci
+      # Harness-only dependencies (Playwright, pg) live in tests/e2e.
+      - run: npm ci --no-audit --no-fund
+        working-directory: tests/e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: tests/e2e
+      - run: npm run test:e2e
+        env:
+          E2E_TMP: ${{ runner.temp }}
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-artifacts
+          path: tests/e2e/artifacts/
+          retention-days: 14
+          if-no-files-found: ignore
