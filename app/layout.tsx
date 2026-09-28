@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import { PwaRegister } from "@/components/layout/PwaRegister";
+import { LangProvider } from "@/lib/context/LangContext";
+import { serverLang } from "@/lib/i18n/serverLang";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,18 +34,21 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // No maximumScale: pinch-zoom must stay available (WCAG 1.4.4). iOS
+  // auto-zoom on focus is avoided by 16px inputs on small screens instead
+  // (globals.css).
   themeColor: "#2c3e52", // DS.sbBg — matches the dark topbar
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const lang = await serverLang();
   return (
-    <html lang="en">
+    <html lang={lang === "pt" ? "pt-BR" : "en"}>
       <body className={`${inter.variable} ${ibmPlexMono.variable}`}>
         <PwaRegister />
-        {children}
+        <LangProvider initialLang={lang}>{children}</LangProvider>
       </body>
     </html>
   );

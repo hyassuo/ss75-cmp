@@ -1,3 +1,4 @@
+import { DS } from "@/lib/design/tokens";
 import type { Reading } from "@/lib/types/domain";
 
 // Corrosion-rate severity thresholds (mm/yr) — shared by rateColor,
@@ -35,9 +36,9 @@ export function calcRate(readings: Reading[] | null | undefined): number | null 
 }
 
 export function rateColor(r: number | null): string {
-  if (r === null) return "#7a95b0";
-  if (r > RATE_CRITICAL_MM_YR) return "#c0392b";
-  if (r > RATE_ELEVATED_MM_YR) return "#c0591b";
-  if (r > 0) return "#a07c10";
-  return "#1e7e45";
+  if (r === null) return DS.text3;
+  if (r > RATE_CRITICAL_MM_YR) return DS.red;
+  if (r > RATE_ELEVATED_MM_YR) return DS.ora;
+  if (r > 0) return DS.yel;
+  return DS.grn;
 }

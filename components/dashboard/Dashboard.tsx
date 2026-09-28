@@ -145,7 +145,8 @@ export function Dashboard() {
           ? Math.round((seceOK / seceItems.length) * 100)
           : 100) + "%",
       sub: `${seceOK}/${seceItems.length} SECE`,
-      color: DS.red,
+      // Colour tracks the value (it used to be red even at 100%).
+      color: pctColor(seceItems.length ? seceOK / seceItems.length : 1),
     },
     {
       label: t("dash.criticalItemsOk"),
@@ -154,7 +155,7 @@ export function Dashboard() {
           ? Math.round((critOK / critItems.length) * 100)
           : 100) + "%",
       sub: `${critOK}/${critItems.length} ${t("priority.Critical").toLowerCase()}`,
-      color: DS.ora,
+      color: pctColor(critItems.length ? critOK / critItems.length : 1),
     },
     {
       label: t("dash.openActions"),
@@ -376,4 +377,11 @@ export function Dashboard() {
       </div>
     </div>
   );
+}
+
+// Share of items in good standing → status colour (same bands as the
+// schedule-compliance KPI).
+function pctColor(ratio: number): string {
+  const pct = ratio * 100;
+  return pct >= 90 ? DS.grn : pct >= 70 ? DS.yel : DS.red;
 }

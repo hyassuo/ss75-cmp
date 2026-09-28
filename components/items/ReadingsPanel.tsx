@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
@@ -37,6 +37,7 @@ export function ReadingsPanel({
   const [loc, setLoc] = useState("");
   const [tech, setTech] = useState("");
   const [busy, setBusy] = useState(false);
+  const fid = useId();
   const [err, setErr] = useState("");
 
   const sorted = [...readings].sort((a, b) =>
@@ -105,17 +106,13 @@ export function ReadingsPanel({
         }}
       >
         <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 10,
-            alignItems: "end",
-            marginBottom: 10,
-          }}
+          className="form-grid-3"
+          style={{ alignItems: "end", marginBottom: 10 }}
         >
           <div>
-            <Label>{t("f.date")}</Label>
+            <Label htmlFor={fid + "date"}>{t("f.date")}</Label>
             <input
+              id={fid + "date"}
               type="date"
               value={date}
               max={today()}
@@ -124,8 +121,9 @@ export function ReadingsPanel({
             />
           </div>
           <div>
-            <Label>{t("f.pitDepth")}</Label>
+            <Label htmlFor={fid + "depth"}>{t("f.pitDepth")}</Label>
             <input
+              id={fid + "depth"}
               type="text"
               inputMode="decimal"
               value={depth}
@@ -135,8 +133,9 @@ export function ReadingsPanel({
             />
           </div>
           <div>
-            <Label>{t("f.location")}</Label>
+            <Label htmlFor={fid + "loc"}>{t("f.location")}</Label>
             <input
+              id={fid + "loc"}
               type="text"
               value={loc}
               placeholder="ex: FR-12 P/S"
@@ -154,8 +153,9 @@ export function ReadingsPanel({
           }}
         >
           <div>
-            <Label>{t("f.checkedBy")}</Label>
+            <Label htmlFor={fid + "tech"}>{t("f.checkedBy")}</Label>
             <input
+              id={fid + "tech"}
               type="text"
               value={tech}
               onChange={(e) => setTech(e.target.value)}
@@ -252,7 +252,7 @@ export function ReadingsPanel({
           style={{
             textAlign: "center",
             fontSize: 12,
-            color: DS.bord2,
+            color: DS.text3,
             padding: "12px 0",
           }}
         >{t("f.notRecorded")}</div>

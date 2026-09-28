@@ -26,7 +26,7 @@ export default function GlobalError({
             Application error
           </div>
           <div
-            style={{ fontSize: 13, color: "#6a8faf", marginBottom: 20 }}
+            style={{ fontSize: 13, color: "#9db5cc", marginBottom: 20 }}
           >
             {error.message || "A fatal error occurred."}
           </div>

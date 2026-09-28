@@ -1,3 +1,4 @@
+import { DS } from "@/lib/design/tokens";
 import { calcRate, RATE_CRITICAL_MM_YR } from "@/lib/domain/calcRate";
 import { isOverdue } from "@/lib/utils/format";
 import type { ItemWithRelations } from "@/lib/types/domain";
@@ -21,11 +22,11 @@ export function itemScore(item: ItemWithRelations): number {
 }
 
 export function integrityColor(s: number | null): string {
-  if (s === null) return "#7a95b0";
-  if (s >= 80) return "#1e7e45";
-  if (s >= 60) return "#a07c10";
-  if (s >= 40) return "#c0591b";
-  return "#c0392b";
+  if (s === null) return DS.text3;
+  if (s >= 80) return DS.grn;
+  if (s >= 60) return DS.yel;
+  if (s >= 40) return DS.ora;
+  return DS.red;
 }
 
 export function integrityLabel(s: number | null): string {

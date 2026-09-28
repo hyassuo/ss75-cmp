@@ -14,10 +14,18 @@ const BOTTOM_BAND = "#243446"; // slightly darker, gives the banded look
 export function Topbar() {
   const { toggleSidebar, sidebarCollapsed, sysFilter, setSysFilter } =
     useShell();
-  const { allItems } = useData();
+  const { allItems, zones } = useData();
   const { t, tDept, lang, setLang } = useLang();
 
-  const overdue = allItems.filter((i) => isOverdue(i.next_insp));
+  // Same scope as the alert bar: active items of the selected department.
+  const inScope = new Set(
+    zones
+      .filter((z) => sysFilter === "All" || z.system === sysFilter)
+      .map((z) => z.zid)
+  );
+  const overdue = allItems.filter(
+    (i) => !i.archived && inScope.has(i.zone_id) && isOverdue(i.next_insp)
+  );
   const degraded = overdue.some((i) => i.sece);
   const attention = !degraded && overdue.length > 0;
   const healthy = !degraded && !attention;
@@ -51,14 +59,16 @@ export function Topbar() {
         <div className="tb-row1">
           <div className="tb-left">
             <button
+              type="button"
               onClick={toggleSidebar}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={t("nav.menu")}
+              aria-expanded={!sidebarCollapsed}
               style={{
                 background: "transparent",
                 border: "1px solid " + DS.sbBord,
-                borderRadius: 5,
-                width: 28,
-                height: 28,
+                borderRadius: 6,
+                width: 40,
+                height: 40,
                 cursor: "pointer",
                 color: DS.sbTxt,
                 display: "flex",
@@ -115,7 +125,8 @@ export function Topbar() {
                       color: active ? "#ffffff" : DS.sbTxt2,
                       border: "none",
                       borderRadius: 4,
-                      padding: "3px 8px",
+                      padding: "6px 10px",
+                      minHeight: 32,
                       fontSize: 10,
                       fontWeight: 700,
                       fontFamily: DS.mono,

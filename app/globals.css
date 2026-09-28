@@ -10,17 +10,17 @@
   --ds-bord2: #c8d3df;
   --ds-text: #1e2d3d;
   --ds-text2: #445566;
-  --ds-text3: #7a95b0;
-  --ds-red: #c0392b;
-  --ds-ora: #c0591b;
-  --ds-yel: #a07c10;
-  --ds-grn: #1e7e45;
+  --ds-text3: #4f677f;
+  --ds-red: #b0301f;
+  --ds-ora: #a4470f;
+  --ds-yel: #7a5d00;
+  --ds-grn: #1a7040;
   --ds-blu: #1a5cb5;
   --ds-vio: #5b3aa0;
   --ds-sb-bg: #2c3e52;
   --ds-sb-bord: #374f66;
   --ds-sb-txt: #c5d6e8;
-  --ds-sb-txt2: #6a8faf;
+  --ds-sb-txt2: #9db5cc;
   --ds-sb-act: #3b5570;
   --ds-sb-act-txt: #93d4f5;
 }
@@ -181,7 +181,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-left: 40px;
+  margin-left: 52px;
   margin-top: 1px;
 }
 .tb-sub {
@@ -276,7 +276,7 @@ body {
     font-size: 15px;
   }
   .tb-row2 {
-    margin-left: 40px;
+    margin-left: 52px;
   }
   .tb-sub {
     font-size: 10px;
@@ -291,3 +291,139 @@ body {
     font-size: 11px;
   }
 }
+
+/* ── Accessibility & field use (v1.16) ─────────────────────────────────── */
+
+/* Visible keyboard focus everywhere. Inline styles set outline: none on
+   inputs, so this needs !important. Mouse/touch focus stays clean. */
+:focus-visible {
+  outline: 2px solid var(--ds-blu) !important;
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* iOS zooms into any focused field under 16px; keep 16px on phones so
+   pinch-zoom can stay enabled without the page jumping on every tap. */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch screens (gloves, motion offshore): form controls and buttons in
+   the item modal get a 44px minimum target. */
+@media (pointer: coarse) {
+  .modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .modal-card select {
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: none !important;
+    line-height: 42px !important;
+  }
+  .modal-card button,
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Responsive form grids: collapse to one column on phones. */
+.form-grid-2,
+.form-grid-3,
+.form-grid-4 {
+  display: grid;
+  gap: 10px;
+}
+.form-grid-2 { grid-template-columns: 1fr 1fr; }
+.form-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.form-grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 640px) {
+  .form-grid-3,
+  .form-grid-4 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 400px) {
+  .form-grid-2,
+  .form-grid-3,
+  .form-grid-4 { grid-template-columns: 1fr; }
+}
+
+/* Item modal action bar stays reachable at the bottom of long forms. */
+.modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--ds-sur);
+  margin: 0 -24px -24px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--ds-bord);
+  box-shadow: 0 -6px 12px -8px rgba(15, 23, 42, 0.18);
+}
+@media (max-width: 640px) {
+  .modal-footer {
+    margin: 0 -16px -16px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Phone layout: bottom navigation, sidebar as an overlay drawer, no
+   footer bar. */
+.bottom-nav,
+.sidebar-backdrop {
+  display: none;
+}
+@media (max-width: 768px) {
+  .bottom-nav {
+    display: flex;
+  }
+  .app-footer {
+    display: none !important;
+  }
+  .app-sidebar[data-collapsed="true"] {
+    display: none !important;
+  }
+  .app-sidebar[data-collapsed="false"] {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(280px, 85vw) !important;
+    z-index: 900;
+    box-shadow: 8px 0 24px rgba(0, 0, 0, 0.3);
+  }
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 899;
+    background: rgba(15, 23, 42, 0.45);
+    border: none;
+  }
+  .app-content {
+    padding: 0 12px 16px !important;
+  }
+}
+

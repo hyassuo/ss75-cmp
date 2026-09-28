@@ -18,24 +18,38 @@ const COLLAPSE_KEY = "ss75.alerts.collapsed";
 interface Alert {
   t: "danger" | "warn";
   msg: string;
+  itemId: string;
 }
 
 export function AlertBar() {
   const { zones, itemsByZone } = useData();
-  const { sysFilter } = useShell();
+  const { sysFilter, openItem } = useShell();
   const { t } = useLang();
   const [collapsed, setCollapsed] = useState(false);
 
+  // Remembered per browser; with no stored choice it starts collapsed on
+  // phones, where an expanded list would push the content off screen.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(COLLAPSE_KEY);
+    } catch {
+      // storage unavailable
+    }
+    setCollapsed(
+      stored !== null
+        ? stored === "1"
+        : window.matchMedia("(max-width: 640px)").matches
+    );
   }, []);
 
   function toggle() {
     setCollapsed((c) => {
       const next = !c;
-      if (typeof window !== "undefined") {
+      try {
         window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
       }
       return next;
     });
@@ -54,6 +68,7 @@ export function AlertBar() {
         alerts.push({
           t: "danger",
           msg: `${z.zid} | ${it.name}: ${t("alert.overdueSince")} ${fmt(it.next_insp)}`,
+          itemId: it.id,
         });
       }
       const dd = daysUntil(it.next_insp);
@@ -61,12 +76,14 @@ export function AlertBar() {
         alerts.push({
           t: "warn",
           msg: `${z.zid} | ${it.name}: ${t("alert.dueIn")} ${dd} ${t("alert.days")}`,
+          itemId: it.id,
         });
       }
       if (isActionOverdue(it, today())) {
         alerts.push({
           t: "danger",
           msg: `${z.zid} | ${it.name}: ${t("alert.actionOverdue")} ${fmt(it.action_due)} (${it.action_type})`,
+          itemId: it.id,
         });
       }
       const rt = calcRate(it.readings);
@@ -74,11 +91,13 @@ export function AlertBar() {
         alerts.push({
           t: "danger",
           msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${rt.toFixed(3)} mm/yr`,
+          itemId: it.id,
         });
       } else if (rt !== null && rt > RATE_ELEVATED_MM_YR) {
         alerts.push({
           t: "warn",
           msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${rt.toFixed(3)} mm/yr`,
+          itemId: it.id,
         });
       }
     }
@@ -99,12 +118,16 @@ export function AlertBar() {
         boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
       }}
     >
-      <div
+      <button
+        type="button"
         onClick={toggle}
-        role="button"
         aria-expanded={!collapsed}
         className="alert-header"
         style={{
+          width: "100%",
+          border: "none",
+          font: "inherit",
+          textAlign: "left",
           padding: "10px 14px",
           background: DS.redBg,
           borderBottom: collapsed ? "none" : "1px solid " + DS.redBord,
@@ -212,15 +235,22 @@ export function AlertBar() {
             ▾
           </span>
         </div>
-      </div>
+      </button>
       {!collapsed && (
       <div style={{ maxHeight: 200, overflowY: "auto" }}>
         {alerts.map((a, i) => {
           const isDanger = a.t === "danger";
           return (
-            <div
+            <button
+              type="button"
               key={i}
+              onClick={() => openItem(a.itemId)}
               style={{
+                width: "100%",
+                border: "none",
+                font: "inherit",
+                textAlign: "left",
+                cursor: "pointer",
                 display: "flex",
                 gap: 10,
                 alignItems: "flex-start",
@@ -253,13 +283,13 @@ export function AlertBar() {
               <span
                 style={{
                   fontSize: 12,
-                  color: isDanger ? DS.red : "#92400e",
+                  color: isDanger ? DS.red : DS.ora,
                   lineHeight: 1.5,
                 }}
               >
                 {a.msg}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>

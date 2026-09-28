@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { DS } from "@/lib/design/tokens";
+import { useLang } from "@/lib/context/LangContext";
 import { createClient } from "@/lib/supabase/client";
 import pkg from "@/package.json";
 
@@ -8,6 +10,8 @@ const APP_VERSION = (pkg as { version: string }).version;
 const VERSION_KEY = "ss75-cmp.lastVersion";
 // Single-tab session that does not survive 30 min of zero interaction.
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+// Heads-up shown this long before the idle sign-out.
+const IDLE_WARNING_MS = 2 * 60 * 1000;
 
 async function forceSignOut(reload: boolean) {
   try {
@@ -37,15 +41,24 @@ async function forceSignOut(reload: boolean) {
  */
 export function IdleLogout() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const warnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastActivity = useRef(Date.now());
+  const [warning, setWarning] = useState(false);
+  const { t } = useLang();
 
   useEffect(() => {
     const arm = (ms: number) => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (warnRef.current) clearTimeout(warnRef.current);
       timerRef.current = setTimeout(() => void forceSignOut(true), ms);
+      warnRef.current = setTimeout(
+        () => setWarning(true),
+        Math.max(0, ms - IDLE_WARNING_MS)
+      );
     };
     const activity = () => {
       lastActivity.current = Date.now();
+      setWarning(false);
       arm(IDLE_TIMEOUT_MS);
     };
     const onVisible = () => {
@@ -62,12 +75,98 @@ export function IdleLogout() {
     activity();
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (warnRef.current) clearTimeout(warnRef.current);
       events.forEach((e) => window.removeEventListener(e, activity));
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
-  return null;
+  if (!warning) return null;
+  // Any tap/key counts as activity and dismisses this; the button just
+  // gives an explicit target. Sits above the item modal (z-index 1000).
+  return (
+    <div
+      role="alert"
+      style={{
+        position: "fixed",
+        left: 16,
+        right: 16,
+        bottom: 16,
+        zIndex: 1100,
+        maxWidth: 520,
+        margin: "0 auto",
+        background: DS.sbBg,
+        color: "#fff",
+        borderRadius: 10,
+        padding: "12px 14px",
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        flexWrap: "wrap",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
+        fontSize: 13,
+      }}
+    >
+      <span style={{ flex: "1 1 220px" }}>{t("idle.warning")}</span>
+      <button
+        type="button"
+        onClick={() => setWarning(false)}
+        style={{
+          background: DS.blu,
+          color: "#fff",
+          border: "none",
+          borderRadius: 7,
+          padding: "8px 16px",
+          minHeight: 44,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        {t("idle.stay")}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Offline banner. The app keeps unsaved item edits locally (itemDraft) and
+ * keeps forms open when a save fails; this tells the inspector why saves
+ * are failing before they try.
+ */
+export function ConnectionBanner() {
+  const [online, setOnline] = useState(true);
+  const { t } = useLang();
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  if (online) return null;
+  return (
+    <div
+      role="status"
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1100,
+        background: DS.yel,
+        color: "#fff",
+        textAlign: "center",
+        fontSize: 13,
+        fontWeight: 600,
+        padding: "6px 12px",
+      }}
+    >
+      {t("net.offline")}
+    </div>
+  );
 }
 
 /**

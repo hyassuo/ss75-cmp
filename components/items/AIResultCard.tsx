@@ -69,12 +69,8 @@ export function AIResultCard({ result: r, onApply }: Props) {
         </div>
       )}
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr 1fr",
-          gap: 8,
-          marginBottom: 10,
-        }}
+        className="form-grid-4"
+        style={{ marginBottom: 10 }}
       >
         <div style={tile(DS.bord)}>
           <div style={cap}>Type</div>
@@ -116,12 +112,8 @@ export function AIResultCard({ result: r, onApply }: Props) {
         </div>
       </div>
       <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 8,
-          marginBottom: 10,
-        }}
+        className="form-grid-2"
+        style={{ marginBottom: 10 }}
       >
         <div style={tile(DS.bord)}>
           <div style={cap}>Area Affected</div>

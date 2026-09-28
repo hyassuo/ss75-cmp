@@ -120,7 +120,9 @@ function showPdfInTab(win: Window | null, blob: Blob) {
 }
 
 export function ExportTab() {
-  const { t, tPriority, tStatus } = useLang();
+  const { lang, t, tPriority, tStatus } = useLang();
+  // Excel in pt-BR expects ";" (the comma is the decimal separator).
+  const csvSep = lang === "pt" ? ";" : ",";
   const { zones, itemsByZone, subareas } = useData();
   const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
   const [busy, setBusy] = useState<string | null>(null);
@@ -185,9 +187,9 @@ export function ExportTab() {
     const rows = itemRows();
     const headers = Object.keys(rows[0] ?? { Zone: "" });
     const csv = [
-      csvRow(headers),
+      csvRow(headers, csvSep),
       ...rows.map((r) =>
-        csvRow(headers.map((h) => (r as Record<string, unknown>)[h]))
+        csvRow(headers.map((h) => (r as Record<string, unknown>)[h]), csvSep)
       ),
     ].join("\n");
     download(
@@ -668,7 +670,7 @@ export function ExportTab() {
                     ? DS.ora
                     : it.next_insp
                       ? DS.text3
-                      : DS.bord2;
+                      : DS.text3;
                 return (
                   <tr
                     key={it.id}
@@ -734,7 +736,7 @@ export function ExportTab() {
                         padding: "8px 10px",
                         fontFamily: "monospace",
                         fontSize: 11,
-                        color: it.last_insp ? DS.text3 : DS.bord2,
+                        color: it.last_insp ? DS.text3 : DS.text3,
                       }}
                     >
                       {fmtCompact(it.last_insp)}
@@ -755,7 +757,7 @@ export function ExportTab() {
                         padding: "8px 10px",
                         fontFamily: "monospace",
                         fontSize: 10,
-                        color: it.ifs_wo ? DS.grn : DS.bord2,
+                        color: it.ifs_wo ? DS.grn : DS.text3,
                       }}
                     >
                       {it.ifs_wo || "-"}

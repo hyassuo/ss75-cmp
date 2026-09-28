@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ShellProvider } from "@/lib/context/ShellContext";
 import { DataProvider } from "@/lib/context/DataContext";
-import { LangProvider } from "@/lib/context/LangContext";
 import { AppShell } from "@/components/layout/AppShell";
 import type { Profile } from "@/lib/types/domain";
 
@@ -29,12 +28,10 @@ export default async function AppLayout({
   }
 
   return (
-    <LangProvider>
-      <ShellProvider>
-        <DataProvider profile={profile as Profile}>
-          <AppShell>{children}</AppShell>
-        </DataProvider>
-      </ShellProvider>
-    </LangProvider>
+    <ShellProvider>
+      <DataProvider profile={profile as Profile}>
+        <AppShell>{children}</AppShell>
+      </DataProvider>
+    </ShellProvider>
   );
 }
