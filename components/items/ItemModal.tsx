@@ -769,8 +769,8 @@ function ItemModalInner({
             fontSize: 18,
             cursor: "pointer",
             borderRadius: 7,
-            minWidth: 40,
-            minHeight: 40,
+            minWidth: 44,
+            minHeight: 44,
             flexShrink: 0,
           }}
         >

@@ -101,9 +101,17 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     under.delete("item");
     under.delete("new");
     const qs = under.toString();
-    window.history.replaceState(null, "", qs ? `/dashboard?${qs}` : "/dashboard");
-    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
-    pushedItem.current = true;
+    const full = `/dashboard?${params.toString()}`;
+    // Deferred one task: child effects run before Next's AppRouter patches
+    // window.history, and entries written earlier carry a null state that
+    // Next's popstate handler ignores (Back would change the URL but not
+    // close the modal).
+    const h = setTimeout(() => {
+      window.history.replaceState(null, "", qs ? `/dashboard?${qs}` : "/dashboard");
+      window.history.pushState(null, "", full);
+      pushedItem.current = true;
+    }, 0);
+    return () => clearTimeout(h);
     // Once, on first load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
