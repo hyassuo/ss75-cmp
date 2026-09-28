@@ -34,8 +34,10 @@ describe("zoneScore", () => {
     // Critical-priority item scores 50, Low-priority item scores 100.
     // Weighted mean must sit below the unweighted mean (75) because the
     // low score carries the 1.4 weight.
-    const bad = makeItem({ priority: "Critical", status: "Critical" });
-    const good = makeItem({ id: "item-2", priority: "Low" });
+    // Weights follow the effective (recomputed) priority, so the risk
+    // inputs drive it — not the stored snapshot.
+    const bad = makeItem({ prob: 5, cons: 5, status: "Critical" });
+    const good = makeItem({ id: "item-2", prob: 1, cons: 1 });
     const sc = zoneScore([bad, good]);
     expect(sc).not.toBeNull();
     expect(sc as number).toBeLessThan(75);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calcPriority } from "@/lib/domain/calcPriority";
+import { calcPriority, effectivePriority } from "@/lib/domain/calcPriority";
 
 const FUTURE = "2999-01-01"; // no overdue / due-soon bonus
 const PAST = "2000-01-01"; // overdue bonus (+5)
@@ -42,5 +42,26 @@ describe("calcPriority", () => {
     expect(calcPriority(3, 4, false, null)).toBe("Medium"); // 12
     const in100 = new Date(Date.now() + 100 * 864e5).toISOString().slice(0, 10);
     expect(calcPriority(3, 4, false, in100)).toBe("Medium"); // 12
+  });
+});
+
+describe("effectivePriority", () => {
+  const base = {
+    prob: 3,
+    cons: 4,
+    sece: false,
+    drops_risk: false,
+    structural: false,
+    next_insp: FUTURE,
+  };
+
+  it("escalates an item that went overdue since it was saved", () => {
+    expect(effectivePriority(base)).toBe("Medium"); // 12
+    expect(effectivePriority({ ...base, next_insp: PAST })).toBe("High"); // 17
+  });
+
+  it("is null when P or C was cleared, whatever was stored before", () => {
+    expect(effectivePriority({ ...base, prob: null })).toBeNull();
+    expect(effectivePriority({ ...base, cons: null })).toBeNull();
   });
 });

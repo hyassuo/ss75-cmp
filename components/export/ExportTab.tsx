@@ -10,6 +10,7 @@ import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
+import { csvRow } from "@/lib/utils/csv";
 import { latestNameByRef } from "@/lib/utils/historyNames";
 import { download } from "@/lib/utils/download";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
@@ -18,6 +19,7 @@ import type { HistoryEntry } from "@/lib/types/domain";
 // PdfDocument + @react-pdf/renderer (~500 KB) are lazy-loaded inside
 // exportPDF so the dashboard chunk stays light for users who never export.
 import type { PdfItem, PdfPhoto } from "@/components/export/PdfDocument";
+import { effectivePriority } from "@/lib/domain/calcPriority";
 
 // Cap per item to keep PDF size sane (~250 KB per JPEG => 1 MB max per item).
 const MAX_PHOTOS_PER_ITEM = 4;
@@ -162,7 +164,7 @@ export function ExportTab() {
         RPN: it.prob && it.cons ? it.prob * it.cons : "",
         "Corrosion Extent (%)": it.corr_extent_band ?? "",
         "Material Loss (%)": it.material_loss_band ?? "",
-        Priority: it.priority ?? "",
+        Priority: effectivePriority(it) ?? "",
         Status: it.status,
         SECE: it.sece ? "YES" : "NO",
         Frequency: it.freq_insp ?? "",
@@ -182,14 +184,10 @@ export function ExportTab() {
   function exportCSV() {
     const rows = itemRows();
     const headers = Object.keys(rows[0] ?? { Zone: "" });
-    const esc = (v: unknown) => {
-      const s = String(v ?? "");
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
     const csv = [
-      headers.join(","),
+      csvRow(headers),
       ...rows.map((r) =>
-        headers.map((h) => esc((r as Record<string, unknown>)[h])).join(",")
+        csvRow(headers.map((h) => (r as Record<string, unknown>)[h]))
       ),
     ].join("\n");
     download(
@@ -216,7 +214,8 @@ export function ExportTab() {
             .select("*")
             .order("event_date", { ascending: false })
             .order("id")
-            .range(from, to)
+            .range(from, to),
+          { key: (h) => h.id }
         ),
         60_000,
         "history fetch"
@@ -438,7 +437,7 @@ export function ExportTab() {
           subarea: (it.subarea_id && subareaName.get(it.subarea_id)) || "",
           name: it.name,
           ifs: it.ifs_obj_id ?? "",
-          priority: it.priority ?? "",
+          priority: effectivePriority(it) ?? "",
           status: it.status,
           sece: it.sece,
           last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
@@ -512,7 +511,7 @@ export function ExportTab() {
           generated={fmtCompact(today())}
           total={activeFlat.length}
           sece={activeFlat.filter((i) => i.sece).length}
-          critical={activeFlat.filter((i) => i.priority === "Critical").length}
+          critical={activeFlat.filter((i) => effectivePriority(i) === "Critical").length}
           items={items}
           photosByItem={photosByItem}
           note={note || undefined}
@@ -706,10 +705,10 @@ export function ExportTab() {
                       {it.ifs_obj_id || "-"}
                     </td>
                     <td style={{ padding: "8px 10px" }}>
-                      {it.priority ? (
+                      {effectivePriority(it) ? (
                         <Badge
-                          text={tPriority(it.priority)}
-                          color={PRIORITY_COLOR[it.priority]}
+                          text={tPriority(effectivePriority(it))}
+                          color={PRIORITY_COLOR[effectivePriority(it)!]}
                           sm
                         />
                       ) : (

@@ -12,7 +12,10 @@ const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 async function forceSignOut(reload: boolean) {
   try {
     const supabase = createClient();
-    await supabase.auth.signOut();
+    // Local scope: end this device's session only. The default ('global')
+    // revoked every session of the user, so an idle desktop tab signed the
+    // inspector out of the tablet in the middle of an inspection.
+    await supabase.auth.signOut({ scope: "local" });
   } catch {
     // ignore — we're already tearing the session down
   }
@@ -26,27 +29,41 @@ async function forceSignOut(reload: boolean) {
 /**
  * Signs the user out after IDLE_TIMEOUT_MS with no input. Activity events
  * (mouse, keyboard, touch, scroll) reset the timer.
+ *
+ * Mobile browsers freeze timers in background tabs, so the deadline is also
+ * checked against the wall clock whenever the page becomes visible again —
+ * returning to the tab is not "activity" and must not restart the count.
+ * Unsaved item edits survive the sign-out in local storage (itemDraft).
  */
 export function IdleLogout() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivity = useRef(Date.now());
 
   useEffect(() => {
-    const reset = () => {
+    const arm = (ms: number) => {
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => void forceSignOut(true), IDLE_TIMEOUT_MS);
+      timerRef.current = setTimeout(() => void forceSignOut(true), ms);
     };
-    const events = [
-      "mousedown",
-      "keydown",
-      "touchstart",
-      "scroll",
-      "visibilitychange",
-    ];
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    reset();
+    const activity = () => {
+      lastActivity.current = Date.now();
+      arm(IDLE_TIMEOUT_MS);
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const left = IDLE_TIMEOUT_MS - (Date.now() - lastActivity.current);
+      if (left <= 0) void forceSignOut(true);
+      else arm(left);
+    };
+    const events = ["mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((e) =>
+      window.addEventListener(e, activity, { passive: true })
+    );
+    document.addEventListener("visibilitychange", onVisible);
+    activity();
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
-      events.forEach((e) => window.removeEventListener(e, reset));
+      events.forEach((e) => window.removeEventListener(e, activity));
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 

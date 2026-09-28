@@ -14,6 +14,7 @@ import { zoneScore } from "@/lib/domain/zoneScore";
 import { isActionOpen, isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import type { ItemPriority } from "@/lib/types/domain";
+import { effectivePriority } from "@/lib/domain/calcPriority";
 
 export function Dashboard() {
   const { zones, itemsByZone } = useData();
@@ -94,7 +95,7 @@ export function Dashboard() {
     return d !== null && d >= 0 && d <= 30;
   }).length;
   const seceItems = allItems.filter((i) => i.sece);
-  const critItems = allItems.filter((i) => i.priority === "Critical");
+  const critItems = allItems.filter((i) => effectivePriority(i) === "Critical");
   const withSched = allItems.filter((i) => i.next_insp).length;
   const schedC =
     withSched > 0 ? Math.round(((withSched - overdue) / withSched) * 100) : 100;
@@ -322,7 +323,7 @@ export function Dashboard() {
 
       <div style={gridAuto}>
         {priorities.map((p) => {
-          const its = allItems.filter((i) => i.priority === p);
+          const its = allItems.filter((i) => effectivePriority(i) === p);
           const sc = zoneScore(its);
           return (
             <div

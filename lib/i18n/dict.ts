@@ -136,6 +136,32 @@ const en = {
   "modal.unsavedEvidence":
     "There is an unsaved evidence entry (photo/description). OK = continue and discard it. Cancel = go back and save it first.",
   "modal.nameRequired": "Item name is required.",
+  "modal.saveFailed":
+    "Not saved — your changes are still here. Check the connection and try again.",
+  "modal.deleteFailed": "Could not delete:",
+  "modal.deletedElsewhere": "This item was deleted by another user.",
+  "modal.conflict":
+    "Someone else changed this item while you were editing. Nothing was saved yet.",
+  "modal.conflictOverwrite": "Save my changes on top",
+  "modal.conflictReload": "Discard mine and load theirs",
+  "modal.discardChanges": "Discard your unsaved changes?",
+  "modal.discardNew":
+    "Discard this new item? Photos and readings already attached to it will be deleted too.",
+  "modal.draftFound": "Unsaved changes from a previous session were found",
+  "modal.draftRestore": "Restore",
+  "modal.draftDiscard": "Discard",
+  "readings.invalidDepth": "Enter a depth of 0 mm or more.",
+  "readings.futureDate": "The reading date cannot be in the future.",
+  "readings.saveFailed": "Reading not saved:",
+  "readings.confirmDelete": "Delete this reading?",
+  "evidence.confirmDelete": "Delete this evidence and its photo?",
+  "evidence.saveFailed": "Evidence not saved:",
+  "common.deleteFailed": "Could not delete:",
+  "ai.timeout": "The AI analysis took too long. Try again.",
+  "common.dismiss": "Dismiss",
+  "audit.truncated":
+    "Showing the most recent events only — narrow the date range to see older ones.",
+  "audit.loadFailed": "Could not load the audit log:",
   "modal.archive": "Archive",
   "modal.unarchive": "Unarchive",
 
@@ -472,6 +498,32 @@ const pt: Translations = {
   "modal.unsavedEvidence":
     "Há uma evidência não salva (foto/descrição). OK = continuar e descartar. Cancelar = voltar e salvá-la primeiro.",
   "modal.nameRequired": "O nome do item é obrigatório.",
+  "modal.saveFailed":
+    "Não salvo — suas alterações continuam aqui. Verifique a conexão e tente novamente.",
+  "modal.deleteFailed": "Não foi possível excluir:",
+  "modal.deletedElsewhere": "Este item foi excluído por outro usuário.",
+  "modal.conflict":
+    "Outra pessoa alterou este item enquanto você editava. Nada foi salvo ainda.",
+  "modal.conflictOverwrite": "Salvar minhas alterações por cima",
+  "modal.conflictReload": "Descartar as minhas e carregar as dela",
+  "modal.discardChanges": "Descartar as alterações não salvas?",
+  "modal.discardNew":
+    "Descartar este item novo? As fotos e leituras já anexadas também serão excluídas.",
+  "modal.draftFound": "Foram encontradas alterações não salvas de uma sessão anterior",
+  "modal.draftRestore": "Restaurar",
+  "modal.draftDiscard": "Descartar",
+  "readings.invalidDepth": "Informe uma profundidade de 0 mm ou mais.",
+  "readings.futureDate": "A data da leitura não pode ser futura.",
+  "readings.saveFailed": "Leitura não salva:",
+  "readings.confirmDelete": "Excluir esta leitura?",
+  "evidence.confirmDelete": "Excluir esta evidência e a foto?",
+  "evidence.saveFailed": "Evidência não salva:",
+  "common.deleteFailed": "Não foi possível excluir:",
+  "ai.timeout": "A análise por IA demorou demais. Tente novamente.",
+  "common.dismiss": "Fechar",
+  "audit.truncated":
+    "Exibindo apenas os eventos mais recentes — reduza o período para ver os mais antigos.",
+  "audit.loadFailed": "Não foi possível carregar o log de auditoria:",
   "modal.archive": "Arquivar",
   "modal.unarchive": "Desarquivar",
 

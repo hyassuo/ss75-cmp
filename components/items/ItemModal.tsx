@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Section } from "@/components/ui/Section";
 import { Input } from "@/components/ui/Input";
@@ -13,13 +13,20 @@ import { EvidencePanel } from "@/components/items/EvidencePanel";
 import { ReadingsPanel } from "@/components/items/ReadingsPanel";
 import { HistoryPanel } from "@/components/items/HistoryPanel";
 import { IfsObjectSearch } from "@/components/items/IfsObjectSearch";
-import { useData } from "@/lib/context/DataContext";
+import { useData, type MutationResult } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
 import { calcPriority } from "@/lib/domain/calcPriority";
 import { calcNextInspection } from "@/lib/domain/calcNextInspection";
 import { suggestActionDue } from "@/lib/domain/actionPlan";
+import { AI_READING_CHECKED_BY, AI_READING_LOCATION } from "@/lib/domain/calcRate";
 import { today } from "@/lib/utils/format";
+import {
+  clearItemDraft,
+  loadItemDraft,
+  saveItemDraft,
+  type ItemDraft,
+} from "@/lib/utils/itemDraft";
 import {
   MECHANISMS,
   PROTECTIONS,
@@ -90,32 +97,19 @@ type Form = {
 
 export function ItemModal(props: Props) {
   const { allItems } = useData();
-  const item = allItems.find((i) => i.id === props.itemId);
+  const live = allItems.find((i) => i.id === props.itemId);
+  // If the item disappears while open (deleted elsewhere, picked up by a
+  // background refresh), keep showing the user's form instead of silently
+  // unmounting it — the save will report what happened.
+  const last = useRef(live);
+  if (live) last.current = live;
+  const item = live ?? last.current;
   if (!item) return null;
-  return <ItemModalInner {...props} item={item} />;
+  return <ItemModalInner {...props} item={item} gone={!live} />;
 }
 
-function ItemModalInner({
-  zoneName,
-  isNew,
-  onClose,
-  item,
-}: Props & { item: ItemWithRelations }) {
-  const {
-    profile,
-    zones,
-    subareasByZone,
-    createSubarea,
-    updateItem,
-    deleteItem,
-    addReading,
-    deleteReading,
-    addEvidence,
-    deleteEvidence,
-  } = useData();
-  const { t } = useLang();
-
-  const [f, setF] = useState<Form>(() => ({
+function formFromItem(item: ItemWithRelations, isNew: boolean): Form {
+  return {
     // On a freshly created draft the DB row carries the "Untitled" fallback;
     // surface it as an empty field so the user types their own name instead
     // of having to manually erase the placeholder text.
@@ -155,8 +149,90 @@ function ItemModalInner({
     is_accessory: item.is_accessory ?? false,
     accessory_type: item.accessory_type ?? "",
     notes: item.notes ?? "",
-  }));
+  };
+}
+
+// Form → the item columns it persists.
+function patchFromForm(f: Form, name: string): Partial<Item> {
+  return {
+    name,
+    zone_id: f.zone_id,
+    subarea_id: f.subarea_id || null,
+    action_type: f.action_type || null,
+    action_due: f.action_due,
+    action_status: f.action_type ? f.action_status || "Sem planejamento" : null,
+    action_note: f.action_note || null,
+    corr_extent_band: f.corr_extent_band || null,
+    material_loss_band: f.material_loss_band || null,
+    is_accessory: f.is_accessory,
+    accessory_type: f.is_accessory ? f.accessory_type || null : null,
+    mechanism: f.mechanism || null,
+    protection: f.protection || null,
+    ifs_obj_id: f.ifs_obj_id || null,
+    ifs_obj_desc: f.ifs_obj_desc || null,
+    ifs_wo: f.ifs_wo || null,
+    ifs_fl: f.ifs_fl || null,
+    prob: f.prob,
+    cons: f.cons,
+    priority: f.priority,
+    status: f.status,
+    sece: f.sece,
+    drops_risk: f.drops_risk,
+    structural: f.structural,
+    obs_source: f.obs_source || null,
+    freq_insp: f.freq_insp,
+    last_insp: f.last_insp,
+    next_insp: f.next_insp,
+    resolved_at: f.resolved_at,
+    notes: f.notes || null,
+  };
+}
+
+// Only the columns whose value differs from `base` (the row as it was when
+// editing started). Saving a diff instead of the whole form means a save
+// never reverts fields someone else changed meanwhile.
+function diffPatch(full: Partial<Item>, base: Item): Partial<Item> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(full)) {
+    const cur = (base as unknown as Record<string, unknown>)[k];
+    if ((v ?? null) !== (cur ?? null)) out[k] = v;
+  }
+  return out as Partial<Item>;
+}
+
+const sameForm = (a: Form, b: Form) => JSON.stringify(a) === JSON.stringify(b);
+
+function ItemModalInner({
+  zoneName,
+  isNew,
+  onClose,
+  item,
+  gone,
+}: Props & { item: ItemWithRelations; gone: boolean }) {
+  const {
+    profile,
+    zones,
+    subareasByZone,
+    createSubarea,
+    updateItem,
+    deleteItem,
+    addReading,
+    deleteReading,
+    addEvidence,
+    deleteEvidence,
+  } = useData();
+  const { t } = useLang();
+
+  // The row as it was when editing started: the baseline for the diff
+  // patch and, via updated_at, for conflict detection.
+  const [base, setBase] = useState<ItemWithRelations>(item);
+  const [initial, setInitial] = useState<Form>(() => formFromItem(item, isNew));
+  const [f, setF] = useState<Form>(initial);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [restorable, setRestorable] = useState<ItemDraft<Form> | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const [nameError, setNameError] = useState(false);
   // AI pit-depth estimate staged in the form — persisted only on Save, so
   // cancelling the modal never leaves an orphan reading in the DB.
@@ -170,6 +246,60 @@ function ItemModalInner({
 
   const isReadOnly = profile.role === "viewer";
   const isAdmin = profile.role === "admin";
+  const dirty = !sameForm(f, initial) || pendingAiReading !== null;
+
+  // Offer edits left unsaved by a previous session (dropped link, idle
+  // logout, closed tab) — only if they differ from what's stored now.
+  useEffect(() => {
+    if (isReadOnly || isNew) return;
+    const d = loadItemDraft<Form>(item.id);
+    if (d && !sameForm(d.form, initial)) setRestorable(d);
+    // Run once per opened item.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  // Mirror unsaved edits to local storage (debounced).
+  useEffect(() => {
+    if (isReadOnly || restorable) return;
+    if (!sameForm(f, initial)) {
+      const h = setTimeout(
+        () =>
+          saveItemDraft<Form>(item.id, {
+            form: f,
+            baseUpdatedAt: base.updated_at,
+            savedAt: Date.now(),
+          }),
+        400
+      );
+      return () => clearTimeout(h);
+    }
+    clearItemDraft(item.id);
+  }, [f, initial, base.updated_at, item.id, isReadOnly, restorable]);
+
+  useEffect(() => {
+    if (saveError || conflict) {
+      errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [saveError, conflict]);
+
+  function restoreDraft() {
+    if (!restorable) return;
+    setF(restorable.form);
+    // Conflict detection relative to the version the draft was based on.
+    setBase((b) => ({ ...b, updated_at: restorable.baseUpdatedAt }));
+    setRestorable(null);
+  }
+
+  function discardDraft() {
+    clearItemDraft(item.id);
+    setRestorable(null);
+  }
+
+  function describe(r: MutationResult<unknown>): string {
+    if (r.ok) return "";
+    if (r.notFound) return t("modal.deletedElsewhere");
+    return t("modal.saveFailed") + " (" + r.error + ")";
+  }
 
   function set<K extends keyof Form>(k: K, v: Form[K]) {
     setF((x) => ({ ...x, [k]: v }));
@@ -186,15 +316,17 @@ function ItemModalInner({
         merged.drops_risk,
         merged.structural
       );
-      return { ...merged, priority: p ?? merged.priority };
+      return { ...merged, priority: p };
     });
   }
 
   function onFreqOrLast(next: Partial<Form>) {
     setF((x) => {
       const merged = { ...x, ...next };
+      // No schedule without a last date and a periodic frequency — never
+      // keep a stale next date that nobody can edit away.
       const ni = calcNextInspection(merged.last_insp, merged.freq_insp);
-      const withNi = { ...merged, next_insp: ni ?? merged.next_insp };
+      const withNi = { ...merged, next_insp: ni };
       const p = calcPriority(
         withNi.prob,
         withNi.cons,
@@ -203,7 +335,7 @@ function ItemModalInner({
         withNi.drops_risk,
         withNi.structural
       );
-      return { ...withNi, priority: p ?? withNi.priority };
+      return { ...withNi, priority: p };
     });
   }
 
@@ -303,7 +435,7 @@ function ItemModalInner({
         next.drops_risk,
         next.structural
       );
-      if (p) next.priority = p;
+      next.priority = p;
       // Status maps from the AI's recommended action: urgent → Critical,
       // anything else nudging us to act → Attention. Auto-apply only
       // escalates from the untouched default (Pending) — x.status is the
@@ -325,7 +457,7 @@ function ItemModalInner({
     }
   }
 
-  async function save() {
+  async function save(overwrite = false) {
     if (evidenceDirty && !confirm(t("modal.unsavedEvidence"))) return;
     const trimmedName = f.name.trim();
     if (!trimmedName) {
@@ -333,65 +465,104 @@ function ItemModalInner({
       return;
     }
     setSaving(true);
+    setSaveError(null);
+    setConflict(false);
     // Persist the staged AI pit-depth estimate first (re-check that no
-    // manual reading appeared since the AI apply).
+    // manual reading appeared since the AI apply). Cleared once stored so
+    // a retry after a failed item save can't add it twice.
     if (pendingAiReading !== null && item.readings.length === 0) {
-      await addReading(item.id, {
+      const r = await addReading(item.id, {
         reading_date: today(),
         depth_mm: pendingAiReading,
-        location: "AI estimate",
-        checked_by: "AI Vision",
+        location: AI_READING_LOCATION,
+        checked_by: AI_READING_CHECKED_BY,
       });
+      if (!r.ok) {
+        setSaveError(describe(r));
+        setSaving(false);
+        return;
+      }
+      setPendingAiReading(null);
     }
-    const patch: Partial<Item> = {
-      name: trimmedName,
-      zone_id: f.zone_id,
-      subarea_id: f.subarea_id || null,
-      action_type: f.action_type || null,
-      action_due: f.action_due,
-      action_status: f.action_type ? f.action_status || "Sem planejamento" : null,
-      action_note: f.action_note || null,
-      corr_extent_band: f.corr_extent_band || null,
-      material_loss_band: f.material_loss_band || null,
-      is_accessory: f.is_accessory,
-      accessory_type: f.is_accessory ? f.accessory_type || null : null,
-      mechanism: f.mechanism || null,
-      protection: f.protection || null,
-      ifs_obj_id: f.ifs_obj_id || null,
-      ifs_obj_desc: f.ifs_obj_desc || null,
-      ifs_wo: f.ifs_wo || null,
-      ifs_fl: f.ifs_fl || null,
-      prob: f.prob,
-      cons: f.cons,
-      priority: f.priority,
-      status: f.status,
-      sece: f.sece,
-      drops_risk: f.drops_risk,
-      structural: f.structural,
-      obs_source: f.obs_source || null,
-      freq_insp: f.freq_insp,
-      last_insp: f.last_insp,
-      next_insp: f.next_insp,
-      resolved_at: f.resolved_at,
-      notes: f.notes || null,
-    };
-    await updateItem(item.id, patch);
+    const patch = diffPatch(patchFromForm(f, trimmedName), base);
+    if (Object.keys(patch).length === 0) {
+      clearItemDraft(item.id);
+      setSaving(false);
+      onClose();
+      return;
+    }
+    // overwrite: the user saw the conflict and chose to apply their changes
+    // on top of the current version (only the fields they changed).
+    const res = await updateItem(item.id, patch, {
+      expectedUpdatedAt: overwrite ? item.updated_at : base.updated_at,
+    });
     setSaving(false);
-    onClose();
+    if (res.ok) {
+      clearItemDraft(item.id);
+      onClose();
+    } else if (res.conflict) {
+      setConflict(true);
+    } else {
+      setSaveError(describe(res));
+    }
+  }
+
+  // Throw the local edits away and start over from the current version.
+  function reloadLatest() {
+    const fresh = formFromItem(item, false);
+    setBase(item);
+    setInitial(fresh);
+    setF(fresh);
+    setPendingAiReading(null);
+    setConflict(false);
+    setSaveError(null);
+    clearItemDraft(item.id);
   }
 
   async function remove() {
     if (!confirm(t("common.confirmDelete"))) return;
-    await deleteItem(item.id);
+    const r = await deleteItem(item.id);
+    if (!r.ok) {
+      setSaveError(t("modal.deleteFailed") + " " + r.error);
+      return;
+    }
+    clearItemDraft(item.id);
+    onClose();
+  }
+
+  async function toggleArchived() {
+    if (dirty && !confirm(t("modal.discardChanges"))) return;
+    const r = await updateItem(item.id, { archived: !item.archived });
+    if (!r.ok) {
+      setSaveError(describe(r));
+      return;
+    }
+    clearItemDraft(item.id);
     onClose();
   }
 
   async function cancel() {
-    if (evidenceDirty && !confirm(t("modal.unsavedEvidence"))) return;
     if (isNew) {
-      // Discard the freshly-created draft row.
-      await deleteItem(item.id);
+      // Readings and photos are stored the moment they're added, so
+      // discarding a new item deletes them too — say so first.
+      const attached = item.readings.length + item.evidences.length > 0;
+      if (
+        (dirty || evidenceDirty || attached) &&
+        !confirm(t("modal.discardNew"))
+      ) {
+        return;
+      }
+      if (!gone) {
+        const r = await deleteItem(item.id, { discardDraft: true });
+        if (!r.ok) {
+          setSaveError(t("modal.deleteFailed") + " " + r.error);
+          return;
+        }
+      }
+    } else if ((dirty || evidenceDirty) && !confirm(t("modal.discardChanges"))) {
+      return;
     }
+    clearItemDraft(item.id);
     onClose();
   }
 
@@ -506,6 +677,26 @@ function ItemModalInner({
         </div>
       </div>
 
+      {gone && (
+        <div role="alert" style={banner(DS.redBg, DS.redBord, DS.red)}>
+          {t("modal.deletedElsewhere")}
+        </div>
+      )}
+      {restorable && (
+        <div role="status" style={banner(DS.bluBg, DS.bluBord, DS.blu)}>
+          <span style={{ flex: 1 }}>
+            {t("modal.draftFound")} (
+            {new Date(restorable.savedAt).toLocaleString()}).
+          </span>
+          <button type="button" onClick={restoreDraft} style={bannerBtn(DS.blu)}>
+            {t("modal.draftRestore")}
+          </button>
+          <button type="button" onClick={discardDraft} style={bannerBtn(DS.text3)}>
+            {t("modal.draftDiscard")}
+          </button>
+        </div>
+      )}
+
       <fieldset
         disabled={isReadOnly}
         style={{
@@ -522,7 +713,7 @@ function ItemModalInner({
           isAdmin={isAdmin}
           canEdit={!isReadOnly}
           onAdd={(e) => addEvidence(item.id, e)}
-          onRemove={(id) => void deleteEvidence(id, item.id)}
+          onRemove={(id) => deleteEvidence(id, item.id)}
           onAIApply={applyAI}
           onDirtyChange={setEvidenceDirty}
         />
@@ -1232,8 +1423,8 @@ function ItemModalInner({
         )}
         <ReadingsPanel
           readings={item.readings}
-          onAdd={(r) => void addReading(item.id, r)}
-          onRemove={(id) => void deleteReading(id, item.id)}
+          onAdd={(r) => addReading(item.id, r)}
+          onRemove={(id) => deleteReading(id, item.id)}
           canEdit={!isReadOnly}
           canDelete={isAdmin}
         />
@@ -1254,6 +1445,38 @@ function ItemModalInner({
       </Section>
       </fieldset>
 
+      <div ref={errorRef} aria-live="assertive">
+        {conflict && (
+          <div role="alert" style={banner(DS.oraBg, DS.oraBord, DS.ora)}>
+            <span style={{ flex: "1 1 220px" }}>{t("modal.conflict")}</span>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save(true)}
+              style={bannerBtn(DS.ora)}
+            >
+              {t("modal.conflictOverwrite")}
+            </button>
+            <button type="button" onClick={reloadLatest} style={bannerBtn(DS.text3)}>
+              {t("modal.conflictReload")}
+            </button>
+          </div>
+        )}
+        {saveError && (
+          <div role="alert" style={banner(DS.redBg, DS.redBord, DS.red)}>
+            <span style={{ flex: 1 }}>{saveError}</span>
+            <button
+              type="button"
+              onClick={() => setSaveError(null)}
+              aria-label={t("common.dismiss")}
+              style={bannerBtn(DS.red)}
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -1268,11 +1491,7 @@ function ItemModalInner({
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!isNew && isAdmin && (
             <button
-              onClick={() => {
-                void updateItem(item.id, { archived: !item.archived }).then(
-                  () => onClose()
-                );
-              }}
+              onClick={() => void toggleArchived()}
               style={{
                 background: DS.sur2,
                 color: DS.text3,
@@ -1354,4 +1573,34 @@ function ItemModalInner({
       </div>
     </Modal>
   );
+}
+
+function banner(bg: string, border: string, color: string): React.CSSProperties {
+  return {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+    background: bg,
+    border: "1px solid " + border,
+    borderRadius: 8,
+    padding: "10px 12px",
+    marginBottom: 12,
+    fontSize: 12,
+    color,
+  };
+}
+
+function bannerBtn(color: string): React.CSSProperties {
+  return {
+    background: "none",
+    border: "1px solid " + color,
+    color,
+    borderRadius: 6,
+    padding: "6px 12px",
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: "pointer",
+    minHeight: 32,
+  };
 }

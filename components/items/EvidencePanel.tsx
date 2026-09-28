@@ -14,6 +14,10 @@ import { useLang } from "@/lib/context/LangContext";
 import type { AIAnalysis, Evidence } from "@/lib/types/domain";
 
 const BUCKET = "evidence-photos";
+// Gemini on a VSAT link can be slow, but a spinner must never hang forever.
+const AI_TIMEOUT_MS = 60_000;
+
+type Outcome = { ok: true } | { ok: false; error: string };
 
 interface Props {
   itemId: string;
@@ -26,8 +30,8 @@ interface Props {
     file_type: string | null;
     file_size: number | null;
     ai_analysis: AIAnalysis | null;
-  }) => Promise<void> | void;
-  onRemove: (id: string) => void;
+  }) => Promise<Outcome>;
+  onRemove: (id: string) => Promise<Outcome>;
   isAdmin: boolean;
   canEdit?: boolean;
   // force=false: fill-only-empty (auto-apply). force=true: overwrite
@@ -60,6 +64,7 @@ export function EvidencePanel({
   const [aiResult, setAiResult] = useState<AIAnalysis | null>(null);
   const [aiErr, setAiErr] = useState("");
   const [saveErr, setSaveErr] = useState("");
+  const [listErr, setListErr] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -71,13 +76,22 @@ export function EvidencePanel({
     let active = true;
     const supabase = createClient();
     (async () => {
+      // One round-trip for all photos instead of one per evidence.
+      const withFile = evidences.filter((ev) => ev.file_path);
       const next: Record<string, string> = {};
-      for (const ev of evidences) {
-        if (ev.file_path) {
-          const { data } = await supabase.storage
-            .from(BUCKET)
-            .createSignedUrl(ev.file_path, 3600);
-          if (data?.signedUrl) next[ev.id] = data.signedUrl;
+      if (withFile.length) {
+        const { data } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrls(
+            withFile.map((ev) => ev.file_path as string),
+            3600
+          );
+        const byPath = new Map(
+          (data ?? []).map((d) => [d.path, d.signedUrl] as const)
+        );
+        for (const ev of withFile) {
+          const url = byPath.get(ev.file_path as string);
+          if (url) next[ev.id] = url;
         }
       }
       if (active) setUrls(next);
@@ -120,11 +134,14 @@ export function EvidencePanel({
     setAiLoading(true);
     setAiResult(null);
     setAiErr("");
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
     try {
       const r = await fetch("/api/ai/analyze-photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ base64: b64, mediaType: mediaType || "image/jpeg" }),
+        signal: ctrl.signal,
       });
       const data = await r.json();
       if (!r.ok) {
@@ -140,52 +157,78 @@ export function EvidencePanel({
         // force-applies for deliberate overwrites.
         onAIApply(result, false);
       }
-    } catch {
-      setAiErr("AI analysis request failed.");
+    } catch (e) {
+      setAiErr(
+        e instanceof DOMException && e.name === "AbortError"
+          ? t("ai.timeout")
+          : "AI analysis request failed."
+      );
+    } finally {
+      clearTimeout(timer);
+      setAiLoading(false);
     }
-    setAiLoading(false);
   }
 
   async function add() {
-    if (!desc.trim()) return;
+    if (!desc.trim() || uploading) return;
     setUploading(true);
     setSaveErr("");
+    const supabase = createClient();
     let filePath: string | null = null;
-    if (file) {
-      const supabase = createClient();
-      const safeName = file.name.replace(/[^\w.\-]/g, "_");
-      const path = `${itemId}/${crypto.randomUUID()}_${safeName}`;
-      const { error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, { contentType: file.type });
-      if (error) {
-        // Abort instead of silently saving an evidence row with no file —
-        // the form keeps its state so the user can retry.
-        setSaveErr(t("f.uploadFailed") + " " + error.message);
-        setUploading(false);
+    try {
+      if (file) {
+        const safeName = file.name.replace(/[^\w.\-]/g, "_");
+        const path = `${itemId}/${crypto.randomUUID()}_${safeName}`;
+        const { error } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, file, { contentType: file.type });
+        if (error) {
+          // Abort instead of silently saving an evidence row with no file —
+          // the form keeps its state so the user can retry.
+          setSaveErr(t("f.uploadFailed") + " " + error.message);
+          return;
+        }
+        filePath = path;
+      }
+      const res = await onAdd({
+        evidence_date: date,
+        description: desc,
+        file_path: filePath,
+        file_name: file?.name ?? null,
+        file_type: file?.type ?? null,
+        file_size: file?.size ?? null,
+        ai_analysis: aiResult,
+      });
+      if (!res.ok) {
+        // Keep the form for a retry; drop the blob we just uploaded
+        // (best-effort — the retry uploads a fresh copy).
+        if (filePath) await supabase.storage.from(BUCKET).remove([filePath]);
+        setSaveErr(t("evidence.saveFailed") + " " + res.error);
         return;
       }
-      filePath = path;
+      setDate(today());
+      setDesc("");
+      setFile(null);
+      setB64(null);
+      setMediaType("");
+      setCompressInfo("");
+      setAiResult(null);
+      setAiErr("");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (e) {
+      setSaveErr(
+        t("evidence.saveFailed") + " " + (e instanceof Error ? e.message : String(e))
+      );
+    } finally {
+      setUploading(false);
     }
-    await onAdd({
-      evidence_date: date,
-      description: desc,
-      file_path: filePath,
-      file_name: file?.name ?? null,
-      file_type: file?.type ?? null,
-      file_size: file?.size ?? null,
-      ai_analysis: aiResult,
-    });
-    setDate(today());
-    setDesc("");
-    setFile(null);
-    setB64(null);
-    setMediaType("");
-    setCompressInfo("");
-    setAiResult(null);
-    setAiErr("");
-    if (fileRef.current) fileRef.current.value = "";
-    setUploading(false);
+  }
+
+  async function remove(id: string) {
+    if (!confirm(t("evidence.confirmDelete"))) return;
+    setListErr("");
+    const res = await onRemove(id);
+    if (!res.ok) setListErr(t("common.deleteFailed") + " " + res.error);
   }
 
   return (
@@ -391,6 +434,11 @@ export function EvidencePanel({
         >{t("f.noEvidence")}</div>
       )}
 
+      {listErr && (
+        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 8 }}>
+          {listErr}
+        </div>
+      )}
       {evidences.map((ev) => (
         <div
           key={ev.id}
@@ -472,7 +520,7 @@ export function EvidencePanel({
           </div>
           {isAdmin && (
             <button
-              onClick={() => onRemove(ev.id)}
+              onClick={() => void remove(ev.id)}
               style={{
                 background: "none",
                 border: "none",

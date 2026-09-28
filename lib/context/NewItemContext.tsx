@@ -35,10 +35,13 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
   async function choose(zid: string, zoneName: string) {
     if (busy) return;
     setBusy(true);
-    const created = await createItem(zid, { status: "Pending" });
-    setBusy(false);
-    setPicking(false);
-    if (created) setOpen({ itemId: created.id, zoneName });
+    try {
+      const created = await createItem(zid, { status: "Pending" });
+      setPicking(false);
+      if (created) setOpen({ itemId: created.id, zoneName });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

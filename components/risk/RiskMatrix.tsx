@@ -10,6 +10,7 @@ import type { DictKey } from "@/lib/i18n/dict";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 import { ItemModal } from "@/components/items/ItemModal";
+import { effectivePriority } from "@/lib/domain/calcPriority";
 
 interface Open {
   itemId: string;
@@ -418,10 +419,10 @@ export function RiskMatrix() {
                 <div
                   style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
                 >
-                  {it.priority && (
+                  {effectivePriority(it) && (
                     <Badge
-                      text={tPriority(it.priority)}
-                      color={PRIORITY_COLOR[it.priority]}
+                      text={tPriority(effectivePriority(it))}
+                      color={PRIORITY_COLOR[effectivePriority(it)!]}
                       sm
                     />
                   )}

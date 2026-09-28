@@ -310,6 +310,14 @@ export interface Database {
         Args: Record<string, never>;
         Returns: string;
       };
+      is_pristine_draft: {
+        Args: { p_item: string };
+        Returns: boolean;
+      };
+      discard_my_abandoned_drafts: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
     };
     Enums: {
       user_role: UserRole;

@@ -1,4 +1,5 @@
 import type { Item, ItemPriority } from "@/lib/types/domain";
+import { addDays } from "@/lib/utils/format";
 
 // Suggested tratativa deadline, driven by OUR priority (P×C + SECE +
 // readings) — not by the FM-116-OFF band matrix. Advisory only: the UI
@@ -10,17 +11,13 @@ export const ACTION_DUE_DAYS: Record<ItemPriority, number> = {
   Low: 1095,
 };
 
-// Same date-math style as calcNextInspection: parse YYYY-MM-DD as UTC
-// midnight, add days, read back the UTC date — internally consistent.
+// Time-zone-independent calendar math (see addDays).
 export function suggestActionDue(
   priority: ItemPriority | null,
   fromDate: string
 ): string | null {
   if (!priority) return null;
-  const d = new Date(fromDate);
-  if (isNaN(d.getTime())) return null;
-  d.setDate(d.getDate() + ACTION_DUE_DAYS[priority]);
-  return d.toISOString().split("T")[0];
+  return addDays(fromDate, ACTION_DUE_DAYS[priority]);
 }
 
 type ActionFields = Pick<Item, "action_type" | "action_status">;

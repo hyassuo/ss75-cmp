@@ -5,12 +5,13 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
-import { fmt, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { addDays, fmt, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
 import type { ItemWithRelations } from "@/lib/types/domain";
+import { effectivePriority } from "@/lib/domain/calcPriority";
 
 type Row = ItemWithRelations & { zid: string; zname: string };
 
@@ -25,9 +26,7 @@ export function ScheduleView() {
       .map((i) => ({ ...i, zid: z.zid, zname: z.name }))
   );
 
-  const cutoff = new Date(today());
-  cutoff.setDate(cutoff.getDate() + horizon);
-  const cutStr = cutoff.toISOString().split("T")[0];
+  const cutStr = addDays(today(), horizon) ?? today();
 
   const overdue = allItems
     .filter((i) => isOverdue(i.next_insp))
@@ -107,10 +106,10 @@ export function ScheduleView() {
             alignItems: "center",
           }}
         >
-          {it.priority && (
+          {effectivePriority(it) && (
             <Badge
-              text={tPriority(it.priority)}
-              color={PRIORITY_COLOR[it.priority]}
+              text={tPriority(effectivePriority(it))}
+              color={PRIORITY_COLOR[effectivePriority(it)!]}
               sm
             />
           )}

@@ -9,6 +9,8 @@ import { fmt, today } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import type { Reading } from "@/lib/types/domain";
 
+type Outcome = { ok: true } | { ok: false; error: string };
+
 interface Props {
   readings: Reading[];
   onAdd: (r: {
@@ -16,8 +18,8 @@ interface Props {
     depth_mm: number;
     location: string | null;
     checked_by: string | null;
-  }) => void;
-  onRemove: (id: string) => void;
+  }) => Promise<Outcome>;
+  onRemove: (id: string) => Promise<Outcome>;
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -34,24 +36,54 @@ export function ReadingsPanel({
   const [depth, setDepth] = useState("");
   const [loc, setLoc] = useState("");
   const [tech, setTech] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   const sorted = [...readings].sort((a, b) =>
     a.reading_date.localeCompare(b.reading_date)
   );
   const rate = calcRate(readings);
 
-  function add() {
-    if (!depth.trim()) return;
-    onAdd({
-      reading_date: date,
-      depth_mm: parseFloat(depth),
-      location: loc || null,
-      checked_by: tech || null,
-    });
-    setDate(today());
-    setDepth("");
-    setLoc("");
-    setTech("");
+  async function add() {
+    if (busy || !depth.trim()) return;
+    // Accept a decimal comma too ("1,5") — the norm on pt-BR keyboards.
+    const mm = Number(depth.trim().replace(",", "."));
+    if (!Number.isFinite(mm) || mm < 0) {
+      setErr(t("readings.invalidDepth"));
+      return;
+    }
+    if (!date || date > today()) {
+      setErr(t("readings.futureDate"));
+      return;
+    }
+    setErr("");
+    setBusy(true);
+    try {
+      const res = await onAdd({
+        reading_date: date,
+        depth_mm: mm,
+        location: loc || null,
+        checked_by: tech || null,
+      });
+      if (!res.ok) {
+        // Keep what was typed so the user can retry.
+        setErr(t("readings.saveFailed") + " " + res.error);
+        return;
+      }
+      setDate(today());
+      setDepth("");
+      setLoc("");
+      setTech("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm(t("readings.confirmDelete"))) return;
+    setErr("");
+    const res = await onRemove(id);
+    if (!res.ok) setErr(t("common.deleteFailed") + " " + res.error);
   }
 
   return (
@@ -80,6 +112,7 @@ export function ReadingsPanel({
             <input
               type="date"
               value={date}
+              max={today()}
               onChange={(e) => setDate(e.target.value)}
               style={{ ...S.inp, marginBottom: 0 }}
             />
@@ -87,7 +120,8 @@ export function ReadingsPanel({
           <div>
             <Label>{t("f.pitDepth")}</Label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={depth}
               placeholder="e.g. 1.5"
               onChange={(e) => setDepth(e.target.value)}
@@ -123,7 +157,8 @@ export function ReadingsPanel({
             />
           </div>
           <button
-            onClick={add}
+            onClick={() => void add()}
+            disabled={busy}
             style={{
               background: DS.blu,
               color: "#fff",
@@ -141,6 +176,12 @@ export function ReadingsPanel({
           >{t("f.addReading")}</button>
         </div>
       </div>
+      )}
+
+      {err && (
+        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 10 }}>
+          {err}
+        </div>
       )}
 
       {rate !== null && (
@@ -298,7 +339,7 @@ export function ReadingsPanel({
                     <td style={{ padding: "7px 8px" }}>
                       {canDelete && (
                         <button
-                          onClick={() => onRemove(r.id)}
+                          onClick={() => void remove(r.id)}
                           style={{
                             background: "none",
                             border: "none",

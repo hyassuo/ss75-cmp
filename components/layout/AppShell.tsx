@@ -14,7 +14,7 @@ import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { loading, error } = useData();
+  const { loading, error, clearError } = useData();
   const { tab } = useShell();
   const pathname = usePathname();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div style={{ paddingTop: 16 }}>
               {error && (
                 <div
+                  role="alert"
                   style={{
                     background: DS.redBg,
                     border: "1px solid " + DS.redBord,
@@ -84,9 +85,28 @@ export function AppShell({ children }: { children: ReactNode }) {
                     marginBottom: 16,
                     fontSize: 12,
                     color: DS.red,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
                   }}
                 >
-                  {error}
+                  <span style={{ flex: 1 }}>{error}</span>
+                  <button
+                    type="button"
+                    onClick={clearError}
+                    aria-label="Dismiss"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: DS.red,
+                      fontSize: 18,
+                      cursor: "pointer",
+                      minWidth: 32,
+                      minHeight: 32,
+                    }}
+                  >
+                    ×
+                  </button>
                 </div>
               )}
               {loading ? (

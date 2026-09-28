@@ -54,4 +54,20 @@ describe("fetchAll", () => {
     expect(r.error).toBe("boom");
     expect(r.data).toHaveLength(1000);
   });
+
+  it("drops rows repeated across pages when a key is given", async () => {
+    // Page 2 re-serves row 999 (a new row was inserted ahead of the offset).
+    const r = await fetchAll<{ id: number }>(
+      (from) =>
+        Promise.resolve({
+          data:
+            from === 0
+              ? Array.from({ length: 1000 }, (_, i) => ({ id: i }))
+              : [{ id: 999 }, { id: 1000 }],
+          error: null,
+        }),
+      { key: (x) => String(x.id) }
+    );
+    expect(r.data).toHaveLength(1001);
+  });
 });

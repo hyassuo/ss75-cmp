@@ -1,5 +1,5 @@
 import { daysUntil } from "@/lib/utils/format";
-import type { ItemPriority } from "@/lib/types/domain";
+import type { Item, ItemPriority } from "@/lib/types/domain";
 
 // Priority = f(P×C, SECE weight, DROPS/Structural bonus, Overdue penalty).
 //
@@ -30,4 +30,25 @@ export function calcPriority(
   if (weighted >= 13) return "High";
   if (weighted >= 6) return "Medium";
   return "Low";
+}
+
+type PriorityInputs = Pick<
+  Item,
+  "prob" | "cons" | "sece" | "next_insp" | "drops_risk" | "structural"
+>;
+
+// Priority as of today. The stored `priority` column is a snapshot taken at
+// the last save, but part of the score (overdue / due-soon escalation)
+// depends on the calendar — an item saved as Medium that later goes overdue
+// must read High without anyone re-saving it. Every screen and export uses
+// this instead of the stored value. Null when P or C is unset.
+export function effectivePriority(it: PriorityInputs): ItemPriority | null {
+  return calcPriority(
+    it.prob,
+    it.cons,
+    !!it.sece,
+    it.next_insp,
+    !!it.drops_risk,
+    !!it.structural
+  );
 }

@@ -56,7 +56,8 @@ export function Sidebar() {
   async function signOut() {
     if (!confirm(t("nav.signOutConfirm"))) return;
     const supabase = createClient();
-    await supabase.auth.signOut();
+    // This device only — other devices keep their sessions.
+    await supabase.auth.signOut({ scope: "local" });
     router.replace("/login");
     router.refresh();
   }

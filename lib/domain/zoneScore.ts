@@ -1,4 +1,5 @@
 import { itemScore } from "@/lib/domain/itemScore";
+import { effectivePriority } from "@/lib/domain/calcPriority";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
 // Priority × SECE weight. Shared with the Dashboard's global integrity
@@ -28,7 +29,7 @@ export function zoneScore(items: ItemWithRelations[]): number | null {
   let totalWeight = 0;
   let weightedSum = 0;
   for (const it of items) {
-    const w = priorityWeight(it);
+    const w = priorityWeight({ priority: effectivePriority(it), sece: it.sece });
     weightedSum += itemScore(it) * w;
     totalWeight += w;
   }

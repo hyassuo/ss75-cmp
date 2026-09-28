@@ -167,7 +167,7 @@ CREATE TABLE IF NOT EXISTS public.readings (
   id           uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   item_id      uuid NOT NULL REFERENCES public.items(id) ON DELETE CASCADE,
   reading_date date NOT NULL,
-  depth_mm     numeric(6,3) NOT NULL,
+  depth_mm     numeric(6,3) NOT NULL CONSTRAINT readings_depth_nonneg CHECK (depth_mm >= 0),
   location     text,
   checked_by   text,
   created_by   uuid REFERENCES public.profiles(id) ON DELETE SET NULL,

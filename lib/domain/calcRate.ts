@@ -5,10 +5,22 @@ import type { Reading } from "@/lib/types/domain";
 export const RATE_CRITICAL_MM_YR = 0.5;
 export const RATE_ELEVATED_MM_YR = 0.2;
 
-// Corrosion / pit growth rate in mm/year from readings (handoff 6.6).
+// Pit-depth estimates staged from the AI photo analysis are saved as a
+// reading tagged like this (ItemModal.save). They are a visual guess, not a
+// measurement, and must never drive the corrosion rate: a 0.3 mm estimate
+// followed a month later by a 1.5 mm UT reading would read as 14.6 mm/yr.
+export const AI_READING_CHECKED_BY = "AI Vision";
+export const AI_READING_LOCATION = "AI estimate";
+export function isAiEstimate(r: Pick<Reading, "checked_by" | "location">): boolean {
+  return r.checked_by === AI_READING_CHECKED_BY && r.location === AI_READING_LOCATION;
+}
+
+// Corrosion / pit growth rate in mm/year from measured readings (handoff
+// 6.6). AI estimates are ignored.
 export function calcRate(readings: Reading[] | null | undefined): number | null {
-  if (!readings || readings.length < 2) return null;
-  const sorted = [...readings].sort((a, b) =>
+  const measured = (readings ?? []).filter((r) => !isAiEstimate(r));
+  if (measured.length < 2) return null;
+  const sorted = [...measured].sort((a, b) =>
     a.reading_date.localeCompare(b.reading_date)
   );
   const first = sorted[0];

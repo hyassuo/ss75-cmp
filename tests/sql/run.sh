@@ -152,6 +152,7 @@ suite() {
   check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
   check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
 
+  local N0; N0=$(new_item $I1 'Depth check')
   echo " storage (evidence-photos)"
   local UB=00000000-0000-0000-0000-0000000000b2
   local OI; OI=$(su_sql "INSERT INTO items (unit_id, zone_id, name) VALUES ('$UB', 'Z01', 'Other unit item') RETURNING id")
@@ -192,6 +193,8 @@ suite() {
   check "...leaving colleagues' and non-empty drafts" "$(su_sql "SELECT count(*) FROM items WHERE id IN ('$OLDD2', '$OLDR')")" "2"
   check "API roles cannot TRUNCATE" "$(as $A1 "TRUNCATE items")" "$DENIED"
 
+  check "negative pit depth is rejected" "$(as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$N0', current_date, -1)")" "new row .* violates check constraint .*readings_depth_nonneg.*"
+
   echo " reference data"
   check "admin of another unit cannot edit IFS register" "$(as $AB "UPDATE ifs_objects SET sece = false WHERE id = 'OBJ-1'")" "$DENIED"
   check "IFS register readable" "$(as $I1 "SELECT count(*) FROM ifs_objects")" "1"
@@ -228,7 +231,8 @@ check "demo seed loads its items" "$(su_sql "SELECT count(*) > 20 FROM items WHE
 
 scenario upgrade supabase-setup.sql supabase-ifs-schema.sql \
   supabase-security-fixes.sql supabase-hardening.sql supabase-hardening-3.sql \
-  supabase-hardening-4.sql supabase-hardening-5.sql supabase-hardening-5.sql
+  supabase-hardening-4.sql supabase-hardening-5.sql supabase-hardening-5.sql \
+  supabase-schema-v115.sql supabase-schema-v115.sql
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs
