@@ -372,7 +372,6 @@ const modal = (page) => page.locator('.modal-card[role="dialog"]');
 const confirmDlg = (page) => page.locator('[role="alertdialog"]');
 const nameInput = (page) => modal(page).locator('div:has(> label:text-is("Item Name / Tag")) > input');
 const notesArea = (page) => modal(page).locator('div:has(> div:text-is("NOTES")) textarea');
-const ifsWoInput = (page) => modal(page).locator('div:has(> label:text-matches("IFS WO|Work Order", "i")) > input').first();
 
 
 // Scroll whichever element actually scrolls the modal (card or overlay).
@@ -1053,7 +1052,6 @@ async function main() {
   // =================================================== v1.16.0 (field UX)
   const q = (page) => new URL(page.url());
   const hasItemParam = (page) => q(page).searchParams.has("item");
-  const dialog = (page) => page.getByRole("dialog").filter({ has: page.locator("h2") });
   const title = async (page) => (await modal(page).locator("h2").first().textContent())?.trim();
   const newDraftId = async () =>
     (await one("SELECT id FROM items WHERE created_by = $1 AND name = 'Untitled' ORDER BY created_at DESC LIMIT 1", [USERS.insp1]))?.id;
@@ -2256,7 +2254,7 @@ async function main() {
     const lr = await page.goto(`${APP}/login`);
     const lcsp = cspOf(lr.headers());
     c.expect(!!nonceOf(lcsp) && /'strict-dynamic'/.test(lcsp), "/login response: CSP with a nonce + 'strict-dynamic'", lcsp);
-    // What the middleware skips (API, images, their 404 pages) gets the
+    // What the proxy skips (API, images, their 404 pages) gets the
     // locked-down static policy — exactly one CSP header, never none.
     for (const path of ["/api/does-not-exist", "/nope.png", "/icon.svg"]) {
       const res = await fetch(`${APP}${path}`);
@@ -3969,7 +3967,7 @@ async function main() {
     const leaky = (status) => ({ code: status, error_code: "unexpected_failure", msg: LEAK });
     await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
     try {
-      // --- prefetch: the middleware shortcut needs an sb- cookie
+      // --- prefetch: the proxy shortcut needs an sb- cookie
       for (const h of [{ "next-router-prefetch": "1" }, { purpose: "prefetch" }, { "sec-purpose": "prefetch;prerender" }]) {
         for (const [route, extra] of [["/dashboard?tab=zones", {}], ["/users", { cookie: "unrelated=1" }]]) {
           const r = await fetch(`${APP}${route}`, { redirect: "manual", headers: { ...h, ...extra } });

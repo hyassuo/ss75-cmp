@@ -24,7 +24,7 @@ async function forceSignOut(reload: boolean) {
     // ignore — we're already tearing the session down
   }
   // Hard reload so any in-memory state is cleared (data context, modal
-  // state, etc.) and the middleware redirects to /login on the next page.
+  // state, etc.) and the proxy redirects to /login on the next page.
   if (typeof window !== "undefined") {
     if (reload) window.location.replace("/login");
   }

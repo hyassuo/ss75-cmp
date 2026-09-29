@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -21,7 +21,7 @@
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.105.4",
-    "next": "^15.5.26",
+    "next": "^16.3.6",
     "react": "^18",
     "react-dom": "^18"
   },
@@ -29,8 +29,8 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "^15.5.26",
+    "eslint": "^9",
+    "eslint-config-next": "^16.3.6",
     "typescript": "^5",
     "vitest": "^4.1.10"
   },

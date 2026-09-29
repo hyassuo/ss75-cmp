@@ -229,7 +229,7 @@ The app is installable (Add to Home Screen / Install app):
   auth'd content stays fresh and private. Bump `VERSION` inside `sw.js`
   to force-invalidate the asset cache on a deploy.
 - Registered by `components/layout/PwaRegister.tsx` (production only).
-- The middleware matcher excludes `sw.js`, `manifest.webmanifest` and
+- The proxy (`proxy.ts`) matcher excludes `sw.js`, `manifest.webmanifest` and
   `offline.html` — they must load without a session.
 
 ## Deploy
