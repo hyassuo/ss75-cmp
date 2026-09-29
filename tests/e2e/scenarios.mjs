@@ -143,6 +143,50 @@ function parseCsv(text, sep = ",") {
   return rows;
 }
 
+// Text runs of a PDF made by @react-pdf (pdfkit): inflates every content
+// stream and follows q/Q/cm/Tm to place each TJ/Tj string on its page.
+// Enough for pdfkit's one-operator-per-line output with the standard
+// (WinAnsi) fonts -> [{page, x, y, text}], in drawing order.
+function pdfTextRuns(buf) {
+  const mul = (m, n) => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2],
+    m[2] * n[1] + m[3] * n[3], m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
+  const runs = [];
+  let page = 0;
+  for (const m of buf.toString("latin1").matchAll(/stream\r?\n([\s\S]*?)endstream/g)) {
+    let c;
+    try { c = zlib.inflateSync(Buffer.from(m[1], "latin1")).toString("latin1"); } catch { continue; }
+    if (!/\bBT\b/.test(c)) continue; // images, fonts, …
+    page += 1;
+    let ctm = [1, 0, 0, 1, 0, 0], tm = [1, 0, 0, 1, 0, 0];
+    const stack = [];
+    for (const line of c.split("\n")) {
+      const l = line.trim();
+      let x;
+      if (l === "q") stack.push(ctm);
+      else if (l === "Q") ctm = stack.pop() ?? ctm;
+      else if ((x = /^(\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (cm|Tm)$/.exec(l))) {
+        const v = x.slice(1, 7).map(Number);
+        if (x[7] === "cm") ctm = mul(v, ctm); else tm = v;
+      } else if ((x = /^\[(.*)\] TJ$/.exec(l) || /^(<[0-9a-fA-F]*>) Tj$/.exec(l))) {
+        const text = [...x[1].matchAll(/<([0-9a-fA-F]*)>/g)].map((h) => Buffer.from(h[1], "hex").toString("latin1")).join("");
+        const t = mul(tm, ctm);
+        runs.push({ page, x: Math.round(t[4] * 10) / 10, y: Math.round(t[5] * 10) / 10, text });
+      }
+    }
+  }
+  return runs;
+}
+// The runs joined into visual lines (same page and baseline, left to right).
+function pdfLines(runs) {
+  const by = new Map();
+  for (const r of runs) {
+    const k = `${r.page}:${r.y}`;
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(r);
+  }
+  return [...by.values()].map((rs) => rs.sort((a, b) => a.x - b.x).map((r) => r.text).join(""));
+}
+
 // The @supabase/ssr session cookie (sb-<ref>-auth-token, maybe chunked
 // .0/.1, "base64-" + base64url JSON) -> {access_token, refresh_token, ...}.
 async function sessionFromCookies(page) {
@@ -3408,6 +3452,602 @@ async function main() {
     await shot(c, mob, "390");
     await mob.context().close();
     await sql("DELETE FROM evidences WHERE item_id = $1", [ID.rate]).catch(() => {});
+  });
+
+  // ------------------------------------------------------------------ F3
+  // Coverage gaps from the backlog (F3). Every scenario seeds its own rows
+  // (fixed ids 0e3aXX) before signing in and removes them in `finally`.
+  const unitId = async () => (await one("SELECT id FROM units WHERE code = 'SS-75'")).id;
+  const F3 = {
+    archived: "00000000-0000-0000-0000-0000000e3a01",
+    toggle: "00000000-0000-0000-0000-0000000e3a02",
+    ai: "00000000-0000-0000-0000-0000000e3a11",
+    sece: "00000000-0000-0000-0000-0000000e3a21",
+    pdf: "00000000-0000-0000-0000-0000000e3a31",
+  };
+  const dropItems = async (ids) => {
+    await sql("DELETE FROM storage.objects WHERE bucket_id = 'evidence-photos' AND split_part(name, '/', 1) = ANY($1::text[])", [ids]);
+    for (const id of ids) fs.rmSync(path.join(STORAGE_DIR, "evidence-photos", id), { recursive: true, force: true });
+    await sql("DELETE FROM items WHERE id = ANY($1::uuid[])", [ids]);
+  };
+  const activeCount = async () => Number((await one("SELECT count(*) FROM items WHERE NOT coalesce(archived, false)")).count);
+  // The PDF blob the app hands to URL.createObjectURL (hook installed before
+  // the app loads), exported from the Export tab.
+  const hookPdf = (page) => page.context().addInitScript(() => {
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = function (b) {
+      if (b && b.type === "application/pdf") window.__e2ePdf = b;
+      return orig.call(URL, b);
+    };
+  });
+  async function exportPdf(page) {
+    await page.evaluate(() => { window.__e2ePdf = null; });
+    const pbtn = page.getByRole("button", { name: /Export PDF/ }).first();
+    await pbtn.waitFor({ timeout: 15000 });
+    const [popup] = await Promise.all([page.waitForEvent("popup", { timeout: 15000 }), pbtn.click()]);
+    const b64 = await page.waitForFunction(() => window.__e2ePdf, null, { timeout: 240000, polling: 500 })
+      .then(() => page.evaluate(async () => {
+        const u8 = new Uint8Array(await window.__e2ePdf.arrayBuffer());
+        let bin = ""; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+        return btoa(bin);
+      }));
+    await page.waitForTimeout(500);
+    if (!popup.isClosed()) await popup.close().catch(() => {});
+    return Buffer.from(b64, "base64");
+  }
+  // Item rows of the PDF: a status word under the "Status" column header
+  // (one per item row), with the zone title (Zxx, first column) above it.
+  function pdfItemRows(runs) {
+    const head = runs.find((r) => r.text === "Status");
+    const nameX = runs.find((r) => r.text === "Item")?.x;
+    const rows = [];
+    let zone = null;
+    for (const r of runs) {
+      if (r.x === nameX && /^Z\d{2}$/.test(r.text)) zone = r.text;
+      else if (head && Math.abs(r.x - head.x) < 0.5 && ["OK", "Attention", "Critical", "Pending"].includes(r.text)) rows.push({ zone, page: r.page, y: r.y });
+    }
+    return rows;
+  }
+  const exportCount = async (page) => {
+    const t = await page.getByText(/^Export — \d+ items$/).first().textContent();
+    return Number(t.match(/— (\d+) items/)[1]);
+  };
+
+  await run("f3archived", "F3: an archived item is left out of Dashboard, Zones, Risk Matrix, Schedule and the PDF, kept in CSV/XLSX (Archived=YES); admin Archive/Unarchive (warns before discarding edits); 'N archived' badge", async (c) => {
+    const NAME = "E2E Archived Item", LIVE = "E2E Archive Toggle Target";
+    const unit = await unitId();
+    // A critical SECE item due in 5 days: it would show on every screen if
+    // the archived filter were missing.
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, priority, sece, freq_insp, last_insp, next_insp, archived, notes, created_by, created_at)
+       VALUES ($1, $3, 'Z13', $4, 'Critical', 5, 5, 'Critical', true, 'Monthly', current_date - 25, current_date + 5, true, 'archived note', $5, now() - interval '3 days'),
+              ($2, $3, 'Z13', $6, 'Attention', 2, 2, 'Low', false, NULL, NULL, NULL, false, 'base note', $5, now() - interval '3 days')
+       ON CONFLICT (id) DO NOTHING`,
+      [F3.archived, F3.toggle, unit, NAME, USERS.insp2, LIVE]
+    );
+    try {
+      const active = await activeCount();
+      const all = Number((await one("SELECT count(*) FROM items")).count);
+      c.step(`items: ${all} in the DB, ${active} active`);
+      const archivedBadges = async (page) => page.evaluate(() =>
+        // "N archived" badges with the zone id of their card.
+        [...document.querySelectorAll("main span")].filter((s) => /^\d+ archived$/.test(s.textContent)).map((b) => {
+          let e = b;
+          while (e && ![...e.querySelectorAll("span")].some((s) => /^Z\d{2}$/.test(s.textContent))) e = e.parentElement;
+          const zid = e && [...e.querySelectorAll("span")].find((s) => /^Z\d{2}$/.test(s.textContent)).textContent;
+          return `${zid}: ${b.textContent}`;
+        })
+      );
+      const expectedBadges = async () => (await sql(
+        "SELECT zone_id, count(*)::int n FROM items WHERE archived GROUP BY zone_id ORDER BY zone_id"
+      )).map((r) => `${r.zone_id}: ${r.n} archived`);
+
+      const page = await newPage(c, "admin1");
+      await hookPdf(page);
+      await login(page, "admin1@test.local");
+      const main = () => page.locator("main").innerText();
+      // Dashboard
+      const kpi = await page.getByText(/\d+\/\d+ inspected/).first().textContent();
+      c.expect(kpi.endsWith(`/${active} inspected`), `Dashboard KPI counts the ${active} active items (not ${all})`, kpi);
+      c.expect(!(await main()).includes(NAME), "Dashboard (alerts included) doesn't list the archived item");
+      // Zones
+      await gotoTab(page, "Zones & Items");
+      const hdr = await page.getByText(/· \d+ items/).first().textContent();
+      c.expect(hdr.endsWith(`· ${active} items`), `Zones header counts ${active} active items`, hdr);
+      c.expect((await page.getByText(NAME, { exact: true }).count()) === 0, "no card for the archived item");
+      c.expect((await page.getByText(LIVE, { exact: true }).count()) === 1, "…while its active neighbour is listed");
+      let badges = await archivedBadges(page);
+      c.expect(JSON.stringify(badges) === JSON.stringify(await expectedBadges()) && badges.includes("Z13: 1 archived"), "'1 archived' badge on Z13 (one per zone with archived items)", badges);
+      await shot(c, page, "zones");
+      // Risk Matrix
+      await gotoTab(page, "Risk Matrix");
+      const assessed = await page.getByText(/\d+ of \d+ items assessed/).first().textContent();
+      c.expect(assessed.endsWith(`of ${active} items assessed`), `Risk Matrix counts ${active} items`, assessed);
+      c.expect(!(await main()).includes(NAME), "Risk Matrix doesn't show the archived (5x5) item");
+      // Schedule
+      await gotoTab(page, "Schedule");
+      await page.locator("main button", { hasText: " | " }).first().waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(!(await main()).includes(NAME), "Schedule doesn't list the archived item (due in 5 days)");
+      // Export: on-screen count, CSV, XLSX, PDF
+      await gotoTab(page, "Export");
+      c.expect((await exportCount(page)) === active, `Export tab: ${active} items`, await exportCount(page));
+      const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.getByRole("button", { name: /^Export CSV$/ }).click()]);
+      const csvF = path.join(ART, "f3archived.csv");
+      await dl.saveAs(csvF);
+      const rows = parseCsv(fs.readFileSync(csvF, "utf8").replace(/^﻿/, ""));
+      const head = rows.shift();
+      const col = (r, h) => r[head.indexOf(h)];
+      const csvArch = rows.filter((r) => col(r, "Item") === NAME);
+      c.expect(rows.length === all, `CSV has all ${all} rows (archived included)`, rows.length);
+      c.expect(csvArch.length === 1 && col(csvArch[0], "Archived") === "YES", "CSV: archived item present with Archived=YES", csvArch.map((r) => col(r, "Archived")));
+      c.expect(col(rows.find((r) => col(r, "Item") === LIVE) || [], "Archived") === "NO", "CSV: active item has Archived=NO");
+      const [dx] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.getByRole("button", { name: /Export XLSX/ }).first().click()]);
+      const xF = path.join(ART, "f3archived.xlsx");
+      await dx.saveAs(xF);
+      const xItems = XLSX.utils.sheet_to_json(XLSX.read(fs.readFileSync(xF)).Sheets["Items"]);
+      const xArch = xItems.filter((r) => r.Item === NAME);
+      c.expect(xItems.length === all && xArch.length === 1 && xArch[0].Archived === "YES", "XLSX Items: all rows, archived item with Archived=YES", { rows: xItems.length, arch: xArch.map((r) => r.Archived) });
+      const pdf = await exportPdf(page);
+      fs.writeFileSync(path.join(ART, "f3archived.pdf"), pdf);
+      const runs = pdfTextRuns(pdf);
+      const pdfRows = pdfItemRows(runs);
+      c.expect(pdfRows.length === active, `PDF: ${active} item rows`, pdfRows.length);
+      c.expect(!pdfLines(runs).some((l) => l.includes(NAME)) && pdfLines(runs).some((l) => l.includes(LIVE)), "PDF: archived item absent, its active neighbour present");
+
+      // Unarchive (reached through a deep link: it has no card).
+      const before = c.dialogs.length;
+      await page.goto(`${APP}/dashboard?tab=zones&item=${F3.archived}`);
+      await modal(page).waitFor({ timeout: 30000 });
+      const unarch = modal(page).getByRole("button", { name: "Unarchive", exact: true });
+      c.expect((await unarch.count()) === 1 && (await modal(page).getByRole("button", { name: "Archive", exact: true }).count()) === 0, "archived item's modal offers 'Unarchive'");
+      await shot(c, page, "unarchive");
+      await unarch.click();
+      await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+      c.expect(!(await modalOpen(page)) && c.dialogs.length === before, "clean modal: Unarchive closes it without a confirm", c.dialogs.slice(before));
+      let db = await one("SELECT archived FROM items WHERE id = $1", [F3.archived]);
+      c.expect(db.archived === false, "DB: unarchived", db);
+      c.expect((await sql("SELECT 1 FROM history WHERE item_id = $1 AND action = 'unarchived'", [F3.archived])).length === 1, "'unarchived' event in the history");
+      await page.getByText(NAME, { exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect((await page.getByText(NAME, { exact: true }).count()) === 1, "card is back in the Zones list");
+      badges = await archivedBadges(page);
+      c.expect(!badges.some((b) => b.startsWith("Z13:")), "Z13 badge gone (nothing archived there now)", badges);
+
+      // Archive with unsaved edits: asks first; declining keeps everything.
+      await openItem(page, LIVE);
+      await notesArea(page).fill("typed, then archived");
+      const archBtn = modal(page).getByRole("button", { name: "Archive", exact: true });
+      page.__dialogPolicy = [false];
+      await archBtn.click();
+      await page.waitForTimeout(600);
+      c.expect(c.dialogs.slice(before).some((d) => /Discard your unsaved changes\?/.test(d)), "Archive with unsaved edits asks 'Discard your unsaved changes?'", c.dialogs.slice(before));
+      c.expect((await modalOpen(page)) && (await notesArea(page).inputValue()) === "typed, then archived", "declining keeps the modal and the edits");
+      c.expect((await one("SELECT archived FROM items WHERE id = $1", [F3.toggle])).archived === false, "…and doesn't archive");
+      page.__dialogPolicy = [true];
+      await archBtn.click();
+      await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+      db = await one("SELECT archived, notes FROM items WHERE id = $1", [F3.toggle]);
+      c.expect(!(await modalOpen(page)) && db.archived === true && db.notes === "base note", "confirming archives the item and drops the edits", db);
+      c.expect((await sql("SELECT 1 FROM history WHERE item_id = $1 AND action = 'archived'", [F3.toggle])).length === 1, "'archived' event in the history");
+      await page.waitForTimeout(500);
+      c.expect((await page.getByText(LIVE, { exact: true }).count()) === 0, "archived card leaves the Zones list at once");
+      badges = await archivedBadges(page);
+      c.expect(badges.includes("Z13: 1 archived"), "'1 archived' badge on Z13 again", badges);
+      await shot(c, page, "archived");
+      await page.context().close();
+
+      // Inspectors see no Archive / Unarchive button.
+      const insp = await newPage(c, "insp1");
+      await login(insp, "insp1@test.local");
+      await insp.goto(`${APP}/dashboard?tab=zones&item=${F3.toggle}`);
+      await modal(insp).waitFor({ timeout: 30000 });
+      c.expect((await modal(insp).getByRole("button", { name: /^(Archive|Unarchive)$/ }).count()) === 0, "inspector: no Archive/Unarchive button");
+      await insp.context().close();
+    } finally {
+      await dropItems([F3.archived, F3.toggle]);
+    }
+  });
+
+  await run("f3ai", "F3: AI in the item modal — auto-apply fills only empty fields, 'Apply to Item Fields' overwrites; the pit-depth estimate is staged (Cancel: no reading; Save: one AI-tagged reading) and never drives the rate; unsaved-evidence confirm on Save; viewers get no AI", async (c) => {
+    const NAME = "E2E AI Target";
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, notes, created_by, created_at)
+       VALUES ($1, $2, 'Z13', $3, 'Pending', 'base note', $4, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [F3.ai, await unitId(), NAME, USERS.insp2]
+    );
+    await sql("DELETE FROM rate_limits WHERE key LIKE 'photo%'");
+    const geminiCalls = async () => (await (await fetch(`${GW}/__ctl/gemini`)).json()).calls;
+    const FINDINGS = "E2E stand-in: surface rust on the flange bolts.";
+    const nReadings = async () => (await one("SELECT count(*)::int n FROM readings WHERE item_id = $1", [F3.ai])).n;
+    try {
+      const page = await newPage(c, "insp1");
+      await login(page, "insp1@test.local");
+      const f = {
+        mech: () => modal(page).getByLabel("Corrosion Mechanism"),
+        prob: () => modal(page).getByLabel("Probability (1-5)"),
+        cons: () => modal(page).getByLabel("Consequence (1-5)"),
+        freq: () => modal(page).getByLabel("Inspection Frequency"),
+        status: () => modal(page).getByLabel("Status", { exact: true }),
+        priority: () => modal(page).locator('div:has(> label:text-is("Priority (auto)")) > div'),
+      };
+      const values = async () => ({
+        mech: await f.mech().inputValue(), prob: await f.prob().inputValue(), cons: await f.cons().inputValue(),
+        freq: await f.freq().inputValue(), status: await f.status().inputValue(), priority: (await f.priority().innerText()).trim(),
+      });
+      const staged = modal(page).getByText(/AI pit-depth estimate — saved as a reading when you save the item: 0\.4 mm/);
+      const analyse = async () => {
+        await modal(page).locator('input[type="file"]:not([capture])').setInputFiles({ name: "f3-ai.png", mimeType: "image/png", buffer: tinyPng({ tint: 40 }) });
+        await modal(page).getByRole("button", { name: /Analyse with AI/ }).click();
+        await modal(page).getByText(FINDINGS).first().waitFor({ timeout: 20000 });
+      };
+      // Values set by hand before the analysis.
+      const byHand = async () => {
+        await f.mech().selectOption("Pitting Corrosion");
+        await f.cons().selectOption("1");
+      };
+
+      // 1) auto-apply after "Analyse": fills only what is empty.
+      await openItem(page, NAME);
+      await byHand();
+      const g0 = await geminiCalls();
+      await analyse();
+      c.expect((await geminiCalls()) === g0 + 1, "one call to the Gemini stand-in");
+      let v = await values();
+      c.step(`after auto-apply: ${JSON.stringify(v)}`);
+      c.expect(v.mech === "Pitting Corrosion" && v.cons === "1", "hand-set mechanism and consequence kept", v);
+      c.expect(v.prob === "3" && v.freq === "Quarterly", "empty probability and frequency filled from the AI (3, Quarterly)", v);
+      c.expect(v.priority === "Low" && v.status === "Pending", "priority derived from P3 x C1 (Low); 'Monitor' leaves the status alone", v);
+      c.expect(await staged.isVisible(), "pit-depth estimate 0.4 mm staged, not saved yet");
+      c.expect((await nReadings()) === 0, "no reading in the DB yet");
+      await shot(c, page, "auto-applied");
+      // 2) Cancel: nothing stays behind.
+      page.__dialogPolicy = [true];
+      await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+      await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+      let db = await one("SELECT mechanism, prob, cons, freq_insp FROM items WHERE id = $1", [F3.ai]);
+      c.expect(!(await modalOpen(page)) && (await nReadings()) === 0, "Cancel: modal closed, no reading written");
+      c.expect(db.mechanism === null && db.prob === null && db.cons === null && db.freq_insp === null, "Cancel: item unchanged", db);
+
+      // 3) "Apply to Item Fields" overwrites the hand-set values.
+      await openItem(page, NAME);
+      await byHand();
+      await analyse();
+      await modal(page).getByRole("button", { name: "Apply to Item Fields" }).click();
+      await page.waitForTimeout(300);
+      v = await values();
+      c.expect(v.mech === "Atmospheric Corrosion" && v.cons === "3" && v.prob === "3" && v.priority === "Medium", "'Apply to Item Fields' overwrites (Atmospheric, C3) -> Medium", v);
+      c.expect((await modal(page).getByText(FINDINGS).count()) === 0 || !(await modal(page).getByRole("button", { name: "Apply to Item Fields" }).count()), "result card closed after applying");
+      c.expect(await staged.isVisible(), "estimate still staged");
+      // 4) Save with the evidence entry still filled in: asks first.
+      const before = c.dialogs.length;
+      page.__dialogPolicy = [false];
+      await modal(page).getByRole("button", { name: "Save", exact: true }).click();
+      await page.waitForTimeout(600);
+      c.expect(c.dialogs.slice(before).some((d) => /There is an unsaved evidence entry/.test(d)), "Save warns about the unsaved evidence entry", c.dialogs.slice(before));
+      c.expect((await modalOpen(page)) && (await nReadings()) === 0 && (await one("SELECT prob FROM items WHERE id = $1", [F3.ai])).prob === null, "going back saves nothing");
+      page.__dialogPolicy = [true];
+      await modal(page).getByRole("button", { name: "Save", exact: true }).click();
+      await modal(page).waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+      c.expect(!(await modalOpen(page)), "continuing saves and closes");
+      db = await one("SELECT mechanism, prob, cons, priority, freq_insp FROM items WHERE id = $1", [F3.ai]);
+      c.expect(db.mechanism === "Atmospheric Corrosion" && db.prob === 3 && db.cons === 3 && db.priority === "Medium" && db.freq_insp === "Quarterly", "DB has the applied fields", db);
+      const rd = await sql("SELECT depth_mm::text d, location, checked_by, reading_date = current_date AS today FROM readings WHERE item_id = $1", [F3.ai]);
+      c.expect(rd.length === 1 && rd[0].d === "0.400" && rd[0].location === "AI estimate" && rd[0].checked_by === "AI Vision" && rd[0].today,
+        "exactly one reading: 0.400 mm, tagged 'AI estimate' / 'AI Vision', dated today", rd);
+      c.expect((await one("SELECT count(*)::int n FROM evidences WHERE item_id = $1", [F3.ai])).n === 0, "the discarded evidence entry was not saved");
+
+      // 5) The rate ignores AI estimates: a second one 120 days earlier at the
+      // same "point" would read 0.913 mm/yr if they counted.
+      await sql("INSERT INTO readings (item_id, reading_date, depth_mm, location, checked_by) VALUES ($1, current_date - 120, 0.1, 'AI estimate', 'AI Vision')", [F3.ai]);
+      await page.reload();
+      await waitLoaded(page);
+      await openItem(page, NAME);
+      await modal(page).getByRole("cell", { name: "0.1", exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
+      const txt = await modal(page).innerText();
+      c.expect((await modal(page).getByRole("cell", { name: "0.1", exact: true }).count()) === 1 && (await modal(page).getByRole("cell", { name: "0.4", exact: true }).count()) === 1, "both AI readings listed");
+      c.expect((await modal(page).getByText("Pit Growth Rate", { exact: true }).count()) === 0 && !/mm\/yr/.test(txt), "no corrosion rate from AI estimates", txt.match(/.{0,40}mm\/yr/)?.[0]);
+      await shot(c, page, "ai-readings");
+      await page.keyboard.press("Escape");
+      await page.context().close();
+
+      // B2: a viewer gets no evidence form, so no AI button.
+      const vw = await newPage(c, "viewer1");
+      await login(vw, "viewer1@test.local");
+      await openItem(vw, NAME);
+      c.expect((await modal(vw).getByRole("button", { name: /Analyse with AI|Gallery \/ file/ }).count()) === 0 && (await modal(vw).locator('input[type="file"]').count()) === 0, "viewer: no photo pick / AI controls");
+      await vw.context().close();
+    } finally {
+      await dropItems([F3.ai]);
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'photo%'");
+    }
+  });
+
+  await run("f3sece", "F3: picking a SECE object in the IFS combobox raises the priority (Medium -> High, x1.5); a non-SECE object brings it back; saved", async (c) => {
+    const NAME = "E2E SECE Target";
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, priority, sece, notes, created_by, created_at)
+       VALUES ($1, $2, 'Z13', $3, 'Attention', 3, 3, 'Medium', false, 'base note', $4, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [F3.sece, await unitId(), NAME, USERS.insp2]
+    );
+    try {
+      const page = await newPage(c, "insp1");
+      await login(page, "insp1@test.local");
+      await openItem(page, NAME);
+      const priority = async () => (await modal(page).locator('div:has(> label:text-is("Priority (auto)")) > div').innerText()).trim();
+      const seceBox = async () => (await modal(page).locator('div:has(> label:text-is("SECE — Safety & Environmental Critical Element")) > div > span').first().innerText()).trim();
+      const combo = modal(page).locator('input[role="combobox"]');
+      const pick = async (term, id) => {
+        await combo.scrollIntoViewIfNeeded();
+        await combo.fill(term);
+        const opt = modal(page).getByRole("option").filter({ hasText: id });
+        await opt.first().waitFor({ timeout: 10000 });
+        await opt.first().click();
+        await page.waitForTimeout(300);
+      };
+      c.expect((await priority()) === "Medium", "P3 x C3, no SECE: Medium", await priority());
+      await pick("pump", "OBJ-PUMP-101");
+      c.expect((await seceBox()) === "YES" && (await priority()) === "High", "SECE object (OBJ-PUMP-101): SECE YES, priority High (9 x 1.5 = 13.5)", { sece: await seceBox(), pri: await priority() });
+      await shot(c, page, "sece-high");
+      await pick("ballast", "OBJ-LINE-22");
+      c.expect((await seceBox()) === "NO" && (await priority()) === "Medium", "non-SECE object (OBJ-LINE-22): back to Medium", { sece: await seceBox(), pri: await priority() });
+      await pick("pump", "OBJ-PUMP-101");
+      await modal(page).getByRole("button", { name: "Save", exact: true }).click();
+      await modal(page).waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+      const db = await one("SELECT ifs_obj_id, sece, priority FROM items WHERE id = $1", [F3.sece]);
+      c.expect(db.ifs_obj_id === "OBJ-PUMP-101" && db.sece === true && db.priority === "High", "saved: OBJ-PUMP-101, sece, High", db);
+      await openItem(page, NAME);
+      c.expect((await priority()) === "High", "reopened: High", await priority());
+      await page.keyboard.press("Escape");
+      await page.context().close();
+    } finally {
+      await dropItems([F3.sece]);
+    }
+  });
+
+  await run("f3pdf", "F3: PDF export — one row per item of the Export tab (zones flow across pages, per-zone counts match), header total, 'Photos: …' note", async (c) => {
+    const unit = await unitId();
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by, created_at)
+       VALUES ($1, $2, 'Z13', 'E2E PDF Photo Target', 'Attention', 2, 2, $3, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [F3.pdf, unit, USERS.insp2]
+    );
+    try {
+      // One photo, attached by the inspector through the API (same RLS as the UI).
+      const insp = await apiAs("insp1@test.local");
+      const p = `${F3.pdf}/e2e_${Date.now()}_f3.png`;
+      const up = await insp.storage.from("evidence-photos").upload(p, new Blob([tinyPng({ tint: 70 })], { type: "image/png" }), { contentType: "image/png" });
+      const ins = await insp.from("evidences").insert({
+        item_id: F3.pdf, evidence_date: new Date().toISOString().slice(0, 10), description: "F3 PDF photo",
+        file_path: p, file_name: "f3.png", file_type: "image/png", file_size: 100,
+      });
+      c.expect(!up.error && !ins.error, "photo evidence attached", up.error?.message || ins.error?.message);
+      // Photos the PDF should embed: image evidences with a stored file, of
+      // active items, at most 4 per item (and <= 50 items).
+      const photoItems = await sql(
+        `SELECT least(count(*), 4)::int n FROM evidences e JOIN items i ON i.id = e.item_id
+          WHERE NOT coalesce(i.archived, false) AND e.file_type LIKE 'image/%'
+            AND EXISTS (SELECT 1 FROM storage.objects o WHERE o.bucket_id = 'evidence-photos' AND o.name = e.file_path)
+          GROUP BY e.item_id`);
+      const expPhotos = photoItems.reduce((a, r) => a + r.n, 0);
+      const perZone = Object.fromEntries((await sql(
+        "SELECT zone_id, count(*)::int n FROM items WHERE NOT coalesce(archived, false) GROUP BY zone_id ORDER BY zone_id"
+      )).map((r) => [r.zone_id, r.n]));
+
+      const page = await newPage(c, "admin1");
+      await hookPdf(page);
+      await login(page, "admin1@test.local");
+      await gotoTab(page, "Export");
+      const n = await exportCount(page);
+      c.expect(n === (await activeCount()), `Export tab: ${n} items (= active items in the DB)`, n);
+      const pdf = await exportPdf(page);
+      fs.writeFileSync(path.join(ART, "f3pdf.pdf"), pdf);
+      const runs = pdfTextRuns(pdf);
+      const lines = pdfLines(runs);
+      const rows = pdfItemRows(runs);
+      const pages = new Set(runs.map((r) => r.page)).size;
+      c.step(`PDF: ${pdf.length} bytes, ${pages} pages, ${rows.length} item rows`);
+      c.expect(rows.length === n, `PDF has ${n} item rows, the Export tab's count`, rows.length);
+      const got = {};
+      for (const r of rows) got[r.zone] = (got[r.zone] || 0) + 1;
+      c.expect(JSON.stringify(got) === JSON.stringify(perZone), "per-zone row counts match the DB", { got, perZone });
+      const zonePages = {};
+      for (const r of rows) (zonePages[r.zone] ??= new Set()).add(r.page);
+      const spanning = Object.entries(zonePages).filter(([, s]) => s.size > 1).map(([z]) => z);
+      c.expect(pages > 1 && spanning.length > 0, `zones continue across page breaks (${spanning.join(", ")})`, { pages, spanning });
+      c.expect(lines.some((l) => l.startsWith(`Total ${n} · SECE`)), `header 'Total ${n}'`, lines.slice(0, 4));
+      const note = lines.find((l) => l.startsWith("Photos: "));
+      c.expect(note === `Photos: ${expPhotos} photos embedded` && expPhotos >= 1, `'Photos: ${expPhotos} photos embedded' note (nothing failed)`, note);
+      c.expect(/\/Subtype\s*\/Image/.test(pdf.toString("latin1")), "the PDF embeds image(s)");
+      c.expect(lines.some((l) => l.startsWith("E2E PDF Photo Target")), "the photo's item is listed");
+      await page.context().close();
+    } finally {
+      await dropItems([F3.pdf]);
+    }
+  });
+
+  await run("f3users", "F3: Users page — create (validation, duplicate -> generic error, success), role change, dept shown, deactivate/reactivate, delete (confirm); non-admins can't open /users", async (c) => {
+    const EMAIL = "f3-new@test.local";
+    const TEMP = "Temp-Passw0rd1";
+    await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
+    try {
+      const adm = await newPage(c, "admin1");
+      await login(adm, "admin1@test.local");
+      await adm.goto(`${APP}/users`);
+      const email = adm.locator('input[type="email"]');
+      const pw = adm.locator('input[type="password"]');
+      const create = adm.getByRole("button", { name: "Create", exact: true });
+      const title = adm.getByText(/^Users \(\d+\)$/);
+      await title.waitFor({ timeout: 30000 });
+      const nUsers = async () => Number((await title.textContent()).match(/\((\d+)\)/)[1]);
+      const n0 = await nUsers();
+      const msg = (t) => adm.getByText(t, { exact: true });
+      // The own row: role locked, no Deactivate/Delete.
+      const self = adm.locator("tr", { hasText: "admin1@test.local" });
+      c.expect((await self.locator("select").isDisabled()) && (await self.getByRole("button", { name: /^(Deactivate|Delete)$/ }).count()) === 0, "own row: role locked, no Deactivate/Delete");
+      // Validation: the button waits for an email and 8+ characters.
+      c.expect(await create.isDisabled(), "Create disabled while empty");
+      await email.fill(EMAIL);
+      await pw.fill("short12");
+      c.expect(await create.isDisabled(), "Create disabled with a 7-character password");
+      await email.fill("not-an-email");
+      await pw.fill(TEMP);
+      await create.click();
+      await msg("Valid email required").waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(await msg("Valid email required").isVisible(), "malformed email -> 'Valid email required'");
+      c.expect((await email.inputValue()) === "not-an-email" && (await pw.inputValue()) === TEMP, "typed values kept for correction");
+      // Duplicate: GoTrue's 'already registered' is not echoed.
+      await email.fill("insp2@test.local");
+      await create.click();
+      await msg("Could not create user").waitFor({ timeout: 10000 }).catch(() => {});
+      const body = await adm.locator("main").innerText();
+      c.expect(await msg("Could not create user").isVisible() && !/already been registered|email_exists/.test(body), "existing email -> generic 'Could not create user' (no GoTrue text)");
+      await shot(c, adm, "duplicate");
+      // Success.
+      await email.fill(EMAIL);
+      await create.click();
+      await msg("User created.").waitFor({ timeout: 10000 }).catch(() => {});
+      const row = adm.locator("tr", { hasText: EMAIL });
+      await row.waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(await msg("User created.").isVisible() && (await row.count()) === 1 && (await nUsers()) === n0 + 1, "'User created.', new row, count +1");
+      c.expect((await email.inputValue()) === "" && (await pw.inputValue()) === "", "form cleared after success");
+      let p = await one("SELECT id, role, active, unit_id FROM profiles WHERE email = $1", [EMAIL]);
+      c.expect(p?.active === true && p.role === "viewer" && p.unit_id === (await unitId()), "profile: active viewer in the admin's unit", p);
+      c.expect((await row.locator("select").inputValue()) === "viewer" && /ACTIVE/.test(await row.innerText()), "row shows viewer / ACTIVE");
+      c.expect(!(await signInApi(EMAIL, TEMP)), "the new user signs in with the temporary password");
+      await shot(c, adm, "created");
+      // Role.
+      await row.locator("select").selectOption("inspector");
+      await msg("Role updated.").waitFor({ timeout: 10000 }).catch(() => {});
+      p = await one("SELECT role FROM profiles WHERE email = $1", [EMAIL]);
+      c.expect(p.role === "inspector" && (await row.locator("select").inputValue()) === "inspector", "role -> inspector (DB and row)", p);
+      // Department: not editable on this page (users set their own); shown as stored.
+      c.expect((await row.locator("td").nth(3).innerText()).trim() === "-", "no department yet: '-'");
+      await sql("UPDATE profiles SET dept = 'Marine' WHERE email = $1", [EMAIL]);
+      await adm.reload();
+      await title.waitFor({ timeout: 30000 });
+      c.expect((await row.locator("td").nth(3).innerText()).trim() === "Marine", "department shown after it changes");
+      // Deactivate / reactivate (ban details: c2ban).
+      await row.getByRole("button", { name: "Deactivate" }).click();
+      await msg("User deactivated.").waitFor({ timeout: 10000 }).catch(() => {});
+      p = await one("SELECT p.active, u.banned_until IS NOT NULL banned FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.email = $1", [EMAIL]);
+      c.expect(p.active === false && p.banned && /INACTIVE/.test(await row.innerText()), "deactivated: INACTIVE, banned", p);
+      await row.getByRole("button", { name: "Activate" }).click();
+      await msg("User activated.").waitFor({ timeout: 10000 }).catch(() => {});
+      p = await one("SELECT p.active, u.banned_until IS NULL unbanned FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.email = $1", [EMAIL]);
+      c.expect(p.active === true && p.unbanned && (await row.getByRole("button", { name: "Deactivate" }).count()) === 1, "reactivated: ACTIVE, ban lifted", p);
+      // Delete: confirm; Cancel keeps the user.
+      const before = c.dialogs.length;
+      adm.__dialogPolicy = [false];
+      await row.getByRole("button", { name: "Delete", exact: true }).click();
+      await adm.waitForTimeout(600);
+      c.expect(c.dialogs.slice(before).some((d) => d.includes(`Delete user ${EMAIL}? This permanently removes the account`)) && (await row.count()) === 1, "Delete asks first; Cancel keeps the user", c.dialogs.slice(before));
+      adm.__dialogPolicy = [true];
+      await row.getByRole("button", { name: "Delete", exact: true }).click();
+      await msg("User deleted.").waitFor({ timeout: 10000 }).catch(() => {});
+      await row.waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+      const gone = await one("SELECT (SELECT count(*)::int FROM profiles WHERE email = $1) p, (SELECT count(*)::int FROM auth.users WHERE email = $1) u", [EMAIL]);
+      c.expect((await row.count()) === 0 && gone.p === 0 && gone.u === 0 && (await nUsers()) === n0, "deleted: row, profile and auth user gone", gone);
+      await shot(c, adm, "deleted");
+      await adm.context().close();
+      // Non-admins are sent back to the dashboard.
+      for (const who of ["insp1", "viewer1"]) {
+        const pg2 = await newPage(c, who);
+        await login(pg2, `${who}@test.local`);
+        await pg2.goto(`${APP}/users`);
+        await pg2.waitForURL(/\/dashboard/, { timeout: 15000 }).catch(() => {});
+        c.expect(q(pg2).pathname === "/dashboard" && (await pg2.locator('input[type="password"]').count()) === 0, `${who}: /users -> /dashboard`, pg2.url());
+        await pg2.context().close();
+      }
+    } finally {
+      await sql("DELETE FROM auth.users WHERE email LIKE 'f3-%@test.local'");
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
+    }
+  });
+
+  await run("f3api", "F3: user API hygiene (malformed JSON 400, admin/origin gates, reset limit 429, generic GoTrue errors) + prefetch without a session cookie -> /login", async (c) => {
+    const LEAK = "Database error saving new user: duplicate key value violates unique constraint users_email_partial_key (SQLSTATE 23505)";
+    const leaky = (status) => ({ code: status, error_code: "unexpected_failure", msg: LEAK });
+    await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
+    try {
+      // --- prefetch: the middleware shortcut needs an sb- cookie
+      for (const h of [{ "next-router-prefetch": "1" }, { purpose: "prefetch" }, { "sec-purpose": "prefetch;prerender" }]) {
+        for (const [route, extra] of [["/dashboard?tab=zones", {}], ["/users", { cookie: "unrelated=1" }]]) {
+          const r = await fetch(`${APP}${route}`, { redirect: "manual", headers: { ...h, ...extra } });
+          const loc = r.headers.get("location") || "";
+          c.expect(r.status === 307 && new URL(loc, APP).pathname === "/login" && new URL(loc, APP).searchParams.get("next") === route,
+            `${JSON.stringify(h)} ${extra.cookie ? "+ non-sb cookie " : ""}${route} -> 307 /login?next=`, { status: r.status, loc });
+        }
+      }
+      // A forged sb- cookie passes the shortcut, but the server layout still
+      // refuses: no page, back to /login.
+      const forged = await fetch(`${APP}/dashboard`, { redirect: "manual", headers: { purpose: "prefetch", cookie: "sb-localhost-auth-token=forged" } });
+      c.expect(forged.status === 307 && new URL(forged.headers.get("location") || "", APP).pathname === "/login", "forged sb- cookie + prefetch -> still /login (layout check)", { status: forged.status, loc: forged.headers.get("location") });
+      const adm = await newPage(c, "admin1");
+      await login(adm, "admin1@test.local");
+      const real = await adm.request.get(`${APP}/dashboard`, { headers: { purpose: "prefetch" }, maxRedirects: 0 });
+      c.expect(real.status() === 200, "real session + prefetch -> 200", real.status());
+
+      // --- user routes
+      const post = async (pg, route, data, headers = {}) => {
+        const r = await pg.request.post(`${APP}/api/users/${route}`, { headers: { Origin: APP, "content-type": "application/json", ...headers }, data, maxRedirects: 0 });
+        const text = await r.text();
+        let body = {};
+        try { body = JSON.parse(text); } catch {}
+        return { status: r.status(), retry: Number(r.headers()["retry-after"] || 0), body, text };
+      };
+      for (const route of ["create", "update", "delete", "reset"]) {
+        const r = await post(adm, route, Buffer.from("{not json")); // raw bytes (a string would be JSON-encoded)
+        c.expect(r.status === 400 && r.body.error === "Invalid JSON body", `${route}: malformed JSON -> 400 'Invalid JSON body'`, r);
+      }
+      const xo = await post(adm, "update", { id: USERS.insp2, role: "viewer" }, { Origin: "https://evil.example" });
+      c.expect(xo.status === 403 && xo.body.error === "Forbidden", "cross-origin -> 403 Forbidden", xo);
+      const insp = await newPage(c, "insp1");
+      await login(insp, "insp1@test.local");
+      for (const route of ["create", "update", "delete", "reset"]) {
+        const r = await post(insp, route, { email: "x@test.local", id: USERS.insp2 });
+        c.expect(r.status === 403 && r.body.error === "Admin access required", `${route}: inspector -> 403 'Admin access required'`, r);
+      }
+      await insp.context().close();
+      c.expect((await one("SELECT role FROM profiles WHERE id = $1", [USERS.insp2])).role === "inspector", "nothing changed by the refused calls");
+
+      // GoTrue failures come back as generic messages.
+      await ctl.fault({ method: "POST", prefix: "/auth/v1/admin/users", status: 500, times: 1, body: leaky(500) });
+      const cf = await post(adm, "create", { email: "f3-api@test.local", password: "Temp-Passw0rd1" });
+      c.expect(cf.status === 400 && cf.body.error === "Could not create user" && !/SQLSTATE|Database error|duplicate key/.test(cf.text), "create: GoTrue 500 -> 400 'Could not create user', no upstream text", cf);
+      c.expect((await one("SELECT count(*)::int n FROM auth.users WHERE email = 'f3-api@test.local'")).n === 0, "…and no user created");
+      const ok = await post(adm, "create", { email: "f3-api@test.local", password: "Temp-Passw0rd1" });
+      const id = (await one("SELECT id FROM profiles WHERE email = 'f3-api@test.local'"))?.id;
+      c.expect(ok.status === 200 && !!id, "create works once GoTrue is back", ok);
+      await ctl.fault({ method: "DELETE", prefix: "/auth/v1/admin/users/", status: 500, times: 1, body: leaky(500) });
+      const df = await post(adm, "delete", { id });
+      c.expect(df.status === 400 && df.body.error === "Could not delete user" && !/SQLSTATE|Database error/.test(df.text), "delete: GoTrue 500 -> 400 'Could not delete user', no upstream text", df);
+      c.expect((await one("SELECT count(*)::int n FROM profiles WHERE id = $1", [id])).n === 1, "…user still there");
+      const dok = await post(adm, "delete", { id });
+      c.expect(dok.status === 200 && (await one("SELECT count(*)::int n FROM auth.users WHERE id = $1", [id])).n === 0, "delete works once GoTrue is back", dok);
+      const t0 = Date.now();
+      await ctl.fault({ method: "POST", prefix: "/auth/v1/recover", status: 500, times: 1,
+        body: { code: 500, error_code: "unexpected_failure", msg: "Error sending recovery email: 535 5.7.8 Username and Password not accepted smtp.example" } });
+      const rf = await post(adm, "reset", { email: "viewer1@test.local" });
+      c.expect(rf.status === 400 && rf.body.error === "Could not send reset email" && !/smtp|535|Username/.test(rf.text), "reset: GoTrue 500 -> 400 'Could not send reset email', no upstream text", rf);
+      c.expect((await (await fetch(`${GW}/__ctl/mail?since=${t0}`)).json()).length === 0, "…and no email sent");
+
+      // Reset: 5 per minute per admin, the 6th gets 429 + Retry-After.
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'users-reset:%'");
+      const st = [];
+      let last;
+      for (let i = 0; i < 6; i++) {
+        last = await post(adm, "reset", { email: "nobody@test.local" });
+        st.push(last.status);
+      }
+      c.expect(st.join(",") === "404,404,404,404,404,429", "reset: 5 calls per minute, then 429", st.join(","));
+      c.expect(last.retry >= 1 && last.retry <= 60 && last.body.error === "Too many requests. Please slow down.", "429 with Retry-After 1..60 and the generic message", last);
+      const other = await post(adm, "update", { id: USERS.insp2 });
+      c.expect(other.status === 400 && other.body.error === "Nothing to update", "the reset limit doesn't block the other user routes", other);
+      await adm.context().close();
+    } finally {
+      await ctl.clear();
+      await sql("DELETE FROM auth.users WHERE email LIKE 'f3-%@test.local'");
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
+    }
   });
 
   await browser.close();
