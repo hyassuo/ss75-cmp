@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
-import { parseTheme, THEME_COOKIE, type Theme } from "@/lib/theme/theme";
+import { DARK_MODE_ENABLED, parseTheme, THEME_COOKIE, type Theme } from "@/lib/theme/theme";
 
-// Theme chosen in the app (ThemeToggle writes the cookie), or null. The
-// root layout puts it on <html data-theme> so the first paint is right.
+// Theme for <html data-theme>: always "light" while dark mode is off (see
+// DARK_MODE_ENABLED); otherwise the cookie's choice, or null to follow the
+// device.
 export async function serverTheme(): Promise<Theme | null> {
+  if (!DARK_MODE_ENABLED) return "light";
   return parseTheme((await cookies()).get(THEME_COOKIE)?.value);
 }

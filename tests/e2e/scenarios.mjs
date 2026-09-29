@@ -3184,20 +3184,26 @@ async function main() {
     await mob.context().close();
   });
 
-  await run("e4theme", "E4: dark theme — follows the device (no cookie), toggle device->light->dark->device (data-theme, cookie, colours, EN/PT labels), SSR with the cookie (no flash, no hydration error), print stays light, text contrast >= AA on every screen in dark, onAccent on accent fills, PDF keeps literal colours", async (c) => {
-    const LIGHT = { bg: "rgb(240, 244, 248)", text: "rgb(30, 45, 61)" };
-    const DARK = { bg: "rgb(14, 21, 29)", text: "rgb(228, 236, 244)", onAccent: "rgb(11, 21, 32)", blu: "rgb(134, 184, 255)" };
+  await run("e4theme", "E4: dark mode off for now: a device in dark mode and a leftover 'dark' cookie both get the light app (data-theme=light, color-scheme light, one light theme-color meta, light from the first paint, no hydration error), no theme switch in the top bar (EN/PT), print light; text contrast >= AA on every screen, onAccent on accent fills, PDF keeps literal colours", async (c) => {
+    const LIGHT = { bg: "rgb(240, 244, 248)", text: "rgb(30, 45, 61)", onAccent: "rgb(255, 255, 255)", blu: "rgb(26, 92, 181)" };
     const state = (page) => page.evaluate(() => ({
       theme: document.documentElement.dataset.theme ?? null,
       scheme: getComputedStyle(document.documentElement).colorScheme,
+      schemeMeta: document.querySelector('meta[name="color-scheme"]')?.content ?? null,
       body: getComputedStyle(document.body).backgroundColor,
       text: getComputedStyle(document.body).color,
       root: document.getElementById("app-root") ? getComputedStyle(document.getElementById("app-root")).backgroundColor : null,
       metas: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => `${m.getAttribute("media") || "*"}=${m.content}`),
     }));
+    // The light app: palette, native controls and browser UI colour.
+    const isLight = (s, app = true) => s.theme === "light" && s.body === LIGHT.bg && s.text === LIGHT.text && (!app || s.root === LIGHT.bg) &&
+      s.scheme === "light" && s.schemeMeta === "light" && JSON.stringify(s.metas) === JSON.stringify(["*=#2c3e52"]);
     const themeCookie = async (page) => (await page.context().cookies()).find((k) => k.name === "ss75-cmp.theme") || null;
-    const toggle = (page) => page.locator('button[aria-label^="Theme:"], button[aria-label^="Tema:"]').first();
-    const label = (page) => toggle(page).getAttribute("aria-label");
+    // Top-bar controls (accessible names) and anything that looks like a theme switch.
+    const topBar = (page) => page.evaluate(() => ({
+      buttons: [...document.querySelectorAll(".tb-band-top button")].map((b) => b.getAttribute("aria-label") || b.textContent.trim()),
+      themeish: [...document.querySelectorAll("button, [role=switch]")].filter((b) => /\b(theme|tema|dark|escuro)\b/i.test(`${b.getAttribute("aria-label") || ""} ${b.title || ""} ${b.textContent}`)).length,
+    }));
     const hydrationErrors = () => c.console.filter((m) => /hydrat|Minified React error #(418|419|421|422|423|425)|did not match/i.test(m));
 
     // Contrast of every visible text node (and filled form control) against
@@ -3280,80 +3286,52 @@ async function main() {
       await page.waitForTimeout(400); // DS.transition (0.18s) on cards
       const r = await contrast(page, scope);
       c.step(`${name}: ${r.n} text elements, min ${r.min}:1, ${r.skipped} exempt`);
-      c.expect(r.n > 0 && r.bad.length === 0, `dark ${name}: every visible text >= AA`, r.bad.slice(0, 8));
+      c.expect(r.n > 0 && r.bad.length === 0, `${name}: every visible text >= AA`, r.bad.slice(0, 8));
       return r;
     };
 
-    // ---- 1. device dark, no cookie -> dark palette, nothing stored
+    // ---- 1. device in dark mode, no cookie -> light app
     const page = await newPage(c, "admin1-dark", { colorScheme: "dark" });
     await login(page, "admin1@test.local");
     let s = await state(page);
-    c.expect(s.theme === null && s.body === DARK.bg && s.root === DARK.bg && s.text === DARK.text && s.scheme === "dark",
-      "device dark, no choice: dark background/text, color-scheme dark, no data-theme", s);
-    c.expect(!(await themeCookie(page)), "no theme cookie while following the device", await themeCookie(page));
-    c.expect(s.metas.includes("(prefers-color-scheme: dark)=#111b26") && s.metas.includes("*=#2c3e52"), "theme-color metas per device scheme", s.metas);
-    c.expect((await label(page)) === "Theme: device", "toggle label 'Theme: device'", await label(page));
+    c.expect(isLight(s), "device dark: light palette, color-scheme light (CSS + meta), data-theme=light, one light theme-color meta", s);
+    c.expect(!(await themeCookie(page)), "no theme cookie written", await themeCookie(page));
+    let tb = await topBar(page);
+    c.expect(JSON.stringify(tb.buttons) === JSON.stringify(["Menu", "EN", "PT"]) && tb.themeish === 0, "top bar: menu + EN/PT only, no theme switch anywhere", tb);
     await shot(c, page, "device-dark");
-
-    // ---- 2. the toggle cycles device -> light -> dark -> device
-    const steps = [
-      ["light", "Theme: light", LIGHT.bg, "light"],
-      ["dark", "Theme: dark", DARK.bg, "dark"],
-      [null, "Theme: device", DARK.bg, null],
-    ];
-    for (const [theme, lbl, bg, ck] of steps) {
-      await toggle(page).click();
-      s = await state(page); // no wait: must apply at once
-      const cookie = await themeCookie(page);
-      c.expect(s.theme === theme && s.body === bg && s.root === bg && (await label(page)) === lbl && (cookie?.value ?? null) === ck,
-        `click -> ${lbl}: data-theme=${theme}, background ${bg}, cookie ${ck}`, { s, cookie, label: await label(page) });
-      if (cookie) c.expect(cookie.path === "/" && cookie.sameSite === "Lax" && cookie.expires > Date.now() / 1000 + 300 * 86400, "cookie: path=/, SameSite=Lax, ~1 year", cookie);
-    }
     await page.getByRole("button", { name: "PT", exact: true }).click();
     await page.waitForTimeout(300);
-    const pt = [];
-    pt.push(await label(page));
-    for (let i = 0; i < 3; i++) { await toggle(page).click(); pt.push(await label(page)); }
-    c.expect(JSON.stringify(pt) === JSON.stringify(["Tema: do aparelho", "Tema: claro", "Tema: escuro", "Tema: do aparelho"]), "PT labels: do aparelho -> claro -> escuro -> do aparelho", pt);
-    c.expect((await toggle(page).getAttribute("title")) === (await label(page)), "title mirrors the aria-label");
+    tb = await topBar(page);
+    c.expect(tb.themeish === 0 && isLight(await state(page)), "PT: still light, no theme switch", tb);
     await page.getByRole("button", { name: "EN", exact: true }).click();
     await page.waitForTimeout(300);
 
-    // ---- 3. device light + dark cookie: the server renders data-theme (no flash)
-    const lp = await newPage(c, "insp1-light", { colorScheme: "light" });
-    await login(lp, "insp1@test.local");
-    s = await state(lp);
-    c.expect(s.theme === null && s.body === LIGHT.bg && s.text === LIGHT.text && s.scheme === "light", "device light, no choice: light palette", s);
-    await toggle(lp).click();
-    await toggle(lp).click();
-    c.expect((await themeCookie(lp))?.value === "dark" && (await state(lp)).body === DARK.bg, "picked dark on a light device");
-    const html = await (await lp.request.get(`${APP}/dashboard`)).text();
+    // ---- 2. a leftover 'dark' cookie (from v1.21.1) on the dark device: ignored
+    await page.context().addCookies([{ name: "ss75-cmp.theme", value: "dark", url: APP }]);
+    const html = await (await page.request.get(`${APP}/dashboard`)).text();
     const htmlTag = (html.match(/<html\b[^>]*>/) || [""])[0];
-    c.expect(/data-theme="dark"/.test(htmlTag), "server HTML: <html data-theme=\"dark\">", htmlTag);
-    c.expect(/<meta name="theme-color" content="#111b26"/.test(html) && !/media="\(prefers-color-scheme/.test(html), "server HTML: one dark theme-color meta", (html.match(/<meta name="theme-color"[^>]*>/g) || []));
-    c.expect(/aria-label="Theme: dark"/.test(html), "server HTML: toggle already labelled 'Theme: dark'");
+    c.expect(/data-theme="light"/.test(htmlTag), "server HTML with the dark cookie: <html data-theme=\"light\">", htmlTag);
+    c.expect(JSON.stringify(html.match(/<meta name="theme-color"[^>]*>/g)) === JSON.stringify(['<meta name="theme-color" content="#2c3e52"/>']) && /<meta name="color-scheme" content="light"\/>/.test(html),
+      "server HTML: one light theme-color meta (no media query), color-scheme light", [html.match(/<meta name="(theme-color|color-scheme)"[^>]*>/g)]);
+    c.expect(!/Theme:|Tema:/.test(html), "server HTML: no theme switch");
     c.console.length = 0;
-    // The very first paint: data-theme is in the HTML, the palette applies
-    // before any script runs.
-    await lp.reload({ waitUntil: "commit" });
-    await lp.waitForFunction(() => document.body, null, { timeout: 10000 });
-    const early = await lp.evaluate(() => ({ theme: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor }));
-    c.expect(early.theme === "dark" && early.body === DARK.bg, "dark from the first paint after reload", early);
-    await waitLoaded(lp);
-    await lp.waitForTimeout(1500);
-    c.expect((await label(lp)) === "Theme: dark", "toggle state after reload: dark", await label(lp));
+    // The very first paint is light: data-theme is in the HTML.
+    await page.reload({ waitUntil: "commit" });
+    await page.waitForFunction(() => document.body, null, { timeout: 10000 });
+    const early = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor }));
+    c.expect(early.theme === "light" && early.body === LIGHT.bg, "light from the first paint after reload (dark device + dark cookie)", early);
+    await waitLoaded(page);
+    await page.waitForTimeout(1500);
+    s = await state(page);
+    c.expect(isLight(s), "after hydration: still light", s);
     c.expect(hydrationErrors().length === 0, "no hydration error / warning in the console", hydrationErrors());
-    // Printing always uses the light palette.
-    await lp.emulateMedia({ media: "print" });
-    s = await state(lp);
-    c.expect(s.body === LIGHT.bg && s.text === LIGHT.text && s.scheme === "light", "print media: light palette even with the dark cookie", s);
-    await lp.emulateMedia({ media: "screen" });
-    await lp.context().close();
+    // Printing uses the light palette.
+    await page.emulateMedia({ media: "print" });
+    s = await state(page);
+    c.expect(s.body === LIGHT.bg && s.text === LIGHT.text && s.scheme === "light", "print media: light palette", s);
+    await page.emulateMedia({ media: "screen" });
 
-    // ---- 4. dark everywhere (admin: cookie dark on a dark device)
-    await toggle(page).click();
-    await toggle(page).click();
-    c.expect((await state(page)).theme === "dark", "admin: dark picked");
+    // ---- 3. every screen (dark device + dark cookie), light contrast sweep
     c.console.length = 0;
     await page.goto(`${APP}/dashboard`);
     await waitLoaded(page);
@@ -3361,7 +3339,7 @@ async function main() {
     await gotoTab(page, "Zones & Items");
     await page.waitForTimeout(800);
     await sweep(page, "zones");
-    // Item with readings (rate, table rows, delete ×) and the evidence
+    // Item with readings (rate, table rows, delete X) and the evidence
     // panel with a picked photo, then a saved record.
     await openItem(page, "E2E Rate Target");
     await sweep(page, "item modal (readings)", ".modal-overlay");
@@ -3369,10 +3347,10 @@ async function main() {
     fs.writeFileSync(pngPath, tinyPng({ tint: 90 }));
     await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
     await modal(page).locator('img[alt="Selected photo preview"]').waitFor({ timeout: 10000 }).catch(() => {});
-    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E4 dark evidence");
+    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E4 evidence");
     const saveEv = modal(page).getByRole("button", { name: "Save evidence record" });
     const saveCol = await saveEv.evaluate((b) => ({ color: getComputedStyle(b).color, bg: getComputedStyle(b).backgroundColor }));
-    c.expect(saveCol.color === DARK.onAccent && saveCol.bg === DARK.blu, "accent button (Save evidence) in dark: dark onAccent text on light blue", saveCol);
+    c.expect(saveCol.color === LIGHT.onAccent && saveCol.bg === LIGHT.blu, "primary button (Save evidence): onAccent text on blue", saveCol);
     await sweep(page, "evidence panel (photo picked)", ".modal-overlay");
     await shot(c, page, "evidence-picked");
     await saveEv.click();
@@ -3380,17 +3358,17 @@ async function main() {
     await toastEl.waitFor({ timeout: 15000 });
     await toastEl.evaluate((e) => e.setAttribute("data-e2e-toast", ""));
     const toastC = await contrast(page, "[data-e2e-toast]");
-    c.expect(toastC.n > 0 && toastC.bad.length === 0, `toast 'Evidence saved' readable in dark (min ${toastC.min})`, toastC.bad);
+    c.expect(toastC.n > 0 && toastC.bad.length === 0, `toast 'Evidence saved' readable (min ${toastC.min})`, toastC.bad);
     await modal(page).locator('img[alt="e4.png"]').waitFor({ timeout: 15000 }).catch(() => {});
     await sweep(page, "evidence panel (saved record)", ".modal-overlay");
     await shot(c, page, "evidence-saved");
-    // Confirmation dialog (danger button) over the modal: admin's ×.
+    // Confirmation dialog (danger button) over the modal: admin's X.
     page.__manualDialogs = true;
-    await modal(page).locator("button", { hasText: /^×$/ }).last().click();
+    await modal(page).getByRole("button", { name: "Delete evidence", exact: true }).last().click();
     await confirmDlg(page).waitFor({ timeout: 5000 });
     await sweep(page, "confirm dialog", '[role="alertdialog"]');
     const del = await confirmDlg(page).getByRole("button", { name: "Delete" }).evaluate((b) => getComputedStyle(b).color);
-    c.expect(del === DARK.onAccent, "danger confirm button uses onAccent", del);
+    c.expect(del === LIGHT.onAccent, "danger confirm button uses onAccent", del);
     await shot(c, page, "confirm");
     await confirmDlg(page).getByRole("button", { name: "Cancel" }).click();
     page.__manualDialogs = false;
@@ -3402,8 +3380,8 @@ async function main() {
       await sweep(page, name);
       await shot(c, page, name.replace(/ /g, "-"));
     }
-    // PDF export in dark: works, and the PDF paints literal colours (the
-    // renderer can't resolve CSS variables).
+    // PDF export: works, and the PDF paints literal colours (the renderer
+    // can't resolve CSS variables).
     await page.context().addInitScript(() => {
       const orig = URL.createObjectURL;
       URL.createObjectURL = function (b) {
@@ -3434,9 +3412,9 @@ async function main() {
       const fills = [...content.matchAll(/([\d.]+) ([\d.]+) ([\d.]+) (?:rg|scn)\b/g)].map((m) => m.slice(1, 4).map((v) => Math.round(Number(v) * 255)));
       const textColour = fills.some(([r, g, b]) => Math.abs(r - 30) <= 1 && Math.abs(g - 45) <= 1 && Math.abs(b - 61) <= 1);
       c.expect(buf.toString("latin1").startsWith("%PDF-") && textColour && !/var\(--ds/.test(content),
-        "PDF in dark mode: produced, body text #1e2d3d (literal light colours)", { size: buf.length, fills: fills.length });
+        "PDF: produced, body text #1e2d3d (literal colours)", { size: buf.length, fills: fills.length });
     } else {
-      c.expect(false, "PDF produced in dark mode", pdf);
+      c.expect(false, "PDF produced", pdf);
     }
     if (!popup.isClosed()) await popup.close().catch(() => {});
     c.expect(!(await toastSeen(page, /PDF export failed/, 500)), "no 'PDF export failed' toast");
@@ -3447,29 +3425,31 @@ async function main() {
       await sweep(page, name);
       await shot(c, page, name.replace(/ /g, "-"));
     }
-    c.expect(hydrationErrors().length === 0, "no hydration error while browsing in dark", hydrationErrors());
+    c.expect(hydrationErrors().length === 0, "no hydration error while browsing", hydrationErrors());
+    c.expect(isLight(await state(page), false), "admin pages / 404: light", await state(page));
     await page.context().close();
 
-    // ---- 5. signed-out login page with the dark cookie (light device)
-    const anon = await newPage(c, "anon-dark", { colorScheme: "light" });
+    // ---- 4. signed-out login page with the dark cookie on a dark device
+    const anon = await newPage(c, "anon-dark", { colorScheme: "dark" });
     await anon.context().addCookies([{ name: "ss75-cmp.theme", value: "dark", url: APP }]);
     await anon.goto(`${APP}/login`);
     await anon.getByRole("button", { name: /sign in/i }).waitFor();
     s = await state(anon);
-    c.expect(s.theme === "dark" && s.body === DARK.bg, "login page: dark from the cookie", s);
+    c.expect(isLight(s, false), "login page: light despite the dark cookie and device", s);
     await anon.locator('input[type="email"]').fill("someone@test.local");
     await sweep(anon, "login page");
     const sb = await anon.getByRole("button", { name: /sign in/i }).evaluate((b) => ({ color: getComputedStyle(b).color, bg: getComputedStyle(b).backgroundColor }));
-    c.expect(sb.color === DARK.onAccent && sb.bg === DARK.blu, "login 'Sign in' (accent) uses onAccent", sb);
+    c.expect(sb.color === LIGHT.onAccent && sb.bg === LIGHT.blu, "login 'Sign in' (primary) uses onAccent", sb);
     await shot(c, anon, "login");
     await anon.context().close();
 
-    // ---- 6. phone (390px), dark: bottom navigation incl. the '+' button
+    // ---- 5. phone (390px) in dark mode: light app, bottom navigation incl. the '+' button
     const mob = await newPage(c, "insp1-390", { colorScheme: "dark", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await login(mob, "insp1@test.local");
+    c.expect(isLight(await state(mob)), "390px, device dark: light app", await state(mob));
     await sweep(mob, "390px dashboard + bottom nav");
     const plus = await mob.locator("nav.bottom-nav button[aria-label='+ New Item']").evaluate((b) => ({ color: getComputedStyle(b).color, dot: getComputedStyle(b.querySelector("span")).backgroundColor }));
-    c.expect(plus.color === DARK.onAccent && plus.dot === DARK.blu, "bottom-nav '+' uses onAccent on the light-blue dot", plus);
+    c.expect(plus.color === LIGHT.onAccent && plus.dot === LIGHT.blu, "bottom-nav '+' uses onAccent on the blue dot", plus);
     await shot(c, mob, "390");
     await mob.context().close();
     await sql("DELETE FROM evidences WHERE item_id = $1", [ID.rate]).catch(() => {});

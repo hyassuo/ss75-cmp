@@ -6,7 +6,6 @@ import { RecoveryRedirect } from "@/components/layout/RecoveryRedirect";
 import { LangProvider } from "@/lib/context/LangContext";
 import { serverLang } from "@/lib/i18n/serverLang";
 import { serverTheme } from "@/lib/theme/serverTheme";
-import { ServerThemeProvider } from "@/lib/theme/ThemeContext";
 import { THEME_COLOR } from "@/lib/theme/theme";
 import "./globals.css";
 
@@ -61,13 +60,16 @@ export async function generateViewport(): Promise<Viewport> {
     // auto-zoom on focus is avoided by 16px inputs on small screens instead
     // (globals.css).
     // Browser UI matches the top bar (DS.sbBg) of the theme in use: the
-    // picked one, else the device's.
+    // picked one, else the device's. Always light while dark mode is off.
     themeColor: theme
       ? THEME_COLOR[theme]
       : [
           { media: "(prefers-color-scheme: dark)", color: THEME_COLOR.dark },
           { color: THEME_COLOR.light },
         ],
+    // A fixed theme also fixes the native controls (scrollbars, date
+    // pickers) before the stylesheet loads.
+    ...(theme ? { colorScheme: theme } : {}),
   };
 }
 
@@ -84,7 +86,7 @@ export default async function RootLayout({
         <PwaRegister />
         <RecoveryRedirect />
         <LangProvider initialLang={lang}>
-          <ServerThemeProvider theme={theme}>{children}</ServerThemeProvider>
+          {children}
         </LangProvider>
       </body>
     </html>

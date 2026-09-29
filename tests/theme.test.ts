@@ -2,10 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
 import { DS, tint } from "@/lib/design/tokens";
-import { parseTheme, THEME_COLOR } from "@/lib/theme/theme";
+import { DARK_MODE_ENABLED, parseTheme, THEME_COLOR } from "@/lib/theme/theme";
 
 // The palettes in app/globals.css: light on :root, dark twice (device
-// preference, and data-theme="dark").
+// preference, and data-theme="dark"). Dark mode is off for now, but its
+// palette is kept (and checked) so it can be switched back on.
 const css = fs.readFileSync(path.join(__dirname, "..", "app", "globals.css"), "utf8");
 
 function palette(selector: string): Record<string, string> {
@@ -100,6 +101,36 @@ describe("theme palettes (app/globals.css)", () => {
   it("dark palette is screen-only (printing stays light)", () => {
     expect(css).toMatch(/@media screen and \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)/);
     expect(css).toMatch(/@media screen\s*\{\s*:root\[data-theme="dark"\]/);
+  });
+});
+
+describe("dark mode switched off (DARK_MODE_ENABLED)", () => {
+  const root = path.join(__dirname, "..");
+  const read = (f: string) => fs.readFileSync(path.join(root, f), "utf8");
+
+  it("is off", () => {
+    expect(DARK_MODE_ENABLED).toBe(false);
+  });
+
+  it("the device preference only applies without data-theme=\"light\"", () => {
+    // The layout always sets data-theme="light" while off: this guard is
+    // what keeps a phone in system dark mode on the light palette.
+    const any = css.match(/prefers-color-scheme:\s*dark/g) ?? [];
+    const guarded = css.match(/@media screen and \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)\s*\{/g) ?? [];
+    expect(any.length).toBeGreaterThan(0);
+    expect(guarded.length).toBe(any.length);
+  });
+
+  it("serverTheme ignores the cookie and the layout uses it for <html> and the viewport", () => {
+    expect(read("lib/theme/serverTheme.ts")).toMatch(/if \(!DARK_MODE_ENABLED\) return "light";/);
+    const layout = read("app/layout.tsx");
+    expect(layout).toMatch(/data-theme=\{theme \?\? undefined\}/);
+    expect(layout).toMatch(/colorScheme: theme/);
+  });
+
+  it("no theme switch is left in the UI", () => {
+    expect(fs.existsSync(path.join(root, "components/layout/ThemeToggle.tsx"))).toBe(false);
+    expect(read("components/layout/Topbar.tsx")).not.toMatch(/Theme/);
   });
 });
 
