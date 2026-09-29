@@ -2,7 +2,7 @@
 
 import { useId, useState } from "react";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
@@ -191,7 +191,7 @@ export function ReadingsPanel({
             disabled={busy}
             style={{
               background: DS.blu,
-              color: "#fff",
+              color: DS.onAccent,
               border: "none",
               borderRadius: 6,
               padding: "0 22px",
@@ -218,7 +218,7 @@ export function ReadingsPanel({
         <div
           style={{
             background: DS.sur2,
-            border: "2px solid " + rateColor(rate) + "50",
+            border: "2px solid " + tint(rateColor(rate), 31),
             borderRadius: 9,
             padding: "12px 16px",
             marginBottom: 12,
@@ -336,7 +336,7 @@ export function ReadingsPanel({
                 return (
                   <tr
                     key={r.id}
-                    style={{ borderBottom: "1px solid #f1f5f9" }}
+                    style={{ borderBottom: "1px solid " + tint(DS.bord, 60) }}
                   >
                     <td
                       style={{
@@ -379,7 +379,7 @@ export function ReadingsPanel({
                           style={{
                             background: "none",
                             border: "none",
-                            color: "rgba(192,57,43,0.5)",
+                            color: DS.red,
                             cursor: "pointer",
                             fontSize: 14,
                           }}

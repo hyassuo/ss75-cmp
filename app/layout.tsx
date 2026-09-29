@@ -4,6 +4,9 @@ import { PwaRegister } from "@/components/layout/PwaRegister";
 import { RecoveryRedirect } from "@/components/layout/RecoveryRedirect";
 import { LangProvider } from "@/lib/context/LangContext";
 import { serverLang } from "@/lib/i18n/serverLang";
+import { serverTheme } from "@/lib/theme/serverTheme";
+import { ServerThemeProvider } from "@/lib/theme/ThemeContext";
+import { THEME_COLOR } from "@/lib/theme/theme";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,25 +35,38 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  // No maximumScale: pinch-zoom must stay available (WCAG 1.4.4). iOS
-  // auto-zoom on focus is avoided by 16px inputs on small screens instead
-  // (globals.css).
-  themeColor: "#2c3e52", // DS.sbBg — matches the dark topbar
-};
+export async function generateViewport(): Promise<Viewport> {
+  const theme = await serverTheme();
+  return {
+    width: "device-width",
+    initialScale: 1,
+    // No maximumScale: pinch-zoom must stay available (WCAG 1.4.4). iOS
+    // auto-zoom on focus is avoided by 16px inputs on small screens instead
+    // (globals.css).
+    // Browser UI matches the top bar (DS.sbBg) of the theme in use: the
+    // picked one, else the device's.
+    themeColor: theme
+      ? THEME_COLOR[theme]
+      : [
+          { media: "(prefers-color-scheme: dark)", color: THEME_COLOR.dark },
+          { color: THEME_COLOR.light },
+        ],
+  };
+}
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const lang = await serverLang();
+  const theme = await serverTheme();
   return (
-    <html lang={lang === "pt" ? "pt-BR" : "en"}>
+    <html lang={lang === "pt" ? "pt-BR" : "en"} data-theme={theme ?? undefined}>
       <body className={`${inter.variable} ${ibmPlexMono.variable}`}>
         <PwaRegister />
         <RecoveryRedirect />
-        <LangProvider initialLang={lang}>{children}</LangProvider>
+        <LangProvider initialLang={lang}>
+          <ServerThemeProvider theme={theme}>{children}</ServerThemeProvider>
+        </LangProvider>
       </body>
     </html>
   );

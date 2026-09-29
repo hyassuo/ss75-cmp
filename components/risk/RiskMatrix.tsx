@@ -1,7 +1,7 @@
 "use client";
 
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -272,8 +272,8 @@ export function RiskMatrix() {
                       >
                         <div
                           style={{
-                            background: clr + "18",
-                            border: "1px solid " + clr + "35",
+                            background: tint(clr, 9),
+                            border: "1px solid " + tint(clr, 21),
                             borderRadius: 6,
                             minHeight: 52,
                             padding: "4px 5px",
@@ -305,7 +305,7 @@ export function RiskMatrix() {
                               style={{
                                 fontSize: 9,
                                 color: DS.text,
-                                background: clr + "28",
+                                background: tint(clr, 16),
                                 borderRadius: 3,
                                 padding: "2px 4px",
                                 marginBottom: 2,

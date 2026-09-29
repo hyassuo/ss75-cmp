@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/Label";
 import { YesNoToggle } from "@/components/ui/YesNoToggle";
 import { IfsObjectSearch } from "@/components/items/IfsObjectSearch";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
 import {
@@ -209,8 +209,8 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
           <Label>{t("f.priorityAuto")}</Label>
           <div
             style={{
-              background: prClr + "18",
-              border: "1px solid " + prClr + "44",
+              background: tint(prClr, 9),
+              border: "1px solid " + tint(prClr, 27),
               borderRadius: 7,
               padding: "8px 11px",
               fontWeight: 800,

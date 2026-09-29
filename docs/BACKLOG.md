@@ -45,7 +45,6 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Sugestão |
 |---|---|------|----------|
-| E4 | P3 | Tema escuro | Útil à noite e em ambientes escuros. |
 | E5 | P3 | Padronização visual | Ainda há três sistemas de estilo (inline, CSS próprio, Tailwind configurado e não usado) e muitos tamanhos de fonte. Continuar migrando para os componentes base em `components/ui/`. |
 
 ## F. Engenharia e operação
@@ -73,3 +72,4 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ baixo, ◇ médio, △ alto, ▲ crítico) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
 | E3 | Várias fotos de uma vez | A galeria aceita até 10 arquivos por seleção; cada um vira um registro de evidência (mesma data e descrição), salvos em sequência com progresso. A IA analisa a primeira foto da fila. Se um envio falhar, os já salvos são informados e o restante fica na fila para tentar de novo, sem duplicar. |
 | F4 | Planos antigos | Os 5 planos de `docs/plans/` foram conferidos critério a critério contra o código: todos concluídos (alguns por soluções mais novas). Arquivados em `docs/plans/archive/` com um índice; o único resto no código (limites de taxa repetidos no painel de leituras) foi corrigido; os testes que faltavam foram para o F3. |
+| E4 | Tema escuro | Botão na barra superior alterna dispositivo → claro → escuro (lembrado em cookie, já aplicado na primeira pintura, sem script inline). Contraste AA em todas as telas nos dois temas (mín. 4,52:1 claro / 5,34:1 escuro, verificado em teste); impressão e PDF sempre claros. |

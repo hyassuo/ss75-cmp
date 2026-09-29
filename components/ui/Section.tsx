@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 
 interface SectionProps {
   title: string;
@@ -19,7 +19,7 @@ export function Section({ title, accent = DS.blu, children }: SectionProps) {
           fontWeight: 800,
           paddingBottom: 6,
           marginBottom: 14,
-          borderBottom: "1px solid " + accent + "28",
+          borderBottom: "1px solid " + tint(accent, 16),
         }}
       >
         {title}

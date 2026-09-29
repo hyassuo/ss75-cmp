@@ -1,9 +1,12 @@
+import { DS } from "@/lib/design/tokens";
+
 interface SpinnerProps {
   size?: number;
   color?: string;
 }
 
-export function Spinner({ size = 16, color = "#fff" }: SpinnerProps) {
+// Default colour suits a spinner inside an accent (primary) button.
+export function Spinner({ size = 16, color = DS.onAccent }: SpinnerProps) {
   return (
     <div
       style={{

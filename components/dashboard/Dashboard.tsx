@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
 import { useData } from "@/lib/context/DataContext";
@@ -242,7 +242,7 @@ export function Dashboard() {
                 key={z.zid}
                 style={{
                   padding: "6px 0",
-                  borderBottom: "1px solid #f1f5f9",
+                  borderBottom: "1px solid " + tint(DS.bord, 60),
                 }}
               >
                 <div

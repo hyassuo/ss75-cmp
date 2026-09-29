@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { fmt } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
@@ -112,7 +112,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             disabled={busy || !invite || newPassword.length < 8}
             style={{
               background: DS.blu,
-              color: "#fff",
+              color: DS.onAccent,
               border: "none",
               borderRadius: 8,
               padding: "9px 20px",
@@ -194,7 +194,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                 return (
                   <tr
                     key={u.id}
-                    style={{ borderBottom: "1px solid #f1f5f9" }}
+                    style={{ borderBottom: "1px solid " + tint(DS.bord, 60) }}
                   >
                     <td style={{ padding: "8px 10px", color: DS.text }}>
                       {u.email}
@@ -333,7 +333,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             disabled={busy}
                             style={{
                               background: DS.red,
-                              color: "#fff",
+                              color: DS.onAccent,
                               border: "none",
                               borderRadius: 6,
                               padding: "4px 10px",

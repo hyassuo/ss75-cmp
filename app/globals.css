@@ -2,7 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (lib/design/tokens.ts reads them through var()).
+   Light is the default; dark follows the device unless the user picked a
+   theme (data-theme on <html>, from the ss75-cmp.theme cookie). The two
+   dark blocks below must stay identical (tests/theme.test.ts checks it).
+   Dark is screen-only: printing always uses the light palette. */
 :root {
+  color-scheme: light;
   --ds-bg: #f0f4f8;
   --ds-sur: #ffffff;
   --ds-sur2: #f7f9fc;
@@ -12,17 +18,111 @@
   --ds-text2: #445566;
   --ds-text3: #4f677f;
   --ds-red: #b0301f;
+  --ds-red-bg: #fdf2f2;
+  --ds-red-bord: #f5c6c2;
   --ds-ora: #a4470f;
+  --ds-ora-bg: #fdf6f0;
+  --ds-ora-bord: #f5d0b8;
   --ds-yel: #7a5d00;
+  --ds-yel-bg: #fdfbee;
+  --ds-yel-bord: #f0e0a0;
   --ds-grn: #1a7040;
+  --ds-grn-bg: #f0faf4;
+  --ds-grn-bord: #a8dfc0;
   --ds-blu: #1a5cb5;
+  --ds-blu-bg: #eef5ff;
+  --ds-blu-bord: #aac8f0;
   --ds-vio: #5b3aa0;
+  --ds-vio-bg: #f3eeff;
+  --ds-vio-bord: #c9b8f0;
+  --ds-on-accent: #ffffff;
   --ds-sb-bg: #2c3e52;
+  --ds-sb-band: #243446;
   --ds-sb-bord: #374f66;
   --ds-sb-txt: #c5d6e8;
   --ds-sb-txt2: #9db5cc;
   --ds-sb-act: #3b5570;
   --ds-sb-act-txt: #93d4f5;
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ds-bg: #0e151d;
+    --ds-sur: #16202b;
+    --ds-sur2: #1b2733;
+    --ds-bord: #2b3a4a;
+    --ds-bord2: #3b4e62;
+    --ds-text: #e4ecf4;
+    --ds-text2: #bccad8;
+    --ds-text3: #9fb2c5;
+    --ds-red: #ff8f80;
+    --ds-red-bg: #3a1c19;
+    --ds-red-bord: #6e342d;
+    --ds-ora: #ffae73;
+    --ds-ora-bg: #382515;
+    --ds-ora-bord: #6c4626;
+    --ds-yel: #e9cc63;
+    --ds-yel-bg: #322d10;
+    --ds-yel-bord: #5f5322;
+    --ds-grn: #72d69c;
+    --ds-grn-bg: #132e1f;
+    --ds-grn-bord: #2b5c40;
+    --ds-blu: #86b8ff;
+    --ds-blu-bg: #14283f;
+    --ds-blu-bord: #2d4e7a;
+    --ds-vio: #bca3ff;
+    --ds-vio-bg: #261e40;
+    --ds-vio-bord: #4b3b7c;
+    --ds-on-accent: #0b1520;
+    --ds-sb-bg: #111b26;
+    --ds-sb-band: #0b131b;
+    --ds-sb-bord: #243446;
+    --ds-sb-txt: #c5d6e8;
+    --ds-sb-txt2: #9db5cc;
+    --ds-sb-act: #243b54;
+    --ds-sb-act-txt: #93d4f5;
+  }
+}
+
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ds-bg: #0e151d;
+    --ds-sur: #16202b;
+    --ds-sur2: #1b2733;
+    --ds-bord: #2b3a4a;
+    --ds-bord2: #3b4e62;
+    --ds-text: #e4ecf4;
+    --ds-text2: #bccad8;
+    --ds-text3: #9fb2c5;
+    --ds-red: #ff8f80;
+    --ds-red-bg: #3a1c19;
+    --ds-red-bord: #6e342d;
+    --ds-ora: #ffae73;
+    --ds-ora-bg: #382515;
+    --ds-ora-bord: #6c4626;
+    --ds-yel: #e9cc63;
+    --ds-yel-bg: #322d10;
+    --ds-yel-bord: #5f5322;
+    --ds-grn: #72d69c;
+    --ds-grn-bg: #132e1f;
+    --ds-grn-bord: #2b5c40;
+    --ds-blu: #86b8ff;
+    --ds-blu-bg: #14283f;
+    --ds-blu-bord: #2d4e7a;
+    --ds-vio: #bca3ff;
+    --ds-vio-bg: #261e40;
+    --ds-vio-bord: #4b3b7c;
+    --ds-on-accent: #0b1520;
+    --ds-sb-bg: #111b26;
+    --ds-sb-band: #0b131b;
+    --ds-sb-bord: #243446;
+    --ds-sb-txt: #c5d6e8;
+    --ds-sb-txt2: #9db5cc;
+    --ds-sb-act: #243b54;
+    --ds-sb-act-txt: #93d4f5;
+  }
 }
 
 html,

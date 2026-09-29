@@ -1,6 +1,6 @@
 "use client";
 
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import type { AIAnalysis } from "@/lib/types/domain";
 import { useLang } from "@/lib/context/LangContext";
 
@@ -106,7 +106,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
             {r.consequence}
           </div>
         </div>
-        <div style={tile(actClr + "50")}>
+        <div style={tile(tint(actClr, 31))}>
           <div style={cap}>{t("ai.action")}</div>
           <div style={{ fontSize: 11, fontWeight: 700, color: actClr }}>
             {r.immediateAction}
@@ -172,7 +172,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
         style={{
           marginTop: 10,
           background: DS.blu,
-          color: "#fff",
+          color: DS.onAccent,
           border: "none",
           borderRadius: 7,
           padding: "7px 16px",

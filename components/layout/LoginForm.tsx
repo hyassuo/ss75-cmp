@@ -240,7 +240,7 @@ export function LoginForm() {
           style={{
             width: "100%",
             background: DS.blu,
-            color: "#fff",
+            color: DS.onAccent,
             border: "none",
             borderRadius: 7,
             padding: "11px 0",

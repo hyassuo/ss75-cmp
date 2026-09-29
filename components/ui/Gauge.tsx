@@ -14,7 +14,7 @@ export function Gauge({ score, size = 52 }: GaugeProps) {
           width: size,
           height: size,
           borderRadius: "50%",
-          border: "3px solid #dde3ec",
+          border: "3px solid " + DS.bord,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -43,7 +43,8 @@ export function Gauge({ score, size = 52 }: GaugeProps) {
           cy={size / 2}
           r={r}
           fill="none"
-          stroke={DS.bord}
+          // style, not the stroke attribute: colours are CSS variables.
+          style={{ stroke: DS.bord }}
           strokeWidth={size > 48 ? 5 : 4}
         />
         <circle
@@ -51,7 +52,7 @@ export function Gauge({ score, size = 52 }: GaugeProps) {
           cy={size / 2}
           r={r}
           fill="none"
-          stroke={c}
+          style={{ stroke: c }}
           strokeWidth={size > 48 ? 5 : 4}
           strokeDasharray={dash + " " + (circ - dash)}
           strokeLinecap="round"

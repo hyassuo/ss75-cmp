@@ -112,7 +112,7 @@ export function IdleLogout() {
         onClick={() => setWarning(false)}
         style={{
           background: DS.blu,
-          color: "#fff",
+          color: DS.onAccent,
           border: "none",
           borderRadius: 7,
           padding: "8px 16px",
@@ -159,7 +159,7 @@ export function ConnectionBanner() {
         right: 0,
         zIndex: 1100,
         background: DS.yel,
-        color: "#fff",
+        color: DS.onAccent,
         textAlign: "center",
         fontSize: 13,
         fontWeight: 600,

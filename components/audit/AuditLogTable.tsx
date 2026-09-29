@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
@@ -163,7 +163,7 @@ export function AuditLogTable() {
           disabled={!filtered.length}
           style={{
             background: DS.blu,
-            color: "#fff",
+            color: DS.onAccent,
             border: "none",
             borderRadius: 8,
             padding: "8px 18px",
@@ -292,7 +292,7 @@ export function AuditLogTable() {
               {filtered.map((r) => (
                 <tr
                   key={r.id}
-                  style={{ borderBottom: "1px solid #f1f5f9" }}
+                  style={{ borderBottom: "1px solid " + tint(DS.bord, 60) }}
                 >
                   <td
                     style={{

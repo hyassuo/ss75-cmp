@@ -109,7 +109,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
             key={t.id}
             style={{
               background: t.tone === "ok" ? DS.grn : DS.red,
-              color: "#fff",
+              color: DS.onAccent,
               borderRadius: 8,
               padding: "10px 16px",
               fontSize: 13,
@@ -177,7 +177,7 @@ function ConfirmDialog({
           onClick={() => onAnswer(true)}
           style={{
             background: opts.danger ? DS.red : DS.blu,
-            color: "#fff",
+            color: DS.onAccent,
             border: "none",
             borderRadius: 8,
             padding: "10px 20px",
