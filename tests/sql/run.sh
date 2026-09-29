@@ -103,6 +103,7 @@ suite() {
   su_sql "DELETE FROM readings WHERE id = '$RID'" >/dev/null
   check "a draft whose reading was added then removed is still a draft" "$(as $I1 "SELECT public.is_pristine_draft('$DR')")" "t"
   check "...and its creator can cancel it" "$(rows $I1 "DELETE FROM items WHERE id = '$DR' RETURNING 1")" "1"
+  check "...keeping the reading's add/remove events and logging the deletion" "$(su_sql "SELECT string_agg(action, ',' ORDER BY action) FROM history WHERE item_ref = '$DR'")" "created,deleted,reading_added,reading_deleted"
 
   local OLD; OLD=$(new_item $I1 'Untitled')
   su_sql "UPDATE items SET created_at = now() - interval '30 days' WHERE id = '$OLD'" >/dev/null
@@ -156,7 +157,7 @@ suite() {
   check "an inactive account reads no zones" "$(as $NU "SELECT count(*) FROM zones")" "0"
   check "an inactive account reads no IFS objects" "$(as $NU "SELECT count(*) FROM ifs_objects")" "0"
   check "an active user reads units, zones and IFS objects" "$(as $I1 "SELECT (SELECT count(*) FROM units) > 0 AND (SELECT count(*) FROM zones) > 0 AND (SELECT count(*) FROM ifs_objects) > 0")" "t"
-  check "no reference table keeps an open SELECT policy" "$(su_sql "SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('units','zones','ifs_objects') AND cmd = 'SELECT' AND qual = 'true'")" "0"
+  check "no reference table grants reads beyond active users" "$(su_sql "SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('units','zones','ifs_objects') AND cmd IN ('SELECT','ALL') AND qual NOT LIKE '%current_user_role()%'")" "0"
   su_sql "DELETE FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'" >/dev/null
   check "admin cannot insert profiles" "$(as $A1 "INSERT INTO profiles (id, email, role, unit_id, active) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test', 'admin', '$U1', true)")" "$DENIED"
   check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "4"
@@ -293,7 +294,8 @@ scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrat
   supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql supabase/upgrades/hardening-5.sql \
   supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql \
   supabase/migrations/20260929000000_rate_limits.sql \
-  supabase/migrations/20260929000100_active_reads_insert_audit.sql
+  supabase/migrations/20260929000100_active_reads_insert_audit.sql \
+  supabase/upgrades/hardening-5.sql
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs

@@ -599,9 +599,15 @@ BEGIN
   SELECT count(*) INTO n_readings  FROM public.readings  WHERE item_id = OLD.id;
   SELECT count(*) INTO n_evidences FROM public.evidences WHERE item_id = OLD.id;
 
-  -- A cancelled "New Item" that never held anything: drop its 'created'
-  -- event instead of logging noise.
-  IF n_readings = 0 AND n_evidences = 0 AND pristine THEN
+  -- A cancelled "New Item" that never held anything — no children and no
+  -- event besides 'created' (a photo added then removed leaves events that
+  -- must stay) — drops its 'created' event instead of logging noise.
+  IF n_readings = 0 AND n_evidences = 0 AND pristine
+     AND NOT EXISTS (
+       SELECT 1 FROM public.history
+       WHERE item_id = OLD.id AND action <> 'created'
+     )
+  THEN
     DELETE FROM public.history WHERE item_id = OLD.id;
     RETURN OLD;
   END IF;
@@ -828,7 +834,7 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 DROP POLICY IF EXISTS "units_select_authenticated" ON public.units;
 -- Active users only (inactive accounts read nothing; see 20260929000100).
 CREATE POLICY "units_select_authenticated" ON public.units
-  FOR SELECT TO authenticated USING (public.current_user_role() IS NOT NULL);
+  FOR SELECT TO authenticated USING ((SELECT public.current_user_role()) IS NOT NULL);
 -- Admins may touch only their own unit row (hardening round 4): a global
 -- admin policy would let any admin rename/delete other units via direct
 -- PostgREST, and a unit delete cascades to that unit's data.
@@ -881,7 +887,7 @@ GRANT UPDATE (full_name, dept) ON public.profiles TO authenticated;
 DROP POLICY IF EXISTS "zones_select_authenticated" ON public.zones;
 -- Active users only (inactive accounts read nothing; see 20260929000100).
 CREATE POLICY "zones_select_authenticated" ON public.zones
-  FOR SELECT TO authenticated USING (public.current_user_role() IS NOT NULL);
+  FOR SELECT TO authenticated USING ((SELECT public.current_user_role()) IS NOT NULL);
 -- The zone catalog (Z01..Z14) is SHARED, read-only reference data
 -- (hardening round 4). Dropping the admin policy leaves only zones_select,
 -- so RLS denies INSERT/UPDATE/DELETE to all authenticated users. Manage

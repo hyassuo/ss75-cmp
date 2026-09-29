@@ -34,7 +34,7 @@ ALTER TABLE public.ifs_objects ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "ifs_objects_select_authenticated" ON public.ifs_objects;
 -- Active users only (inactive accounts read nothing; see 20260929000100).
 CREATE POLICY "ifs_objects_select_authenticated" ON public.ifs_objects
-  FOR SELECT TO authenticated USING (public.current_user_role() IS NOT NULL);
+  FOR SELECT TO authenticated USING ((SELECT public.current_user_role()) IS NOT NULL);
 
 -- No admin write policy (hardening round 5): the register is shared by all
 -- units, and an unscoped admin policy let any unit's admin rewrite it

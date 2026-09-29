@@ -50,7 +50,7 @@ BEGIN
         SELECT 1 FROM public.history h
         WHERE h.item_id = i.id AND h.action <> 'created'
           AND NOT (h.action IN ('reading_added', 'evidence_added')
-                   AND h.by_user IS NULL)
+                   AND h.by_user IS NULL AND h.by_user_email IS NULL)
       )
       AND NOT EXISTS (
         SELECT 1 FROM public.readings r
