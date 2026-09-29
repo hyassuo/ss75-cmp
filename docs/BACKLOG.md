@@ -1,6 +1,6 @@
 # Backlog — SS-75 CMP
 
-Estado em 29/09/2026, após a v1.21.0 (PR #30). Reúne o que ficou em aberto
+Estado em 29/09/2026, após a v1.21.1. Reúne o que ficou em aberto
 da revisão completa (segurança + UI/UX) e das auditorias das etapas 1–4.
 Cada item foi conferido no código desta versão.
 
@@ -13,17 +13,12 @@ para "Concluídos".
 | # | P | O quê | Onde |
 |---|---|-------|------|
 | A6 | P1 | Configurar SMTP próprio no Supabase | Seção A |
-| A7 | P1 | Liberar `https://ss75-cmp.vercel.app/auth/reset` nas Redirect URLs | Seção A |
-| A1 | P1 | Desativar o cadastro público e exigir confirmação de e-mail | Seção A |
 | A2 | P1 | Secrets do GitHub + rodar o workflow **Backup** uma vez | Seção A |
-| A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Seção A |
-| A11 | P2 | Chaves JWT assimétricas no Supabase | Seção A |
 | A3 | P2 | Ensaiar um restore | Seção A |
 | A4 | P2 | `supabase migration repair` | Seção A |
 | C5 | P2 | Ativar MFA no Supabase (depois eu faço a parte do app) | Seção C |
 | F1 | P2 | Criar conta no Sentry e passar o DSN | Seção F |
 | F2 | P2 | Gerar um token de acesso do Supabase para o CI | Seção F |
-| C7 | P3 | Informar o prazo desejado para os links das fotos | Seção C |
 | A5 | P3 | PITR, se o plano permitir | Seção A |
 | D3 | P3 | Definir os requisitos do módulo de espessura (UT) | Seção D |
 | A13 | P3 | Avaliar mover o Supabase para São Paulo (`sa-east-1`) | Seção A |
@@ -34,15 +29,11 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Como |
 |---|---|------|------|
-| A1 | P1 | Desativar o cadastro público e exigir confirmação de e-mail | Supabase → Authentication → Sign In / Providers. Hoje qualquer pessoa pode criar conta (fica inativa, mas lê as tabelas de referência — ver C6). |
-| A2 | P1 | Ativar os backups automáticos | GitHub → Settings → Secrets: `SUPABASE_DB_URL` (Session pooler), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BACKUP_AGE_RECIPIENT`. Guardar a chave privada do `age` fora do GitHub. Rodar o workflow **Backup** manualmente uma vez e baixar o artefato. |
+| A2 | P1 | Ativar os backups automáticos | GitHub → Settings → Secrets: `SUPABASE_DB_URL` (Session pooler), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `BACKUP_AGE_RECIPIENT`. Guardar a chave privada do `age` fora do GitHub. O workflow só roda com a *variável* do repositório `BACKUP_ENABLED` = `true` (GitHub → Settings → Secrets and variables → Actions → aba *Variables*; sem ela o job é pulado, mesmo com os secrets). Rodar o workflow **Backup** manualmente uma vez e baixar o artefato. |
 | A3 | P2 | Ensaiar um restore real | Seguir README → "Backups" num projeto Supabase descartável. |
-| A4 | P2 | Adotar o histórico de migrações | `supabase link` → `supabase migration repair --status applied 20260928000000 20260928000100` → `supabase db diff --linked` (deve vir vazio). |
+| A4 | P2 | Adotar o histórico de migrações | `supabase link` → `supabase migration repair --status applied 20260928000000 20260928000100 20260929000000 20260929000100` → `supabase db diff --linked` (deve vir vazio). As duas de 29/09 entram na lista porque já foram aplicadas à mão no SQL Editor (A8). |
 | A5 | P3 | PITR (point-in-time recovery) | Se o plano do Supabase permitir. |
 | A6 | P1 | SMTP próprio para os e-mails de autenticação | Sem SMTP próprio o Supabase **só entrega e-mail para membros da equipe do projeto** (2 por hora, sem garantia) — reset de senha e confirmação de cadastro não chegam aos usuários. Supabase → Authentication → Emails → SMTP Settings (ex.: Resend, SendGrid, Amazon SES). |
-| A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
-| A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Os deploys de preview (um por PR) não têm `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`: só `/login` abre, as outras páginas dão erro 500 (já era assim antes do Next 16). Vercel → Settings → Environment Variables → marcar *Preview* — de preferência apontando para um projeto Supabase de teste, não o de produção. |
-| A11 | P2 | Chaves de assinatura JWT assimétricas | Supabase → Project Settings → JWT Keys → criar uma chave *ECC (P-256)* em espera e rotacionar para ela (a chave antiga continua valendo até os tokens emitidos com ela vencerem; ninguém é deslogado). Com isso o app confere o login localmente (`getClaims()`), sem ir ao Supabase Auth: some 1 ida e volta Vercel↔Supabase antes de **toda** página (≈150 ms no teste com 150 ms de latência; no app de hoje ≈ a latência entre as regiões da Vercel e do Supabase) e a verificação em paralelo do layout deixa de ser uma requisição. O código já está pronto (F6) e é testado assim no E2E (`f6jwt`). Contrapartida: uma sessão encerrada ou um banimento só é percebido pelo servidor quando o token vence (até 1 h); a desativação no app continua imediata (perfil inativo = layout manda para o login, RLS não devolve dados). |
 | A13 | P3 | Supabase mais perto dos usuários (São Paulo) | O banco está em `us-west-2` (Oregon) e os dados vão direto do navegador para ele: do Brasil/offshore cada ida e volta custa ≈ 150–200 ms. Com o projeto em `sa-east-1` (e as funções da Vercel em `gru1`) esse trajeto cai bastante. Exige criar um projeto novo, migrar banco (backup/restore — ver A2/A3), fotos do Storage, usuários e trocar as variáveis na Vercel; fazer como projeto à parte, com janela de manutenção. |
 
 ## B. Decisões tomadas (29/09/2026)
@@ -59,7 +50,6 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
 | C5 | P2 | Senhas fracas | Sem MFA e sem troca obrigatória no primeiro acesso. **Sua ação:** Supabase → Authentication → Multi-Factor → habilitar TOTP. **Depois (minha parte):** tela de cadastro/validação do código no app e exigir MFA para admin. |
-| C7 | P3 | Links assinados de fotos valem 1 h | `components/items/EvidencePanel.tsx:134` (`3600`). **Sua ação:** dizer por quanto tempo uma foto aberta precisa continuar acessível (ex.: 10 min) e se links de fotos são compartilhados fora do app. **Depois (minha parte):** reduzir e renovar sob demanda. |
 
 ## D. Dados e lógica
 
@@ -82,7 +72,7 @@ _(nenhum item aberto)_
 
 | # | Item | Como ficou |
 |---|------|-----------|
-| C1 | Reset de senha | O e-mail do "Reset PW" leva a `/auth/reset`, onde o usuário define a nova senha (mín. 8 caracteres). Login ganhou "Esqueci minha senha". Depende de A6 e A7 para os e-mails chegarem. |
+| C1 | Reset de senha | O e-mail do "Reset PW" leva a `/auth/reset`, onde o usuário define a nova senha (mín. 8 caracteres). Login ganhou "Esqueci minha senha". Depende de A6 para os e-mails chegarem. |
 | C2 | Sessões de usuário desativado | Desativar bloqueia a conta de autenticação (sem renovar sessão nem entrar de novo); reativar libera. |
 | D1 | Taxa de corrosão | Só com ≥ 2 medições reais no mesmo ponto e ≥ 90 dias entre elas; por ponto vale a pior entre longo e curto prazo, e o item assume o pior ponto. Sem isso aparece "dados insuficientes", sem alerta. |
 | C8 | ~~Logout de usuário inativo é global~~ | Descartado: para uma conta desativada, encerrar as sessões em todos os aparelhos é o comportamento certo. |
@@ -102,3 +92,8 @@ _(nenhum item aberto)_
 | A8 | Migrations de 29/09 aplicadas | `20260929000000_rate_limits.sql` (C4) e `20260929000100_active_reads_insert_audit.sql` (C6 + D2) rodadas no Supabase de produção em 29/09/2026: limite de requisições compartilhado, tabelas de referência só para ativos e auditoria de inclusões ativos. |
 | A10 | Versão do Node na Vercel | Configuração do projeto alinhada em 22.x (a mesma declarada em `engines`, no `.nvmrc` e usada no CI). |
 | A12 | Funções da Vercel perto do Supabase | Supabase em `us-west-2` (Oregon); funções movidas de `iad1` (Washington) para `pdx1` (Portland) em 29/09/2026 — cada ida e volta servidor↔Supabase caiu de ≈ 70 ms para poucos ms (2 por página; 1 com A11). |
+| A1 | Cadastro público | Cadastro público desativado e confirmação de e-mail exigida no Supabase. |
+| A7 | URL de redefinição de senha | Redirect URL `/auth/reset` liberada no Supabase. |
+| C7 | Fotos só dentro da sessão | Sem links compartilháveis (nem assinados nem públicos): cada foto é baixada com a sessão do usuário e mostrada da memória da aba (`blob:`), descartada ao fechar o item; nada no cache do navegador (nem da exportação) nem no service worker; só imagens e PDF são exibidos — um arquivo gravado como SVG/HTML aparece como "tipo de arquivo não permitido"; download sem resposta desiste em 2 min, com "Tentar novamente"; o CSP não aceita imagem vinda do Supabase. Tirar fotos do app = exportar o PDF. |
+| A11 | Chaves JWT assimétricas | Chave atual ECC (P-256); o segredo HS256 antigo fica como *previous key* — não revogar enquanto o app usar as chaves anon/service_role legadas. O servidor confere o login localmente (`getClaims()`). |
+| A9 | ~~Variáveis do Supabase nos previews~~ | Descartado por ora: sem vaga para um projeto Supabase de teste no plano gratuito; os previews ficam só como verificação de build e o funcionamento é coberto pelos testes E2E do CI. Rever se o plano mudar (Pro permite branching). |

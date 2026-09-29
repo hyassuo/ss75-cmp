@@ -15,6 +15,8 @@ import { compressImage } from "@/lib/utils/compressImage";
 import { useLang } from "@/lib/context/LangContext";
 import type { AIAnalysis, Evidence } from "@/lib/types/domain";
 import { useFeedback } from "@/lib/context/FeedbackContext";
+import { useEvidenceFiles } from "@/lib/hooks/useEvidenceFiles";
+import type { FileState } from "@/lib/utils/evidenceFiles";
 
 const BUCKET = "evidence-photos";
 // Gemini on a VSAT link can be slow, but a spinner must never hang forever.
@@ -78,7 +80,15 @@ export function EvidencePanel({
   const [aiErr, setAiErr] = useState("");
   const [saveErr, setSaveErr] = useState("");
   const [listErr, setListErr] = useState("");
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  // Thumbnails and attachments of this item, held in memory only (C7).
+  const { files: stored, retry, open } = useEvidenceFiles(
+    evidences
+      .filter((ev) => ev.file_path)
+      .map((ev) => ({
+        path: ev.file_path as string,
+        eager: !!ev.file_type?.startsWith("image"),
+      }))
+  );
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   // Local preview of the picked photo (revoked when replaced/unmounted).
@@ -118,35 +128,6 @@ export function EvidencePanel({
   // Picking, the AI call and saving all work on the queue's head photo:
   // one at a time, so none of them acts on a photo that another replaced.
   const busy = preparing > 0 || uploading || aiLoading;
-
-  useEffect(() => {
-    let active = true;
-    const supabase = createClient();
-    (async () => {
-      // One round-trip for all photos instead of one per evidence.
-      const withFile = evidences.filter((ev) => ev.file_path);
-      const next: Record<string, string> = {};
-      if (withFile.length) {
-        const { data } = await supabase.storage
-          .from(BUCKET)
-          .createSignedUrls(
-            withFile.map((ev) => ev.file_path as string),
-            3600
-          );
-        const byPath = new Map(
-          (data ?? []).map((d) => [d.path, d.signedUrl] as const)
-        );
-        for (const ev of withFile) {
-          const url = byPath.get(ev.file_path as string);
-          if (url) next[ev.id] = url;
-        }
-      }
-      if (active) setUrls(next);
-    })();
-    return () => {
-      active = false;
-    };
-  }, [evidences]);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
@@ -596,37 +577,14 @@ export function EvidencePanel({
             </div>
             {ev.file_name && (
               <div style={{ marginTop: 7 }}>
-                {ev.file_type?.startsWith("image") && urls[ev.id] ? (
-                  // Plain <img>: next/image would need a loader configured
-                  // for Supabase signed URLs (which rotate every 1 h), and
-                  // these are tiny thumbnails inside a modal — the cost of
-                  // unoptimised loading is negligible here.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={urls[ev.id]}
-                    alt={ev.file_name}
-                    style={{
-                      maxWidth: 120,
-                      maxHeight: 70,
-                      borderRadius: 5,
-                      border: "1px solid " + DS.bord,
-                      cursor: "pointer",
-                    }}
-                    onClick={() => window.open(urls[ev.id])}
+                {ev.file_path ? (
+                  <EvidenceFile
+                    name={ev.file_name}
+                    image={!!ev.file_type?.startsWith("image")}
+                    state={stored[ev.file_path]}
+                    onOpen={() => open(ev.file_path as string, t("evidence.opening"))}
+                    onRetry={() => retry(ev.file_path as string)}
                   />
-                ) : urls[ev.id] ? (
-                  <a
-                    href={urls[ev.id]}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      fontSize: DS.fs.sm,
-                      color: DS.blu,
-                      textDecoration: "none",
-                    }}
-                  >
-                    Attachment: {ev.file_name}
-                  </a>
                 ) : (
                   <span style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
                     {ev.file_name}
@@ -656,5 +614,124 @@ export function EvidencePanel({
         </div>
       ))}
     </div>
+  );
+}
+
+// One evidence file: a thumbnail (photos) or a link (other attachments),
+// both backed by an in-memory blob: URL; a placeholder while it downloads
+// and, when it fails (offline, storage error), a message and a retry for
+// that file alone.
+function EvidenceFile({
+  name,
+  image,
+  state,
+  onOpen,
+  onRetry,
+}: {
+  name: string;
+  image: boolean;
+  state: FileState | undefined;
+  onOpen: () => void;
+  onRetry: () => void;
+}) {
+  const { t } = useLang();
+  // Never shown nor opened (see viewableBlob); retrying can't change that.
+  if (state?.status === "blocked") {
+    return (
+      <div role="status" style={{ fontSize: DS.fs.sm, color: DS.red }}>
+        {t("evidence.fileBlocked", name)}
+      </div>
+    );
+  }
+  if (state?.status === "error") {
+    return (
+      <div
+        role="status"
+        style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+      >
+        <span style={{ fontSize: DS.fs.sm, color: DS.red }}>
+          {t(image ? "evidence.photoFailed" : "evidence.fileFailed", name)}
+        </span>
+        {/* Named after its file: several failed photos each have one. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRetry}
+          aria-label={`${t("common.tryAgain")}: ${name}`}
+        >
+          {t("common.tryAgain")}
+        </Button>
+      </div>
+    );
+  }
+  if (image) {
+    if (state?.status !== "ready") {
+      return (
+        <div
+          role="status"
+          aria-label={t("evidence.photoLoading", name)}
+          style={{
+            width: 120,
+            height: 70,
+            borderRadius: 5,
+            border: "1px solid " + DS.bord,
+            background: DS.sur,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Spinner size={16} color={DS.text3} />
+        </div>
+      );
+    }
+    return (
+      // Plain <img>: a blob: URL needs no optimisation, and next/image
+      // can't take one anyway.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={state.url}
+        alt={name}
+        role="button"
+        tabIndex={0}
+        title={t("evidence.openPhoto")}
+        style={{
+          maxWidth: 120,
+          maxHeight: 70,
+          borderRadius: 5,
+          border: "1px solid " + DS.bord,
+          cursor: "pointer",
+        }}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+      />
+    );
+  }
+  // Attachments download on the first open only (PDFs can be large).
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      style={{
+        background: "none",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        fontSize: DS.fs.sm,
+        color: DS.blu,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        textAlign: "left",
+      }}
+    >
+      {t("evidence.attachment", name)}
+      {state?.status === "loading" && <Spinner size={12} color={DS.blu} />}
+    </button>
   );
 }

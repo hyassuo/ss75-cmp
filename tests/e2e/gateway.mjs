@@ -701,8 +701,12 @@ const server = http.createServer(async (req, res) => {
   res.on("finish", () => {
     if (url.startsWith("/__ctl")) return;
     // src: browsers send Origin on these cross-origin calls; the app's
-    // server (proxy, layouts, API routes) does not.
-    record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0, src: req.headers.origin ? "browser" : "server" });
+    // server (proxy, layouts, API routes) does not. sub: the user of the
+    // valid JWT in the Authorization header (null: none, or the anon key)
+    // — C7 checks that photos are only fetched with a session.
+    const h = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || "");
+    const sub = (h && verify(h[1], SECRET)?.sub) || null;
+    record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0, src: req.headers.origin ? "browser" : "server", sub });
   });
   try {
     if (LATENCY_MS && !url.startsWith("/__ctl")) await new Promise((r) => setTimeout(r, LATENCY_MS));

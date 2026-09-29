@@ -5,7 +5,7 @@
 // injected <script>, an inline event handler, eval — is refused.
 //
 // Browser traffic goes only to this origin and the project's Supabase URL
-// (REST, auth, storage images). Gemini is called by the server, never by
+// (REST, auth, storage downloads). Gemini is called by the server, never by
 // the browser, so it is not listed.
 
 // The project's Supabase origin, or every Supabase project if the URL is
@@ -28,7 +28,9 @@ export function pageCsp(nonce: string): string {
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${dev ? " 'unsafe-eval'" : ""}`,
     // The design system styles with inline style attributes.
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: ${supabase}`,
+    // No Supabase origin: evidence photos are downloaded with the session
+    // and shown as blob: URLs (C7), never loaded from a storage URL.
+    "img-src 'self' data: blob:",
     "font-src 'self' data:",
     // data:: the PDF layout engine fetch()es its inlined WebAssembly.
     `connect-src 'self' data: ${supabase}${dev ? " ws:" : ""}`,
