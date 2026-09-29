@@ -5,6 +5,7 @@ import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
+import { Button } from "@/components/ui/Button";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -58,22 +59,12 @@ export function Dashboard() {
           }}
         >
           {visibleZones.map((z) => (
-            <button
+            <Button
               key={z.zid}
+              variant="secondary"
+              size="sm"
               onClick={() => setTab("zones")}
-              style={{
-                background: DS.sur,
-                border: "1px solid " + DS.bord,
-                borderRadius: 8,
-                padding: "8px 14px",
-                cursor: "pointer",
-                fontSize: DS.fs.md,
-                color: DS.blu,
-                fontWeight: 600,
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-              }}
+              style={{ color: DS.blu, gap: 6 }}
             >
               <span
                 style={{ fontFamily: DS.mono, fontSize: DS.fs.xs, color: DS.text3 }}
@@ -81,7 +72,7 @@ export function Dashboard() {
                 {z.zid}
               </span>
               {z.name}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

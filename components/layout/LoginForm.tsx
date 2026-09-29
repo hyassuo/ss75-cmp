@@ -6,7 +6,8 @@ import { safeNext } from "@/lib/utils/safeNext";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
-import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/lib/context/LangContext";
 
@@ -198,85 +199,30 @@ export function LoginForm() {
         </div>
 
         {err ? (
-          <div
-            id={errId}
-            role="alert"
-            style={{
-              background: DS.redBg,
-              border: "1px solid " + DS.redBord,
-              borderRadius: 6,
-              padding: "8px 12px",
-              fontSize: DS.fs.md,
-              color: DS.red,
-              marginBottom: 16,
-              textAlign: "center",
-            }}
-          >
+          <Notice tone="error" id={errId} style={NOTICE}>
             {err}
-          </div>
+          </Notice>
         ) : null}
 
         {info ? (
-          <div
-            role="status"
-            style={{
-              background: DS.grnBg,
-              border: "1px solid " + DS.grnBord,
-              borderRadius: 6,
-              padding: "8px 12px",
-              fontSize: DS.fs.md,
-              color: DS.grn,
-              marginBottom: 16,
-              textAlign: "center",
-            }}
-          >
+          <Notice tone="success" style={NOTICE}>
             {info}
-          </div>
+          </Notice>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: "100%",
-            background: DS.blu,
-            color: DS.onAccent,
-            border: "none",
-            borderRadius: 7,
-            padding: "11px 0",
-            fontWeight: 700,
-            cursor: loading ? "default" : "pointer",
-            fontSize: DS.fs.lg,
-            fontFamily: DS.sans,
-            transition: DS.transition,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
-          }}
-        >
-          {loading ? <Spinner size={14} /> : null}
+        <Button type="submit" size="lg" fullWidth loading={loading}>
           {loading ? t("login.signingIn") : t("login.signIn")}
-        </button>
+        </Button>
 
         <div style={{ textAlign: "center", marginTop: 12 }}>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={() => void forgot()}
             disabled={loading}
-            style={{
-              background: "none",
-              border: "none",
-              color: DS.blu,
-              fontSize: DS.fs.md,
-              fontWeight: 600,
-              padding: "8px 12px",
-              minHeight: 36,
-              cursor: loading ? "default" : "pointer",
-            }}
+            style={{ color: DS.blu, fontSize: DS.fs.md }}
           >
             {t("login.forgot")}
-          </button>
+          </Button>
         </div>
 
         <div
@@ -291,24 +237,17 @@ export function LoginForm() {
           {t("login.help")}
         </div>
         <div style={{ textAlign: "center", marginTop: 12 }}>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => setLang(lang === "pt" ? "en" : "pt")}
-            style={{
-              background: "none",
-              border: "1px solid " + DS.bord,
-              borderRadius: 6,
-              color: DS.text2,
-              fontSize: DS.fs.md,
-              padding: "6px 14px",
-              minHeight: 36,
-              cursor: "pointer",
-            }}
+            style={{ fontSize: DS.fs.md }}
           >
             {lang === "pt" ? "English" : "Português"}
-          </button>
+          </Button>
         </div>
       </form>
     </main>
   );
 }
+
+const NOTICE: React.CSSProperties = { marginBottom: 16, textAlign: "center" };

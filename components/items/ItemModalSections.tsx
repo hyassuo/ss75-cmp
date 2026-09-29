@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
 import { YesNoToggle } from "@/components/ui/YesNoToggle";
+import { Notice } from "@/components/ui/Notice";
 import { IfsObjectSearch } from "@/components/items/IfsObjectSearch";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
@@ -495,19 +496,9 @@ export function ActionSection({ f, set, onActionTypeChange }: {
         </div>
       </div>
       {f.action_type && (f.action_status || "Sem planejamento") === "Executado" && (
-        <div
-          style={{
-            background: DS.grnBg,
-            border: "1px solid " + DS.grnBord,
-            borderRadius: 8,
-            padding: "8px 12px",
-            marginBottom: 10,
-            fontSize: DS.fs.sm,
-            color: DS.grn,
-          }}
-        >
+        <Notice tone="success" role={null} style={{ padding: "8px 12px", marginBottom: 10 }}>
           {t("f.actionDoneHint")}
-        </div>
+        </Notice>
       )}
       <Textarea
         label={t("f.actionNote")}

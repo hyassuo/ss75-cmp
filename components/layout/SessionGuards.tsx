@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DS } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 import { useLang } from "@/lib/context/LangContext";
 import { createClient } from "@/lib/supabase/client";
 
@@ -107,22 +108,9 @@ export function IdleLogout() {
       }}
     >
       <span style={{ flex: "1 1 220px" }}>{t("idle.warning")}</span>
-      <button
-        type="button"
-        onClick={() => setWarning(false)}
-        style={{
-          background: DS.blu,
-          color: DS.onAccent,
-          border: "none",
-          borderRadius: 7,
-          padding: "8px 16px",
-          minHeight: 44,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
+      <Button size="lg" onClick={() => setWarning(false)}>
         {t("idle.stay")}
-      </button>
+      </Button>
     </div>
   );
 }

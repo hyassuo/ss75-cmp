@@ -4,6 +4,7 @@ import { useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useData } from "@/lib/context/DataContext";
 import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
@@ -555,22 +556,13 @@ export function ExportTab() {
   }
 
   const btn = (longLabel: string, shortLabel: string, onClick: () => void, key: string) => (
-    <button
+    <Button
+      size="lg"
       onClick={onClick}
       disabled={busy !== null || !flat.length}
+      loading={busy === key}
       className="exp-btn"
-      style={{
-        background: DS.blu,
-        color: DS.onAccent,
-        border: "none",
-        borderRadius: 8,
-        padding: "10px 22px",
-        fontWeight: 700,
-        cursor: busy || !flat.length ? "default" : "pointer",
-        fontSize: DS.fs.base,
-        opacity: busy || !flat.length ? 0.6 : 1,
-        whiteSpace: "nowrap",
-      }}
+      style={{ whiteSpace: "nowrap" }}
     >
       {busy === key ? (
         t("common.generating")
@@ -580,7 +572,7 @@ export function ExportTab() {
           <span className="exp-btn-short">{shortLabel}</span>
         </>
       )}
-    </button>
+    </Button>
   );
 
   return (

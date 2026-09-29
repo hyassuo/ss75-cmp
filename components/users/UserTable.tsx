@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { fmt } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, UserRole } from "@/lib/types/domain";
@@ -102,7 +104,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             onChange={(e) => setNewPassword(e.target.value)}
             style={{ ...S.inp, maxWidth: 240, marginBottom: 0 }}
           />
-          <button
+          <Button
             onClick={() =>
               void call(
                 "/api/users/create",
@@ -116,39 +118,14 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
               })
             }
             disabled={busy || !invite || newPassword.length < 8}
-            style={{
-              background: DS.blu,
-              color: DS.onAccent,
-              border: "none",
-              borderRadius: 8,
-              padding: "9px 20px",
-              fontWeight: 700,
-              cursor:
-                busy || !invite || newPassword.length < 8
-                  ? "default"
-                  : "pointer",
-              fontSize: DS.fs.base,
-              opacity: busy || !invite || newPassword.length < 8 ? 0.6 : 1,
-            }}
           >
             Create
-          </button>
+          </Button>
         </div>
         {msg && (
-          <div
-            style={{
-              marginTop: 12,
-              fontSize: DS.fs.md,
-              color: msg.t === "ok" ? DS.grn : DS.red,
-              background: msg.t === "ok" ? DS.grnBg : DS.redBg,
-              border:
-                "1px solid " + (msg.t === "ok" ? DS.grnBord : DS.redBord),
-              borderRadius: 6,
-              padding: "8px 12px",
-            }}
-          >
+          <Notice tone={msg.t === "ok" ? "success" : "error"} style={{ marginTop: 12 }}>
             {msg.m}
-          </div>
+          </Notice>
         )}
       </div>
 
@@ -269,7 +246,9 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                     </td>
                     <td style={{ padding: "8px 10px" }}>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() =>
                             void call(
                               "/api/users/reset",
@@ -278,21 +257,14 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             )
                           }
                           disabled={busy}
-                          style={{
-                            background: DS.sur2,
-                            color: DS.blu,
-                            border: "1px solid " + DS.bord,
-                            borderRadius: 6,
-                            padding: "4px 10px",
-                            fontSize: DS.fs.sm,
-                            cursor: busy ? "default" : "pointer",
-                            fontWeight: 600,
-                          }}
+                          style={{ color: DS.blu }}
                         >
                           Reset PW
-                        </button>
+                        </Button>
                         {!isSelf && (
-                          <button
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() =>
                               void call(
                                 "/api/users/update",
@@ -303,24 +275,19 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                               )
                             }
                             disabled={busy}
-                            style={{
-                              background: u.active ? DS.redBg : DS.grnBg,
-                              color: u.active ? DS.red : DS.grn,
-                              border:
-                                "1px solid " +
-                                (u.active ? DS.redBord : DS.grnBord),
-                              borderRadius: 6,
-                              padding: "4px 10px",
-                              fontSize: DS.fs.sm,
-                              cursor: busy ? "default" : "pointer",
-                              fontWeight: 600,
-                            }}
+                            style={
+                              u.active
+                                ? { background: DS.redBg, color: DS.red, borderColor: DS.redBord }
+                                : { background: DS.grnBg, color: DS.grn, borderColor: DS.grnBord }
+                            }
                           >
                             {u.active ? "Deactivate" : "Activate"}
-                          </button>
+                          </Button>
                         )}
                         {!isSelf && (
-                          <button
+                          <Button
+                            variant="danger"
+                            size="sm"
                             onClick={async () => {
                               if (
                                 await confirm({
@@ -337,19 +304,9 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                               }
                             }}
                             disabled={busy}
-                            style={{
-                              background: DS.red,
-                              color: DS.onAccent,
-                              border: "none",
-                              borderRadius: 6,
-                              padding: "4px 10px",
-                              fontSize: DS.fs.sm,
-                              cursor: busy ? "default" : "pointer",
-                              fontWeight: 600,
-                            }}
                           >
                             Delete
-                          </button>
+                          </Button>
                         )}
                       </div>
                     </td>

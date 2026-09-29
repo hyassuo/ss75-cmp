@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useNewItem } from "@/lib/context/NewItemContext";
@@ -198,7 +199,8 @@ export function Sidebar() {
               paddingTop: 12,
             }}
           >
-            <button
+            <Button
+              fullWidth
               onClick={() => {
                 closeDrawer();
                 openNewItem();
@@ -206,23 +208,13 @@ export function Sidebar() {
               title={collapsed ? t("nav.newItem") : ""}
               aria-label={collapsed ? t("nav.newItem") : undefined}
               style={{
-                display: "block",
-                textAlign: "center",
-                background: DS.blu,
-                color: DS.onAccent,
-                border: "none",
-                borderRadius: 6,
-                padding: "9px 0",
-                fontWeight: 700,
+                padding: "8px 0",
                 fontSize: collapsed ? DS.fs.lg : DS.fs.md,
-                fontFamily: DS.sans,
                 whiteSpace: "nowrap",
-                width: "100%",
-                cursor: "pointer",
               }}
             >
               {collapsed ? "+" : t("nav.newItem")}
-            </button>
+            </Button>
           </div>
         )}
       </div>

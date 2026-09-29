@@ -5,6 +5,8 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/lib/context/LangContext";
 
@@ -128,7 +130,7 @@ export function ResetPasswordForm() {
 
         {phase === "checking" && (
           <div role="status" style={{ display: "flex", justifyContent: "center", gap: 8, color: DS.text3, fontSize: DS.fs.base }}>
-            <Spinner size={14} /> {t("reset.checking")}
+            <Spinner size={14} color={DS.text3} /> {t("reset.checking")}
           </div>
         )}
 
@@ -186,46 +188,17 @@ export function ResetPasswordForm() {
               />
             </div>
             {err ? (
-              <div
+              <Notice
+                tone="error"
                 id={errId}
-                role="alert"
-                style={{
-                  background: DS.redBg,
-                  border: "1px solid " + DS.redBord,
-                  borderRadius: 6,
-                  padding: "8px 12px",
-                  fontSize: DS.fs.md,
-                  color: DS.red,
-                  marginBottom: 16,
-                  textAlign: "center",
-                }}
+                style={{ marginBottom: 16, textAlign: "center" }}
               >
                 {err}
-              </div>
+              </Notice>
             ) : null}
-            <button
-              type="submit"
-              disabled={phase === "saving"}
-              style={{
-                width: "100%",
-                background: DS.blu,
-                color: DS.onAccent,
-                border: "none",
-                borderRadius: 7,
-                padding: "11px 0",
-                minHeight: 44,
-                fontWeight: 700,
-                cursor: phase === "saving" ? "default" : "pointer",
-                fontSize: DS.fs.lg,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-            >
-              {phase === "saving" ? <Spinner size={14} /> : null}
+            <Button type="submit" size="lg" fullWidth loading={phase === "saving"}>
               {t("reset.save")}
-            </button>
+            </Button>
           </>
         )}
       </form>

@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
 import {
@@ -186,32 +188,21 @@ export function ReadingsPanel({
               style={{ ...S.inp, marginBottom: 0 }}
             />
           </div>
-          <button
+          <Button
             onClick={() => void add()}
-            disabled={busy}
-            style={{
-              background: DS.blu,
-              color: DS.onAccent,
-              border: "none",
-              borderRadius: 6,
-              padding: "0 22px",
-              fontWeight: 700,
-              cursor: "pointer",
-              fontSize: DS.fs.base,
-              whiteSpace: "nowrap",
-              height: 36,
-              boxSizing: "border-box",
-              fontFamily: DS.sans,
-            }}
-          >{t("f.addReading")}</button>
+            loading={busy}
+            style={{ padding: "0 22px", whiteSpace: "nowrap" }}
+          >
+            {t("f.addReading")}
+          </Button>
         </div>
       </div>
       )}
 
       {err && (
-        <div role="alert" style={{ color: DS.red, fontSize: DS.fs.md, marginBottom: 10 }}>
+        <Notice tone="error" style={{ marginBottom: 10 }}>
           {err}
-        </div>
+        </Notice>
       )}
 
       {rate !== null && (
@@ -375,7 +366,9 @@ export function ReadingsPanel({
                     <td style={{ padding: "7px 8px" }}>
                       {canDelete && (
                         <button
+                          type="button"
                           onClick={() => void remove(r.id)}
+                          aria-label={t("readings.delete")}
                           style={{
                             background: "none",
                             border: "none",

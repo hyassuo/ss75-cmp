@@ -5,6 +5,7 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
+import { Button } from "@/components/ui/Button";
 import { ItemCard } from "@/components/items/ItemCard";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
@@ -149,20 +150,13 @@ export function ZonesTab() {
                   </div>
                 </div>
               </div>
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => void addItem(z.zid)}
-                style={{
-                  background: DS.sur2,
-                  color: DS.blu,
-                  border: "1px solid " + DS.bord,
-                  borderRadius: 8,
-                  padding: "8px 18px",
-                  fontSize: DS.fs.md,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  whiteSpace: "nowrap",
-                }}
-              >{t("nav.addItem")}</button>
+                style={{ color: DS.blu, whiteSpace: "nowrap" }}
+              >
+                {t("nav.addItem")}
+              </Button>
             </div>
             {activeItems.length > 0 &&
               (() => {

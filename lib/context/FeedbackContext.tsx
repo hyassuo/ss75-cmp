@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { Button } from "@/components/ui/Button";
 import { DS } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
 
@@ -155,40 +156,21 @@ function ConfirmDialog({
         {opts.message}
       </p>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="lg"
           data-autofocus
           onClick={() => onAnswer(false)}
-          style={{
-            background: "transparent",
-            color: DS.text2,
-            border: "1px solid " + DS.bord,
-            borderRadius: 8,
-            padding: "10px 20px",
-            minHeight: 44,
-            fontSize: DS.fs.lg,
-            cursor: "pointer",
-          }}
         >
           {opts.cancelLabel ?? t("common.cancel")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={opts.danger ? "danger" : "primary"}
+          size="lg"
           onClick={() => onAnswer(true)}
-          style={{
-            background: opts.danger ? DS.red : DS.blu,
-            color: DS.onAccent,
-            border: "none",
-            borderRadius: 8,
-            padding: "10px 20px",
-            minHeight: 44,
-            fontSize: DS.fs.lg,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
         >
           {opts.confirmLabel ?? t("common.confirm")}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

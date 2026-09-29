@@ -6,6 +6,8 @@ import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { AIResultCard } from "@/components/items/AIResultCard";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
@@ -371,22 +373,22 @@ export function EvidencePanel({
             style={{ display: "none" }}
           />
           <div className="form-grid-2">
-            <button
-              type="button"
+            <Button
+              variant="accent"
+              size="lg"
               onClick={() => cameraRef.current?.click()}
               disabled={busy}
-              style={pickBtn(true, busy)}
             >
               📷 {t("f.takePhoto")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
               onClick={() => fileRef.current?.click()}
               disabled={busy}
-              style={pickBtn(false, busy)}
             >
               🖼 {t("f.fromGallery")}
-            </button>
+            </Button>
           </div>
           {file && (
             <div
@@ -449,31 +451,16 @@ export function EvidencePanel({
         {b64 && (
           <div style={{ marginBottom: 12 }}>
             <Label>{t("f.step2")}</Label>
-            <button
+            <Button
+              variant="accent"
+              size="lg"
+              fullWidth
               onClick={() => void runAI()}
               disabled={busy}
-              style={{
-                width: "100%",
-                background: aiLoading ? "transparent" : DS.vio,
-                color: aiLoading ? DS.text3 : DS.onAccent,
-                border: "1px solid " + DS.vio,
-                borderRadius: 7,
-                padding: "10px 14px",
-                fontWeight: 700,
-                cursor: busy ? "default" : "pointer",
-                opacity: busy && !aiLoading ? 0.6 : 1,
-                fontSize: DS.fs.base,
-                fontFamily: DS.sans,
-                transition: DS.transition,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
+              loading={aiLoading}
             >
-              {aiLoading && <Spinner size={12} />}
-              <span>{aiLoading ? t("f.analysing") : t("f.analyse")}</span>
-            </button>
+              {aiLoading ? t("f.analysing") : t("f.analyse")}
+            </Button>
           </div>
         )}
 
@@ -497,84 +484,51 @@ export function EvidencePanel({
         </div>
 
         {/* Step 4 — save */}
-        <button
+        <Button
+          size="lg"
+          fullWidth
           onClick={() => void add()}
           disabled={busy || !desc.trim()}
-          style={{
-            width: "100%",
-            background: !desc.trim() ? DS.bord : DS.blu,
-            color: !desc.trim() ? DS.text3 : DS.onAccent,
-            border: "none",
-            borderRadius: 7,
-            padding: "12px 18px",
-            fontWeight: 700,
-            cursor: busy || !desc.trim() ? "default" : "pointer",
-            fontSize: DS.fs.lg,
-            opacity: busy ? 0.6 : 1,
-          }}
+          loading={uploading}
         >
           {uploading
             ? progress || t("common.saving")
             : files.length > 1
               ? t("evidence.saveMany", files.length)
               : t("f.saveEvidence")}
-        </button>
+        </Button>
         {/* The label change above is not announced; this is. */}
         <div role="status" className="sr-only">
           {progress}
         </div>
         {saveErr && (
-          <div
-            role="alert"
-            style={{
-              background: DS.redBg,
-              border: "1px solid " + DS.redBord,
-              borderRadius: 8,
-              padding: "10px 14px",
-              marginTop: 10,
-              fontSize: DS.fs.md,
-              color: DS.red,
-            }}
-          >
+          <Notice tone="error" style={{ marginTop: 10 }}>
             {saveErr}
-          </div>
+          </Notice>
         )}
       </div>
       )}
 
       {aiLoading && (
-        <div
+        <Notice
+          tone="info"
+          role={null}
           style={{
-            background: DS.bluBg,
-            border: "1px solid " + DS.bluBord,
-            borderRadius: 8,
-            padding: "12px 16px",
             marginBottom: 10,
             display: "flex",
             gap: 10,
             alignItems: "center",
+            fontWeight: 600,
           }}
         >
           <Spinner size={16} color={DS.blu} />
-          <span style={{ fontSize: DS.fs.md, color: DS.blu, fontWeight: 600 }}>
-            {t("f.aiAnalysing")}
-          </span>
-        </div>
+          {t("f.aiAnalysing")}
+        </Notice>
       )}
       {aiErr && (
-        <div
-          style={{
-            background: DS.redBg,
-            border: "1px solid " + DS.redBord,
-            borderRadius: 8,
-            padding: "10px 14px",
-            marginBottom: 10,
-            fontSize: DS.fs.md,
-            color: DS.red,
-          }}
-        >
+        <Notice tone="error" role={null} style={{ marginBottom: 10 }}>
           {aiErr}
-        </div>
+        </Notice>
       )}
       {aiResult && (
         <AIResultCard
@@ -598,9 +552,9 @@ export function EvidencePanel({
       )}
 
       {listErr && (
-        <div role="alert" style={{ color: DS.red, fontSize: DS.fs.md, marginBottom: 8 }}>
+        <Notice tone="error" style={{ marginBottom: 8 }}>
           {listErr}
-        </div>
+        </Notice>
       )}
       {evidences.map((ev) => (
         <div
@@ -683,7 +637,9 @@ export function EvidencePanel({
           </div>
           {isAdmin && (
             <button
+              type="button"
               onClick={() => void remove(ev.id)}
+              aria-label={t("evidence.delete")}
               style={{
                 background: "none",
                 border: "none",
@@ -701,19 +657,4 @@ export function EvidencePanel({
       ))}
     </div>
   );
-}
-
-function pickBtn(primary: boolean, disabled: boolean): React.CSSProperties {
-  return {
-    background: primary ? DS.vio : DS.sur,
-    color: primary ? DS.onAccent : DS.text,
-    border: "1px solid " + (primary ? DS.vio : DS.bord),
-    borderRadius: 7,
-    minHeight: 44,
-    padding: "8px 10px",
-    fontSize: DS.fs.base,
-    fontWeight: 700,
-    cursor: disabled ? "default" : "pointer",
-    opacity: disabled ? 0.6 : 1,
-  };
 }

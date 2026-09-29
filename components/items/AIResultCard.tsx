@@ -1,6 +1,7 @@
 "use client";
 
 import { DS, tint } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 import type { AIAnalysis } from "@/lib/types/domain";
 import { useLang } from "@/lib/context/LangContext";
 
@@ -167,22 +168,9 @@ export function AIResultCard({ result: r, onApply }: Props) {
           {r.inspectionFrequency}
         </div>
       )}
-      <button
-        onClick={onApply}
-        style={{
-          marginTop: 10,
-          background: DS.blu,
-          color: DS.onAccent,
-          border: "none",
-          borderRadius: 7,
-          padding: "7px 16px",
-          fontSize: DS.fs.md,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
+      <Button size="sm" onClick={onApply} style={{ marginTop: 10 }}>
         Apply to Item Fields
-      </button>
+      </Button>
     </div>
   );
 }
