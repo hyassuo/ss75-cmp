@@ -1582,7 +1582,19 @@ async function main() {
     await login(page, "insp1@test.local");
     const measure = (sel) =>
       page.evaluate((sel) => {
-        const parse = (s) => { const m = s.match(/[\d.]+/g).map(Number); return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 }; };
+        // Any CSS colour (rgb(), and the color(srgb …) that color-mix()
+        // tints compute to since E4) through a 1x1 canvas.
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = 1;
+        const cx = cv.getContext("2d", { willReadFrequently: true });
+        const parse = (s) => {
+          cx.clearRect(0, 0, 1, 1);
+          cx.fillStyle = "rgba(0, 0, 0, 0)";
+          cx.fillStyle = s;
+          cx.fillRect(0, 0, 1, 1);
+          const d = cx.getImageData(0, 0, 1, 1).data;
+          return { r: d[0], g: d[1], b: d[2], a: d[3] / 255 };
+        };
         const over = (top, bot) => ({ r: top.r * top.a + bot.r * (1 - top.a), g: top.g * top.a + bot.g * (1 - top.a), b: top.b * top.a + bot.b * (1 - top.a), a: 1 });
         const bgOf = (el) => {
           const layers = [];
@@ -1612,15 +1624,15 @@ async function main() {
       }, sel);
     const groups = {};
     await page.getByText(/\d+\/\d+ inspected/).first().waitFor({ timeout: 15000 });
-    groups["text3 text (dashboard)"] = await measure('main [style*="color: rgb(79, 103, 127)"]');
+    groups["text3 text (dashboard)"] = await measure('main [style*="color: var(--ds-text3)"]');
     await gotoTab(page, "Zones & Items");
     await page.waitForTimeout(500);
     groups["item-card badges"] = await measure('main [role=button] span[style*="border-radius: 5px"]');
-    groups["zone header text3"] = await measure('main [style*="color: rgb(79, 103, 127)"]');
+    groups["zone header text3"] = await measure('main [style*="color: var(--ds-text3)"]');
     await openItem(page, "E2E Nav Target");
     groups["modal labels"] = await measure(".modal-card label");
     groups["modal section titles"] = await measure('.modal-card div[style*="text-transform: uppercase"]');
-    groups["sidebar/topbar text"] = await measure('#app-root nav button, header span, #app-root [style*="color: rgb(157, 181, 204)"]');
+    groups["sidebar/topbar text"] = await measure('#app-root nav button, header span, #app-root [style*="color: var(--ds-sb-txt2)"]');
     for (const [g, rows] of Object.entries(groups)) {
       const bad = rows.filter((r) => r.ratio < r.need);
       const min = rows.reduce((m, r) => Math.min(m, r.ratio), Infinity);
