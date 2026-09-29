@@ -1,26 +1,19 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAppSession, getVisibleItemCount } from "@/lib/supabase/appSession";
 import { ShellProvider } from "@/lib/context/ShellContext";
 import { DataProvider } from "@/lib/context/DataContext";
 import { AppShell } from "@/components/layout/AppShell";
-import type { Profile } from "@/lib/types/domain";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  const [{ supabase, userId, profile }, itemCount] = await Promise.all([
+    getAppSession(),
+    getVisibleItemCount(),
+  ]);
+  if (!userId) redirect("/login");
 
   if (!profile || !profile.active) {
     await supabase.auth.signOut();
@@ -29,7 +22,7 @@ export default async function AppLayout({
 
   return (
     <ShellProvider>
-      <DataProvider profile={profile as Profile}>
+      <DataProvider profile={profile} itemCountHint={itemCount}>
         <AppShell>{children}</AppShell>
       </DataProvider>
     </ShellProvider>

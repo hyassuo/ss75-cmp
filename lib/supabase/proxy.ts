@@ -68,9 +68,13 @@ export async function updateSession(
       },
     });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Verifies the JWT and refreshes an expiring session (new cookies via
+    // setAll above). With asymmetric JWT signing keys the check is local
+    // (JWKS cached per server instance): no round-trip to Supabase Auth
+    // before the page renders. With the legacy shared secret it calls
+    // /auth/v1/user, like getUser(). See lib/supabase/appSession.ts.
+    const { data } = await supabase.auth.getClaims();
+    const user = data?.claims ?? null;
 
     const path = request.nextUrl.pathname;
     const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
@@ -85,11 +89,18 @@ export async function updateSession(
       return NextResponse.redirect(url);
     }
 
-    if (user && path === "/login") {
+    // Signed in: "/" (bookmarks, apps installed with the old start_url) and
+    // /login go straight to the dashboard — no render + second verification
+    // of "/" (app/page.tsx) just to redirect.
+    // The redirect carries any session cookies refreshed above: the old
+    // refresh token has just been spent.
+    if (user && (path === "/login" || path === "/")) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       url.search = "";
-      return NextResponse.redirect(url);
+      const redirect = NextResponse.redirect(url);
+      for (const c of supabaseResponse.cookies.getAll()) redirect.cookies.set(c);
+      return redirect;
     }
 
     return supabaseResponse;
