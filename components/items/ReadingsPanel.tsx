@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/Label";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { useLang } from "@/lib/context/LangContext";
-import { fmt, today } from "@/lib/utils/format";
+import { fmt, fmtNum, today } from "@/lib/utils/format";
 import {
   calcRate,
   isAiEstimate,
@@ -42,7 +42,7 @@ export function ReadingsPanel({
   canEdit = true,
   canDelete = true,
 }: Props) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [depth, setDepth] = useState("");
@@ -240,7 +240,7 @@ export function ReadingsPanel({
                 lineHeight: 1,
               }}
             >
-              {rate.toFixed(3)}
+              {fmtNum(rate, lang, 3)}
               <span style={{ fontSize: DS.fs.md, marginLeft: 3, fontWeight: 400 }}>
                 mm/yr
               </span>
@@ -325,7 +325,7 @@ export function ReadingsPanel({
                 const dTxt =
                   delta === null
                     ? "-"
-                    : (delta > 0 ? "+" : "") + delta.toFixed(2);
+                    : (delta > 0 ? "+" : "") + fmtNum(delta, lang, 2);
                 return (
                   <tr
                     key={r.id}
@@ -338,7 +338,7 @@ export function ReadingsPanel({
                         color: DS.text3,
                       }}
                     >
-                      {fmt(r.reading_date)}
+                      {fmt(r.reading_date, lang)}
                     </td>
                     <td
                       style={{
@@ -348,7 +348,7 @@ export function ReadingsPanel({
                         fontWeight: 700,
                       }}
                     >
-                      {r.depth_mm}
+                      {fmtNum(r.depth_mm, lang)}
                     </td>
                     <td
                       style={{

@@ -4,7 +4,7 @@ import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useLang } from "@/lib/context/LangContext";
 import { Gauge } from "@/components/ui/Gauge";
-import { fmt, isOverdue, daysUntil, today } from "@/lib/utils/format";
+import { fmt, fmtNum, isOverdue, daysUntil, today } from "@/lib/utils/format";
 import { itemScore } from "@/lib/domain/itemScore";
 import { effectiveStatus } from "@/lib/domain/effectiveStatus";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
@@ -21,7 +21,7 @@ export function ItemCard({
   item: ItemWithRelations;
   onClick: () => void;
 }) {
-  const { t, tPriority, tStatus } = useLang();
+  const { lang, t, tPriority, tStatus } = useLang();
   const priority = effectivePriority(item);
   const sc = itemScore(item);
   const rt = calcRate(item.readings);
@@ -106,7 +106,7 @@ export function ItemCard({
           )}
           {rt !== null && (
             <Badge
-              text={rt.toFixed(2) + "mm/yr"}
+              text={fmtNum(rt, lang, 2) + "mm/yr"}
               color={rateColor(rt)}
               sm
             />
@@ -134,7 +134,7 @@ export function ItemCard({
             : dd !== null && dd <= 30
               ? dd + "d → "
               : ""}
-          {fmt(item.next_insp)}
+          {fmt(item.next_insp, lang)}
         </div>
       </div>
     </div>

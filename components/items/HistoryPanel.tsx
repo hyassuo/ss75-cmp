@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { fmt } from "@/lib/utils/format";
 import { historyNote } from "@/lib/utils/historyNote";
+import { useLang } from "@/lib/context/LangContext";
 import { createClient } from "@/lib/supabase/client";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 export function HistoryPanel({ itemId }: { itemId: string }) {
   const [rows, setRows] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const { lang } = useLang();
 
   useEffect(() => {
     let active = true;
@@ -67,7 +69,7 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
               minWidth: 96,
             }}
           >
-            {fmt(h.event_date.split("T")[0])}
+            {fmt(h.event_date.split("T")[0], lang)}
           </div>
           <div>
             <div

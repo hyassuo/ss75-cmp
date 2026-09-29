@@ -62,7 +62,7 @@ export function EvidencePanel({
   onAIApply,
   onDirtyChange,
 }: Props) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
@@ -572,7 +572,7 @@ export function EvidencePanel({
                   color: DS.blu,
                 }}
               >
-                {fmt(ev.evidence_date)}
+                {fmt(ev.evidence_date, lang)}
               </span>
             </div>
             <div

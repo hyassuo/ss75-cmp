@@ -17,6 +17,7 @@ import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
+import { fmt } from "@/lib/utils/format";
 import {
   STATUSES,
   FREQUENCIES,
@@ -368,7 +369,7 @@ export function InspectionSection({ f, onFreqOrLast }: {
   f: Form;
   onFreqOrLast: (next: Partial<Form>) => void;
 }) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const blank = t("select.placeholder");
   const fid = useId();
   const freqOpts = [{ v: "", l: blank }].concat(
@@ -430,7 +431,7 @@ export function InspectionSection({ f, onFreqOrLast }: {
               alignItems: "center",
             }}
           >
-            {f.next_insp ?? "-"}
+            {fmt(f.next_insp, lang)}
           </div>
         </div>
       </div>

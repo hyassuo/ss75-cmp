@@ -285,7 +285,7 @@ export function AuditLogTable() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {fmt(r.event_date.split("T")[0])}
+                    {fmt(r.event_date.split("T")[0], lang)}
                   </td>
                   <td
                     style={{

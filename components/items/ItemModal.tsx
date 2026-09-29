@@ -36,7 +36,7 @@ import { calcPriority } from "@/lib/domain/calcPriority";
 import { calcNextInspection } from "@/lib/domain/calcNextInspection";
 import { suggestActionDue } from "@/lib/domain/actionPlan";
 import { AI_READING_CHECKED_BY, AI_READING_LOCATION } from "@/lib/domain/calcRate";
-import { today } from "@/lib/utils/format";
+import { fmtDateTime, fmtNum, today } from "@/lib/utils/format";
 import {
   clearItemDraft,
   loadItemDraft,
@@ -103,7 +103,7 @@ function ItemModalInner({
     addEvidence,
     deleteEvidence,
   } = useData();
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const { confirm, toast } = useFeedback();
 
   // The row as it was when editing started: the baseline for the diff
@@ -620,7 +620,7 @@ function ItemModalInner({
         <Notice tone="info" style={BANNER}>
           <span style={{ flex: 1 }}>
             {t("modal.draftFound")} (
-            {new Date(restorable.savedAt).toLocaleString()}).
+            {fmtDateTime(restorable.savedAt, lang)}).
           </span>
           <Button variant="secondary" size="sm" onClick={restoreDraft} style={bannerBtn(DS.blu)}>
             {t("modal.draftRestore")}
@@ -803,7 +803,7 @@ function ItemModalInner({
             }}
           >
             <span>
-              {t("modal.pendingAiReading")} {pendingAiReading} mm
+              {t("modal.pendingAiReading")} {fmtNum(pendingAiReading, lang)} mm
             </span>
             <button
               type="button"

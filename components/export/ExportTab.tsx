@@ -6,7 +6,7 @@ import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useData } from "@/lib/context/DataContext";
-import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { fmtCompact, fmtNum, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
@@ -467,12 +467,12 @@ export function ExportTab() {
           priority: effectivePriority(it) ?? "",
           status: it.status,
           sece: it.sece,
-          last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
-          next_insp: it.next_insp ? fmtCompact(it.next_insp) : "",
+          last_insp: it.last_insp ? fmtCompact(it.last_insp, lang) : "",
+          next_insp: it.next_insp ? fmtCompact(it.next_insp, lang) : "",
           rate: rt !== null ? rt.toFixed(3) : "",
           action: it.action_type
             ? `Tratativa: ${it.action_type} · ${it.action_status || "Sem planejamento"}` +
-              (it.action_due ? ` · prazo ${fmtCompact(it.action_due)}` : "")
+              (it.action_due ? ` · prazo ${fmtCompact(it.action_due, lang)}` : "")
             : "",
         };
       });
@@ -532,7 +532,7 @@ export function ExportTab() {
       );
       const blob = await pdf(
         <PdfDocument
-          generated={fmtCompact(today())}
+          generated={fmtCompact(today(), lang)}
           total={activeFlat.length}
           sece={activeFlat.filter((i) => i.sece).length}
           critical={activeFlat.filter((i) => effectivePriority(i) === "Critical").length}
@@ -787,7 +787,7 @@ export function ExportTab() {
                         color: it.last_insp ? DS.text3 : DS.text3,
                       }}
                     >
-                      {fmtCompact(it.last_insp)}
+                      {fmtCompact(it.last_insp, lang)}
                     </td>
                     <td
                       style={{
@@ -798,7 +798,7 @@ export function ExportTab() {
                       }}
                     >
                       {(isOverdue(it.next_insp) ? "! " : "") +
-                        fmtCompact(it.next_insp)}
+                        fmtCompact(it.next_insp, lang)}
                     </td>
                     <td
                       style={{
@@ -818,7 +818,7 @@ export function ExportTab() {
                         color: rateColor(rt),
                       }}
                     >
-                      {rt !== null ? rt.toFixed(3) : "-"}
+                      {rt !== null ? fmtNum(rt, lang, 3) : "-"}
                     </td>
                   </tr>
                 );

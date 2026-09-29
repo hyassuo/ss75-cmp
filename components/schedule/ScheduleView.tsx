@@ -5,7 +5,7 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
-import { addDays, fmt, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { addDays, fmt, fmtNum, today, isOverdue, daysUntil } from "@/lib/utils/format";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
@@ -18,7 +18,7 @@ import { effectivePriority } from "@/lib/domain/calcPriority";
 type Row = ItemWithRelations & { zid: string; zname: string };
 
 function RowItem({ it, isOd }: { it: Row; isOd: boolean }) {
-const { tPriority } = useLang();
+const { lang, tPriority } = useLang();
 const { openItem } = useShell();
   const dd = daysUntil(it.next_insp) ?? 0;
   const rt = calcRate(it.readings);
@@ -101,7 +101,7 @@ const { openItem } = useShell();
         {it.ifs_wo && <Badge text={it.ifs_wo} color={DS.grn} sm />}
         {rt !== null && (
           <Badge
-            text={rt.toFixed(2) + " mm/yr"}
+            text={fmtNum(rt, lang, 2) + " mm/yr"}
             color={rateColor(rt)}
             sm
           />
@@ -116,14 +116,14 @@ const { openItem } = useShell();
           textAlign: "right",
         }}
       >
-        {fmt(it.next_insp)}
+        {fmt(it.next_insp, lang)}
       </div>
     </button>
   );
 }
 
 export function ScheduleView() {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const { itemsByZone } = useData();
   const zones = useScopedZones();
   const [horizon, setHorizon] = useState(90);
@@ -184,7 +184,7 @@ export function ScheduleView() {
           </button>
         ))}
         <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginLeft: 8 }}>
-          {t("sched.until")} {fmt(cutStr)}
+          {t("sched.until")} {fmt(cutStr, lang)}
         </div>
       </div>
 
@@ -285,7 +285,7 @@ export function ScheduleView() {
                     textAlign: "right",
                   }}
                 >
-                  {fmt(it.action_due)}
+                  {fmt(it.action_due, lang)}
                 </span>
               </div>
             );

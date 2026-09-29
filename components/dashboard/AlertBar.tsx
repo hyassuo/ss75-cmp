@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, CircleAlert, Clock } from "lucide-react";
 import { DS } from "@/lib/design/tokens";
 import { Icon } from "@/components/ui/Icon";
-import { fmt, isOverdue, daysUntil, today } from "@/lib/utils/format";
+import { fmt, fmtNum, isOverdue, daysUntil, today } from "@/lib/utils/format";
 import {
   calcRate,
   RATE_CRITICAL_MM_YR,
@@ -26,7 +26,7 @@ interface Alert {
 export function AlertBar() {
   const { zones, itemsByZone } = useData();
   const { sysFilter, openItem } = useShell();
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const [collapsed, setCollapsed] = useState(false);
 
   // Remembered per browser; with no stored choice it starts collapsed on
@@ -69,7 +69,7 @@ export function AlertBar() {
       if (isOverdue(it.next_insp)) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: ${t("alert.overdueSince")} ${fmt(it.next_insp)}`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.overdueSince")} ${fmt(it.next_insp, lang)}`,
           itemId: it.id,
         });
       }
@@ -84,7 +84,7 @@ export function AlertBar() {
       if (isActionOverdue(it, today())) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: ${t("alert.actionOverdue")} ${fmt(it.action_due)} (${it.action_type})`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.actionOverdue")} ${fmt(it.action_due, lang)} (${it.action_type})`,
           itemId: it.id,
         });
       }
@@ -92,13 +92,13 @@ export function AlertBar() {
       if (rt !== null && rt > RATE_CRITICAL_MM_YR) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${rt.toFixed(3)} mm/yr`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${fmtNum(rt, lang, 3)} mm/yr`,
           itemId: it.id,
         });
       } else if (rt !== null && rt > RATE_ELEVATED_MM_YR) {
         alerts.push({
           t: "warn",
-          msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${rt.toFixed(3)} mm/yr`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${fmtNum(rt, lang, 3)} mm/yr`,
           itemId: it.id,
         });
       }

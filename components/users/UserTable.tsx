@@ -21,7 +21,7 @@ const ROLE_COLOR: Record<UserRole, string> = {
 
 export function UserTable({ currentUserId }: { currentUserId: string }) {
   const { confirm } = useFeedback();
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const [rows, setRows] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
@@ -240,7 +240,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                         color: DS.text3,
                       }}
                     >
-                      {fmt(u.created_at.split("T")[0])}
+                      {fmt(u.created_at.split("T")[0], lang)}
                     </td>
                     <td style={{ padding: "8px 10px" }}>
                       <div style={{ display: "flex", gap: 6 }}>
