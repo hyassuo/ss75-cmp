@@ -5,6 +5,7 @@ import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
+import { Button } from "@/components/ui/Button";
 import { ItemCard } from "@/components/items/ItemCard";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
@@ -39,7 +40,7 @@ export function ZonesTab() {
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: DS.text3, marginBottom: 16 }}>
+      <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginBottom: 16 }}>
         {visibleZones.length} {visibleZones.length !== 1 ? t("dash.zones") : t("dash.zone")} ·{" "}
         {totalItems} {totalItems !== 1 ? t("dash.items") : t("dash.item")}
       </div>
@@ -80,7 +81,7 @@ export function ZonesTab() {
                     <span
                       style={{
                         fontFamily: "monospace",
-                        fontSize: 13,
+                        fontSize: DS.fs.base,
                         color: DS.blu,
                         fontWeight: 800,
                       }}
@@ -89,7 +90,7 @@ export function ZonesTab() {
                     </span>
                     <span
                       style={{
-                        fontSize: 16,
+                        fontSize: DS.fs.xl,
                         fontWeight: 800,
                         color: DS.text,
                       }}
@@ -107,7 +108,7 @@ export function ZonesTab() {
                   </div>
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: DS.fs.md,
                       color: DS.text3,
                       marginTop: 3,
                     }}
@@ -122,7 +123,7 @@ export function ZonesTab() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <span style={{ fontSize: 10, color: DS.text3 }}>
+                    <span style={{ fontSize: DS.fs.xs, color: DS.text3 }}>
                       {activeItems.length +
                         (activeItems.length !== 1 ? " " + t("dash.items") : " " + t("dash.item"))}
                     </span>
@@ -149,20 +150,13 @@ export function ZonesTab() {
                   </div>
                 </div>
               </div>
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => void addItem(z.zid)}
-                style={{
-                  background: DS.sur2,
-                  color: DS.blu,
-                  border: "1px solid " + DS.bord,
-                  borderRadius: 8,
-                  padding: "8px 18px",
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  whiteSpace: "nowrap",
-                }}
-              >{t("nav.addItem")}</button>
+                style={{ color: DS.blu, whiteSpace: "nowrap" }}
+              >
+                {t("nav.addItem")}
+              </Button>
             </div>
             {activeItems.length > 0 &&
               (() => {
@@ -210,7 +204,7 @@ export function ZonesTab() {
                       <div key={s.id} style={{ marginBottom: 12 }}>
                         <div
                           style={{
-                            fontSize: 11,
+                            fontSize: DS.fs.sm,
                             color: DS.text3,
                             textTransform: "uppercase",
                             letterSpacing: 1.2,
@@ -230,7 +224,7 @@ export function ZonesTab() {
                       <div>
                         <div
                           style={{
-                            fontSize: 11,
+                            fontSize: DS.fs.sm,
                             color: DS.text3,
                             textTransform: "uppercase",
                             letterSpacing: 1.2,

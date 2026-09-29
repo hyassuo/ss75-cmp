@@ -62,7 +62,7 @@ export function ThemeToggle() {
         color: DS.sbTxt,
         width: 40,
         height: 36,
-        fontSize: 16,
+        fontSize: DS.fs.xl,
         cursor: "pointer",
         flexShrink: 0,
       }}

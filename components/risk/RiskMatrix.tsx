@@ -47,16 +47,16 @@ export function RiskMatrix() {
   if (!withRisk.length) {
     return (
       <div style={{ ...S.card, textAlign: "center", padding: "48px 24px" }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>△</div>
+        <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>△</div>
         <div
           style={{
-            fontSize: 15,
+            fontSize: DS.fs.xl,
             color: DS.text3,
             fontWeight: 600,
             marginBottom: 6,
           }}
         >{t("risk.empty.title")}</div>
-        <div style={{ fontSize: 13, color: DS.text3 }}>{t("risk.empty.hint")}</div>
+        <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>{t("risk.empty.hint")}</div>
       </div>
     );
   }
@@ -73,7 +73,7 @@ export function RiskMatrix() {
       <div style={{ ...S.card, marginBottom: 16 }}>
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -83,7 +83,7 @@ export function RiskMatrix() {
         >{t("risk.title")}</div>
         <div
           style={{
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text3,
             marginBottom: 12,
             display: "flex",
@@ -94,7 +94,7 @@ export function RiskMatrix() {
           }}
         >
           <span>{t("risk.assessedOf", withRisk.length, allItems.length)}</span>
-          <details style={{ fontSize: 11 }}>
+          <details style={{ fontSize: DS.fs.sm }}>
             <summary
               style={{
                 cursor: "pointer",
@@ -118,7 +118,7 @@ export function RiskMatrix() {
             >
               <div
                 style={{
-                  fontSize: 9,
+                  fontSize: DS.fs.xs,
                   fontWeight: 700,
                   color: DS.text3,
                   textTransform: "uppercase",
@@ -132,7 +132,7 @@ export function RiskMatrix() {
                 <div
                   key={`p${n}`}
                   style={{
-                    fontSize: 11,
+                    fontSize: DS.fs.sm,
                     color: DS.text2,
                     marginBottom: 3,
                     display: "flex",
@@ -153,7 +153,7 @@ export function RiskMatrix() {
               ))}
               <div
                 style={{
-                  fontSize: 9,
+                  fontSize: DS.fs.xs,
                   fontWeight: 700,
                   color: DS.text3,
                   textTransform: "uppercase",
@@ -168,7 +168,7 @@ export function RiskMatrix() {
                 <div
                   key={`c${n}`}
                   style={{
-                    fontSize: 11,
+                    fontSize: DS.fs.sm,
                     color: DS.text2,
                     marginBottom: 3,
                     display: "flex",
@@ -204,7 +204,7 @@ export function RiskMatrix() {
                   style={{
                     width: "4%",
                     padding: "6px 4px",
-                    fontSize: 9,
+                    fontSize: DS.fs.xs,
                     color: DS.text3,
                     textAlign: "center",
                     whiteSpace: "nowrap",
@@ -218,7 +218,7 @@ export function RiskMatrix() {
                     style={{
                       width: "19.2%",
                       padding: "6px 4px",
-                      fontSize: 10,
+                      fontSize: DS.fs.xs,
                       color: DS.text3,
                       textAlign: "center",
                     }}
@@ -242,7 +242,7 @@ export function RiskMatrix() {
                   <td
                     style={{
                       padding: "4px 4px",
-                      fontSize: 10,
+                      fontSize: DS.fs.xs,
                       color: DS.text3,
                       verticalAlign: "middle",
                       width: "4%",
@@ -283,7 +283,7 @@ export function RiskMatrix() {
                             title={`${t(`risk.level.${level}`)} · RPN ${p * c}`}
                             style={{
                               fontFamily: "monospace",
-                              fontSize: 10,
+                              fontSize: DS.fs.xs,
                               color: clr,
                               fontWeight: 800,
                               marginBottom: 3,
@@ -292,7 +292,7 @@ export function RiskMatrix() {
                             }}
                           >
                             <span>{p * c}</span>
-                            <span aria-hidden="true" style={{ fontSize: 12, lineHeight: 1 }}>
+                            <span aria-hidden="true" style={{ fontSize: DS.fs.md, lineHeight: 1 }}>
                               {LEVEL[level].glyph}
                             </span>
                             <span className="sr-only">{t(`risk.level.${level}`)}</span>
@@ -303,7 +303,7 @@ export function RiskMatrix() {
                               title={it.name}
                               {...pressable(() => openItem(it.id), it.name)}
                               style={{
-                                fontSize: 9,
+                                fontSize: DS.fs.xs,
                                 color: DS.text,
                                 background: tint(clr, 16),
                                 borderRadius: 3,
@@ -344,11 +344,11 @@ export function RiskMatrix() {
             >
               <span
                 aria-hidden="true"
-                style={{ color: LEVEL[lv].color, fontWeight: 800, fontSize: 13 }}
+                style={{ color: LEVEL[lv].color, fontWeight: 800, fontSize: DS.fs.base }}
               >
                 {LEVEL[lv].glyph}
               </span>
-              <span style={{ fontSize: 11, color: DS.text3 }}>
+              <span style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
                 {t(`risk.level.${lv}`)} ({LEVEL[lv].range})
               </span>
             </div>
@@ -360,7 +360,7 @@ export function RiskMatrix() {
         <div style={S.card}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.ora,
               textTransform: "uppercase",
               letterSpacing: 1.5,
@@ -390,7 +390,7 @@ export function RiskMatrix() {
                 <div
                   style={{
                     fontFamily: "monospace",
-                    fontSize: 16,
+                    fontSize: DS.fs.xl,
                     fontWeight: 800,
                     color: c,
                     minWidth: 30,
@@ -401,14 +401,14 @@ export function RiskMatrix() {
                 <div style={{ flex: 1 }}>
                   <div
                     style={{
-                      fontSize: 13,
+                      fontSize: DS.fs.base,
                       fontWeight: 700,
                       color: DS.text,
                     }}
                   >
                     {it.name || it.id}
                   </div>
-                  <div style={{ fontSize: 11, color: DS.text3 }}>
+                  <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
                     {it.zoneName} | P:{it.prob} x C:{it.cons}
                   </div>
                 </div>

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { fmt, today } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
@@ -149,7 +151,7 @@ export function AuditLogTable() {
       >
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -158,23 +160,9 @@ export function AuditLogTable() {
         >
           Audit Log ({filtered.length})
         </div>
-        <button
-          onClick={exportCSV}
-          disabled={!filtered.length}
-          style={{
-            background: DS.blu,
-            color: DS.onAccent,
-            border: "none",
-            borderRadius: 8,
-            padding: "8px 18px",
-            fontWeight: 700,
-            cursor: filtered.length ? "pointer" : "default",
-            fontSize: 12,
-            opacity: filtered.length ? 1 : 0.6,
-          }}
-        >
+        <Button onClick={exportCSV} disabled={!filtered.length}>
           Export CSV
-        </button>
+        </Button>
       </div>
 
       <div
@@ -192,7 +180,7 @@ export function AuditLogTable() {
           onChange={(e) => setFrom(e.target.value)}
           style={filterStyle}
         />
-        <span style={{ color: DS.text3, fontSize: 12 }}>→</span>
+        <span style={{ color: DS.text3, fontSize: DS.fs.md }}>→</span>
         <input
           type="date"
           value={to}
@@ -224,47 +212,40 @@ export function AuditLogTable() {
           ))}
         </select>
         {(from || to || action || user) && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => {
               setFrom("");
               setTo("");
               setAction("");
               setUser("");
             }}
-            style={{
-              background: DS.sur2,
-              color: DS.text3,
-              border: "1px solid " + DS.bord,
-              borderRadius: 6,
-              padding: "6px 12px",
-              fontSize: 11,
-              cursor: "pointer",
-            }}
           >
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
       {loadErr && (
-        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 10 }}>
+        <Notice tone="error" style={{ marginBottom: 10 }}>
           {t("audit.loadFailed")} {loadErr}
-        </div>
+        </Notice>
       )}
       {truncated && (
-        <div role="status" style={{ color: DS.ora, fontSize: 12, marginBottom: 10 }}>
+        <Notice tone="warning" style={{ marginBottom: 10 }}>
           {t("audit.truncated")}
-        </div>
+        </Notice>
       )}
       {loading ? (
-        <div style={{ fontSize: 13, color: DS.text3 }}>Loading…</div>
+        <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>Loading…</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table
             style={{
               width: "100%",
               borderCollapse: "collapse",
-              fontSize: 12,
+              fontSize: DS.fs.md,
             }}
           >
             <thead>
@@ -277,7 +258,7 @@ export function AuditLogTable() {
                         textAlign: "left",
                         padding: "8px 10px",
                         color: DS.text3,
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         textTransform: "uppercase",
                         whiteSpace: "nowrap",
                       }}
@@ -298,7 +279,7 @@ export function AuditLogTable() {
                     style={{
                       padding: "8px 10px",
                       fontFamily: "monospace",
-                      fontSize: 11,
+                      fontSize: DS.fs.sm,
                       color: DS.text3,
                       whiteSpace: "nowrap",
                     }}
@@ -324,7 +305,7 @@ export function AuditLogTable() {
                     style={{
                       padding: "8px 10px",
                       fontFamily: "monospace",
-                      fontSize: 11,
+                      fontSize: DS.fs.sm,
                       color: DS.text3,
                     }}
                   >
@@ -333,7 +314,7 @@ export function AuditLogTable() {
                   <td
                     style={{
                       padding: "8px 10px",
-                      fontSize: 11,
+                      fontSize: DS.fs.sm,
                       color: DS.text3,
                     }}
                   >

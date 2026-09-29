@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { DS } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 import { useLang } from "@/lib/context/LangContext";
 import { createClient } from "@/lib/supabase/client";
 
@@ -103,26 +104,13 @@ export function IdleLogout() {
         alignItems: "center",
         flexWrap: "wrap",
         boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
-        fontSize: 13,
+        fontSize: DS.fs.base,
       }}
     >
       <span style={{ flex: "1 1 220px" }}>{t("idle.warning")}</span>
-      <button
-        type="button"
-        onClick={() => setWarning(false)}
-        style={{
-          background: DS.blu,
-          color: DS.onAccent,
-          border: "none",
-          borderRadius: 7,
-          padding: "8px 16px",
-          minHeight: 44,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
+      <Button size="lg" onClick={() => setWarning(false)}>
         {t("idle.stay")}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -161,7 +149,7 @@ export function ConnectionBanner() {
         background: DS.yel,
         color: DS.onAccent,
         textAlign: "center",
-        fontSize: 13,
+        fontSize: DS.fs.base,
         fontWeight: 600,
         padding: "6px 12px",
       }}

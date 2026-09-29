@@ -20,7 +20,7 @@ export const S: Record<string, CSSProperties> = {
     borderRadius: 6,
     color: DS.text,
     padding: "0 11px",
-    fontSize: 12,
+    fontSize: DS.fs.md,
     boxSizing: "border-box",
     outline: "none",
     fontFamily: DS.sans,
@@ -36,7 +36,7 @@ export const S: Record<string, CSSProperties> = {
   mono: { fontFamily: DS.mono },
   lbl: {
     display: "block",
-    fontSize: 10,
+    fontSize: DS.fs.xs,
     color: DS.text3,
     textTransform: "uppercase",
     letterSpacing: 1.2,

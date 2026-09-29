@@ -9,6 +9,7 @@ import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { AlertBar } from "@/components/dashboard/AlertBar";
 import { DashboardSkeleton } from "@/components/ui/Skeleton";
+import { Notice } from "@/components/ui/Notice";
 import {
   ConnectionBanner,
   DeployLogout,
@@ -88,16 +89,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <div style={{ paddingTop: 16 }}>
               {error && (
-                <div
-                  role="alert"
+                <Notice
+                  tone="error"
                   style={{
-                    background: DS.redBg,
-                    border: "1px solid " + DS.redBord,
-                    borderRadius: 8,
-                    padding: "10px 14px",
                     marginBottom: 16,
-                    fontSize: 12,
-                    color: DS.red,
                     display: "flex",
                     alignItems: "center",
                     gap: 10,
@@ -112,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       background: "none",
                       border: "none",
                       color: DS.red,
-                      fontSize: 18,
+                      fontSize: DS.fs.h3,
                       cursor: "pointer",
                       minWidth: 32,
                       minHeight: 32,
@@ -120,7 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   >
                     ×
                   </button>
-                </div>
+                </Notice>
               )}
               {loading ? (
                 <DashboardSkeleton />

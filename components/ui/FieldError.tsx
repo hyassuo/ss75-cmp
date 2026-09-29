@@ -5,7 +5,7 @@ export function FieldError({ id, children }: { id: string; children: string }) {
     <div
       id={id}
       role="alert"
-      style={{ color: DS.red, fontSize: 12, marginTop: 4 }}
+      style={{ color: DS.red, fontSize: DS.fs.md, marginTop: 4 }}
     >
       {children}
     </div>

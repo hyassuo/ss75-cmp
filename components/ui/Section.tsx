@@ -12,7 +12,7 @@ export function Section({ title, accent = DS.blu, children }: SectionProps) {
     <div style={{ marginBottom: 20 }}>
       <div
         style={{
-          fontSize: 9,
+          fontSize: DS.fs.xs,
           color: accent,
           textTransform: "uppercase",
           letterSpacing: 2,

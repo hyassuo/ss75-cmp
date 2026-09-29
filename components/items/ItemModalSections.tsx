@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
 import { YesNoToggle } from "@/components/ui/YesNoToggle";
+import { Notice } from "@/components/ui/Notice";
 import { IfsObjectSearch } from "@/components/items/IfsObjectSearch";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
@@ -81,7 +82,7 @@ export function IfsSection({ f, set, setF, recalcPriority }: {
             <span
               style={{
                 fontFamily: "monospace",
-                fontSize: 13,
+                fontSize: DS.fs.base,
                 color: DS.grn,
               }}
             >
@@ -90,7 +91,7 @@ export function IfsSection({ f, set, setF, recalcPriority }: {
           </div>
           <div>
             <Label>{t("f.objectDesc")}</Label>
-            <span style={{ fontSize: 13, color: DS.text2 }}>
+            <span style={{ fontSize: DS.fs.base, color: DS.text2 }}>
               {f.ifs_obj_desc}
             </span>
           </div>
@@ -111,7 +112,7 @@ export function IfsSection({ f, set, setF, recalcPriority }: {
             display: "flex",
             alignItems: "center",
             gap: 8,
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text2,
             fontWeight: 600,
             cursor: "pointer",
@@ -132,7 +133,7 @@ export function IfsSection({ f, set, setF, recalcPriority }: {
           />
           {t("f.isAccessory")}
         </label>
-        <div style={{ fontSize: 10, color: DS.text3, marginBottom: 8 }}>
+        <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginBottom: 8 }}>
           {t("f.isAccessoryHint")}
         </div>
         {f.is_accessory && (
@@ -214,7 +215,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
               borderRadius: 7,
               padding: "8px 11px",
               fontWeight: 800,
-              fontSize: 14,
+              fontSize: DS.fs.lg,
               color: prClr,
               textAlign: "center",
               height: 36,
@@ -236,7 +237,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
               borderRadius: 7,
               padding: "8px 11px",
               fontWeight: 800,
-              fontSize: 18,
+              fontSize: DS.fs.h3,
               color: DS.text2,
               textAlign: "center",
               fontFamily: "monospace",
@@ -264,7 +265,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
           borderRadius: 8,
           padding: "10px 14px",
           marginBottom: 10,
-          fontSize: 11,
+          fontSize: DS.fs.sm,
           color: DS.text3,
         }}
       >
@@ -288,7 +289,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
             color: f.sece ? DS.red : DS.text3,
             borderRadius: 6,
             padding: "9px 12px",
-            fontSize: 12,
+            fontSize: DS.fs.md,
             fontWeight: 700,
             display: "flex",
             alignItems: "center",
@@ -302,7 +303,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
                 ? t("sece.yes") : t("sece.no")
               : "—"}
           </span>
-          <span style={{ fontSize: 10, fontWeight: 500, color: DS.text3 }}>
+          <span style={{ fontSize: DS.fs.xs, fontWeight: 500, color: DS.text3 }}>
             {f.ifs_obj_id ? null : t("f.seceSelect")}
           </span>
         </div>
@@ -356,7 +357,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
           )}
         />
       </div>
-      <div style={{ fontSize: 10, color: DS.text3, marginTop: 4 }}>
+      <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 4 }}>
         {t("f.bandsInfo")}
       </div>
     </Section>
@@ -420,7 +421,7 @@ export function InspectionSection({ f, onFreqOrLast }: {
               border: "1px solid " + DS.bord,
               borderRadius: 7,
               padding: "0 11px",
-              fontSize: 13,
+              fontSize: DS.fs.base,
               fontFamily: "monospace",
               color: f.next_insp ? DS.text : DS.text3,
               height: 36,
@@ -490,24 +491,14 @@ export function ActionSection({ f, set, onActionTypeChange }: {
             style={{ ...S.inp, marginBottom: 0 }}
           />
         </div>
-        <div style={{ fontSize: 10, color: DS.text3, paddingBottom: 10 }}>
+        <div style={{ fontSize: DS.fs.xs, color: DS.text3, paddingBottom: 10 }}>
           {f.action_type ? t("f.actionDueSuggested") : null}
         </div>
       </div>
       {f.action_type && (f.action_status || "Sem planejamento") === "Executado" && (
-        <div
-          style={{
-            background: DS.grnBg,
-            border: "1px solid " + DS.grnBord,
-            borderRadius: 8,
-            padding: "8px 12px",
-            marginBottom: 10,
-            fontSize: 11,
-            color: DS.grn,
-          }}
-        >
+        <Notice tone="success" role={null} style={{ padding: "8px 12px", marginBottom: 10 }}>
           {t("f.actionDoneHint")}
-        </div>
+        </Notice>
       )}
       <Textarea
         label={t("f.actionNote")}

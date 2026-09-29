@@ -138,7 +138,7 @@ export function AlertBar() {
         {/* Left: just the title. Counts move to the right cluster so they
             sit next to the total and the expand/collapse button. */}
         <div className="alert-header-title">
-          <span style={{ fontSize: 13, fontWeight: 700, color: DS.red }}>
+          <span style={{ fontSize: DS.fs.base, fontWeight: 700, color: DS.red }}>
             {t("alert.title")}
           </span>
         </div>
@@ -161,8 +161,8 @@ export function AlertBar() {
                 boxSizing: "border-box",
               }}
             >
-              <span style={{ fontSize: 12 }}>{danger}</span>
-              <span style={{ fontSize: 8, opacity: 0.9, marginTop: 1 }}>
+              <span style={{ fontSize: DS.fs.md }}>{danger}</span>
+              <span style={{ fontSize: DS.fs.xs, opacity: 0.9, marginTop: 1 }}>
                 {t("alert.critical")}
               </span>
             </span>
@@ -185,8 +185,8 @@ export function AlertBar() {
                 boxSizing: "border-box",
               }}
             >
-              <span style={{ fontSize: 12 }}>{warn}</span>
-              <span style={{ fontSize: 8, opacity: 0.9, marginTop: 1 }}>
+              <span style={{ fontSize: DS.fs.md }}>{warn}</span>
+              <span style={{ fontSize: DS.fs.xs, opacity: 0.9, marginTop: 1 }}>
                 {t("alert.warning")}
               </span>
             </span>
@@ -209,8 +209,8 @@ export function AlertBar() {
               boxSizing: "border-box",
             }}
           >
-            <span style={{ fontSize: 12 }}>{alerts.length}</span>
-            <span style={{ fontSize: 8, opacity: 0.9, marginTop: 1 }}>
+            <span style={{ fontSize: DS.fs.md }}>{alerts.length}</span>
+            <span style={{ fontSize: DS.fs.xs, opacity: 0.9, marginTop: 1 }}>
               {t("alert.total")}
             </span>
           </span>
@@ -222,7 +222,7 @@ export function AlertBar() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 13,
+              fontSize: DS.fs.base,
               color: DS.red,
               fontWeight: 800,
               background: DS.sur,
@@ -271,7 +271,7 @@ export function AlertBar() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 10,
+                  fontSize: DS.fs.xs,
                   fontWeight: 800,
                   marginTop: 1,
                   background: isDanger ? DS.red : DS.ora,
@@ -282,7 +282,7 @@ export function AlertBar() {
               </span>
               <span
                 style={{
-                  fontSize: 12,
+                  fontSize: DS.fs.md,
                   color: isDanger ? DS.red : DS.ora,
                   lineHeight: 1.5,
                 }}

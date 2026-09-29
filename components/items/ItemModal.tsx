@@ -6,6 +6,8 @@ import { Section } from "@/components/ui/Section";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { EvidencePanel } from "@/components/items/EvidencePanel";
@@ -567,7 +569,7 @@ function ItemModalInner({
         <div>
           <div
             style={{
-              fontSize: 10,
+              fontSize: DS.fs.xs,
               color: DS.blu,
               textTransform: "uppercase",
               letterSpacing: 2.5,
@@ -580,7 +582,7 @@ function ItemModalInner({
           </div>
           <h2
             id={titleId}
-            style={{ fontSize: 17, fontWeight: 800, color: DS.text, margin: 0 }}
+            style={{ fontSize: DS.fs.h3, fontWeight: 800, color: DS.text, margin: 0 }}
           >
             {f.name || f.ifs_obj_desc || t("modal.untitled")}
           </h2>
@@ -593,7 +595,7 @@ function ItemModalInner({
             background: "none",
             border: "1px solid " + DS.bord,
             color: DS.text3,
-            fontSize: 18,
+            fontSize: DS.fs.h3,
             cursor: "pointer",
             borderRadius: 7,
             minWidth: 44,
@@ -606,23 +608,23 @@ function ItemModalInner({
       </div>
 
       {gone && (
-        <div role="alert" style={banner(DS.redBg, DS.redBord, DS.red)}>
+        <Notice tone="error" style={BANNER}>
           {t("modal.deletedElsewhere")}
-        </div>
+        </Notice>
       )}
       {restorable && (
-        <div role="status" style={banner(DS.bluBg, DS.bluBord, DS.blu)}>
+        <Notice tone="info" style={BANNER}>
           <span style={{ flex: 1 }}>
             {t("modal.draftFound")} (
             {new Date(restorable.savedAt).toLocaleString()}).
           </span>
-          <button type="button" onClick={restoreDraft} style={bannerBtn(DS.blu)}>
+          <Button variant="secondary" size="sm" onClick={restoreDraft} style={bannerBtn(DS.blu)}>
             {t("modal.draftRestore")}
-          </button>
-          <button type="button" onClick={discardDraft} style={bannerBtn(DS.text3)}>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={discardDraft} style={bannerBtn(DS.text3)}>
             {t("modal.draftDiscard")}
-          </button>
-        </div>
+          </Button>
+        </Notice>
       )}
 
       <fieldset
@@ -691,7 +693,7 @@ function ItemModalInner({
                 border: "none",
                 color: DS.blu,
                 cursor: "pointer",
-                fontSize: 11,
+                fontSize: DS.fs.sm,
                 fontWeight: 600,
                 padding: 0,
                 marginTop: -6,
@@ -709,9 +711,9 @@ function ItemModalInner({
                 placeholder={t("subarea.namePlaceholder")}
                 style={{ ...S.inp, marginBottom: 0, flex: 1 }}
               />
-              <button
-                type="button"
-                disabled={savingSubarea || !newSubareaName.trim()}
+              <Button
+                disabled={!newSubareaName.trim()}
+                loading={savingSubarea}
                 onClick={() => {
                   void (async () => {
                     setSavingSubarea(true);
@@ -727,38 +729,20 @@ function ItemModalInner({
                     }
                   })();
                 }}
-                style={{
-                  background: DS.blu,
-                  color: DS.onAccent,
-                  border: "none",
-                  borderRadius: 7,
-                  padding: "0 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: savingSubarea ? "default" : "pointer",
-                  opacity: savingSubarea || !newSubareaName.trim() ? 0.6 : 1,
-                }}
               >
                 {t("common.add")}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setAddingSubarea(false);
                   setNewSubareaName("");
                 }}
-                style={{
-                  background: "none",
-                  border: "1px solid " + DS.bord,
-                  color: DS.text3,
-                  borderRadius: 7,
-                  padding: "0 10px",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
+                aria-label={t("common.cancel")}
+                style={{ padding: "0 12px" }}
               >
                 ×
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -802,19 +786,16 @@ function ItemModalInner({
 
       <Section title={t("sec.pit")} accent={DS.ora}>
         {pendingAiReading !== null && (
-          <div
+          <Notice
+            tone="info"
+            role={null}
             style={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 8,
-              background: DS.bluBg,
-              border: "1px solid " + DS.bluBord,
-              borderRadius: 8,
               padding: "8px 12px",
               marginBottom: 10,
-              fontSize: 12,
-              color: DS.blu,
             }}
           >
             <span>
@@ -829,13 +810,13 @@ function ItemModalInner({
                 border: "none",
                 color: DS.blu,
                 cursor: "pointer",
-                fontSize: 14,
+                fontSize: DS.fs.lg,
                 padding: "0 2px",
               }}
             >
               ×
             </button>
-          </div>
+          </Notice>
         )}
         <ReadingsPanel
           readings={item.readings}
@@ -866,33 +847,35 @@ function ItemModalInner({
       <div className="modal-footer">
       <div ref={errorRef} aria-live="assertive">
         {conflict && (
-          <div role="alert" style={banner(DS.oraBg, DS.oraBord, DS.ora)}>
+          <Notice tone="warning" role="alert" style={BANNER}>
             <span style={{ flex: "1 1 220px" }}>{t("modal.conflict")}</span>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={saving}
               onClick={saveOnTop}
               style={bannerBtn(DS.ora)}
             >
               {t("modal.conflictOverwrite")}
-            </button>
-            <button type="button" onClick={reloadLatest} style={bannerBtn(DS.text3)}>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={reloadLatest} style={bannerBtn(DS.text3)}>
               {t("modal.conflictReload")}
-            </button>
-          </div>
+            </Button>
+          </Notice>
         )}
         {saveError && (
-          <div role="alert" style={banner(DS.redBg, DS.redBord, DS.red)}>
+          <Notice tone="error" style={BANNER}>
             <span style={{ flex: 1 }}>{saveError}</span>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setSaveError(null)}
               aria-label={t("common.dismiss")}
               style={bannerBtn(DS.red)}
             >
               ×
-            </button>
-          </div>
+            </Button>
+          </Notice>
         )}
       </div>
 
@@ -906,105 +889,49 @@ function ItemModalInner({
         }}
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {/* Destructive action lives here, away from the close button. */}
+          {/* Destructive action lives here, away from the close button. Soft
+              red, not filled: it must not compete with Save (the
+              confirmation dialog carries the filled danger button). */}
           {!isNew && isAdmin && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => void remove()}
-              style={{
-                background: DS.redBg,
-                color: DS.red,
-                border: "1px solid " + DS.redBord,
-                borderRadius: 8,
-                padding: "9px 14px",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 700,
-              }}
+              style={{ background: DS.redBg, color: DS.red, borderColor: DS.redBord }}
             >
               {t("common.delete")}
-            </button>
+            </Button>
           )}
           {!isNew && isAdmin && (
-            <button
-              type="button"
-              onClick={() => void toggleArchived()}
-              style={{
-                background: DS.sur2,
-                color: DS.text3,
-                border: "1px solid " + DS.bord,
-                borderRadius: 8,
-                padding: "9px 18px",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 700,
-              }}
-            >
+            <Button variant="secondary" onClick={() => void toggleArchived()}>
               {item.archived ? t("modal.unarchive") : t("modal.archive")}
-            </button>
+            </Button>
           )}
           {!isReadOnly && (
-            <button
+            <Button
+              variant="secondary"
               onClick={toggleResolved}
-              style={{
-                background:
-                  f.status === "OK" && f.resolved_at ? DS.grnBg : DS.sur2,
-                color:
-                  f.status === "OK" && f.resolved_at ? DS.grn : DS.text3,
-                border:
-                  "1px solid " +
-                  (f.status === "OK" && f.resolved_at
-                    ? DS.grnBord
-                    : DS.bord),
-                borderRadius: 8,
-                padding: "9px 18px",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 700,
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-              }}
+              style={
+                f.status === "OK" && f.resolved_at
+                  ? { background: DS.grnBg, color: DS.grn, borderColor: DS.grnBord }
+                  : undefined
+              }
             >
-              <span style={{ fontSize: 14 }}>
+              <span style={{ fontSize: DS.fs.lg }}>
                 {f.status === "OK" && f.resolved_at ? "✓" : "○"}
               </span>
               {f.status === "OK" && f.resolved_at
                 ? t("modal.resolved") : t("modal.markResolved")}
-            </button>
+            </Button>
           )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => void cancel()}
-            style={{
-              background: "transparent",
-              color: DS.text3,
-              border: "1px solid " + DS.bord,
-              borderRadius: 8,
-              padding: "10px 22px",
-              cursor: "pointer",
-              fontSize: 14,
-            }}
-          >{t("common.cancel")}</button>
+          <Button variant="secondary" size="lg" onClick={() => void cancel()}>
+            {t("common.cancel")}
+          </Button>
           {!isReadOnly && (
-            <button
-              onClick={() => void save()}
-              disabled={saving}
-              style={{
-                background: DS.blu,
-                color: DS.onAccent,
-                border: "none",
-                borderRadius: 8,
-                padding: "10px 28px",
-                fontWeight: 700,
-                cursor: saving ? "default" : "pointer",
-                fontSize: 14,
-                opacity: saving ? 0.6 : 1,
-              }}
-            >
+            <Button size="lg" onClick={() => void save()} loading={saving}>
               {saving ? t("common.saving") : isNew ? t("modal.createItem") : t("common.save")}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -1013,32 +940,15 @@ function ItemModalInner({
   );
 }
 
-function banner(bg: string, border: string, color: string): React.CSSProperties {
-  return {
-    display: "flex",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 8,
-    background: bg,
-    border: "1px solid " + border,
-    borderRadius: 8,
-    padding: "10px 12px",
-    marginBottom: 12,
-    fontSize: 12,
-    color,
-  };
-}
+// Message banners with inline actions (draft restore, conflict, errors).
+const BANNER: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 12,
+};
 
 function bannerBtn(color: string): React.CSSProperties {
-  return {
-    background: "none",
-    border: "1px solid " + color,
-    color,
-    borderRadius: 6,
-    padding: "6px 12px",
-    fontSize: 12,
-    fontWeight: 700,
-    cursor: "pointer",
-    minHeight: 32,
-  };
+  return { background: "none", color, borderColor: color };
 }

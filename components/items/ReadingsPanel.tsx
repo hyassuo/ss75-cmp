@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
+import { Button } from "@/components/ui/Button";
+import { Notice } from "@/components/ui/Notice";
 import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
 import {
@@ -186,32 +188,21 @@ export function ReadingsPanel({
               style={{ ...S.inp, marginBottom: 0 }}
             />
           </div>
-          <button
+          <Button
             onClick={() => void add()}
-            disabled={busy}
-            style={{
-              background: DS.blu,
-              color: DS.onAccent,
-              border: "none",
-              borderRadius: 6,
-              padding: "0 22px",
-              fontWeight: 700,
-              cursor: "pointer",
-              fontSize: 13,
-              whiteSpace: "nowrap",
-              height: 36,
-              boxSizing: "border-box",
-              fontFamily: DS.sans,
-            }}
-          >{t("f.addReading")}</button>
+            loading={busy}
+            style={{ padding: "0 22px", whiteSpace: "nowrap" }}
+          >
+            {t("f.addReading")}
+          </Button>
         </div>
       </div>
       )}
 
       {err && (
-        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 10 }}>
+        <Notice tone="error" style={{ marginBottom: 10 }}>
           {err}
-        </div>
+        </Notice>
       )}
 
       {rate !== null && (
@@ -231,7 +222,7 @@ export function ReadingsPanel({
           <div>
             <div
               style={{
-                fontSize: 9,
+                fontSize: DS.fs.xs,
                 color: DS.text3,
                 textTransform: "uppercase",
                 letterSpacing: 1,
@@ -240,7 +231,7 @@ export function ReadingsPanel({
             >{t("f.pitRate")}</div>
             <div
               style={{
-                fontSize: 28,
+                fontSize: DS.fs.h1,
                 fontWeight: 800,
                 color: rateColor(rate),
                 fontFamily: "monospace",
@@ -248,14 +239,14 @@ export function ReadingsPanel({
               }}
             >
               {rate.toFixed(3)}
-              <span style={{ fontSize: 12, marginLeft: 3, fontWeight: 400 }}>
+              <span style={{ fontSize: DS.fs.md, marginLeft: 3, fontWeight: 400 }}>
                 mm/yr
               </span>
             </div>
           </div>
           <div
             style={{
-              fontSize: 12,
+              fontSize: DS.fs.md,
               fontWeight: 700,
               color: rateColor(rate),
             }}
@@ -272,7 +263,7 @@ export function ReadingsPanel({
       )}
 
       {rate === null && measured > 0 && (
-        <div style={{ fontSize: 12, color: DS.text3, marginBottom: 12 }}>
+        <div style={{ fontSize: DS.fs.md, color: DS.text3, marginBottom: 12 }}>
           {t("rate.insufficient")}
         </div>
       )}
@@ -281,7 +272,7 @@ export function ReadingsPanel({
         <div
           style={{
             textAlign: "center",
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text3,
             padding: "12px 0",
           }}
@@ -294,7 +285,7 @@ export function ReadingsPanel({
             style={{
               width: "100%",
               borderCollapse: "collapse",
-              fontSize: 12,
+              fontSize: DS.fs.md,
             }}
           >
             <thead>
@@ -307,7 +298,7 @@ export function ReadingsPanel({
                         textAlign: "left",
                         padding: "6px 8px",
                         color: DS.text3,
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         textTransform: "uppercase",
                       }}
                     >
@@ -375,13 +366,15 @@ export function ReadingsPanel({
                     <td style={{ padding: "7px 8px" }}>
                       {canDelete && (
                         <button
+                          type="button"
                           onClick={() => void remove(r.id)}
+                          aria-label={t("readings.delete")}
                           style={{
                             background: "none",
                             border: "none",
                             color: DS.red,
                             cursor: "pointer",
-                            fontSize: 14,
+                            fontSize: DS.fs.lg,
                           }}
                         >
                           ×

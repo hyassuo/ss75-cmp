@@ -5,7 +5,7 @@ export default function NotFound() {
   return (
     <div
       style={{
-        fontFamily: "var(--font-ibm-plex-sans), system-ui, sans-serif",
+        fontFamily: DS.sans,
         background: DS.bg,
         color: DS.text,
         display: "flex",
@@ -18,15 +18,15 @@ export default function NotFound() {
       <div style={{ textAlign: "center" }}>
         <div
           style={{
-            fontSize: 48,
+            fontSize: DS.fs.display,
             fontWeight: 800,
-            fontFamily: "var(--font-ibm-plex-mono), monospace",
+            fontFamily: DS.mono,
             color: DS.blu,
           }}
         >
           404
         </div>
-        <div style={{ fontSize: 14, color: DS.text3, margin: "8px 0 20px" }}>
+        <div style={{ fontSize: DS.fs.lg, color: DS.text3, margin: "8px 0 20px" }}>
           Page not found
         </div>
         <Link
@@ -37,7 +37,7 @@ export default function NotFound() {
             borderRadius: 8,
             padding: "10px 22px",
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: DS.fs.base,
             textDecoration: "none",
           }}
         >

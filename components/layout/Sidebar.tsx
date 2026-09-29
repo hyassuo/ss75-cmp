@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useNewItem } from "@/lib/context/NewItemContext";
@@ -114,7 +115,7 @@ export function Sidebar() {
       ? "3px solid " + DS.sbActTxt
       : "3px solid transparent",
     color: active ? DS.sbActTxt : DS.sbTxt,
-    fontSize: 12,
+    fontSize: DS.fs.md,
     fontWeight: active ? 600 : 400,
     fontFamily: DS.sans,
     transition: DS.transition,
@@ -165,7 +166,7 @@ export function Sidebar() {
               aria-current={active ? "page" : undefined}
               style={{ ...itemStyle(active), minHeight: 44 }}
             >
-              <span style={{ fontSize: 14, opacity: 0.85 }}>{nav.icon}</span>
+              <span style={{ fontSize: DS.fs.lg, opacity: 0.85 }}>{nav.icon}</span>
               {!collapsed && <span>{label}</span>}
             </button>
           );
@@ -184,7 +185,7 @@ export function Sidebar() {
                 aria-current={active ? "page" : undefined}
                 style={{ ...itemStyle(active), minHeight: 44 }}
               >
-                <span style={{ fontSize: 14, opacity: 0.85 }}>{n.icon}</span>
+                <span style={{ fontSize: DS.fs.lg, opacity: 0.85 }}>{n.icon}</span>
                 {!collapsed && <span>{label}</span>}
               </Link>
             );
@@ -198,7 +199,8 @@ export function Sidebar() {
               paddingTop: 12,
             }}
           >
-            <button
+            <Button
+              fullWidth
               onClick={() => {
                 closeDrawer();
                 openNewItem();
@@ -206,23 +208,13 @@ export function Sidebar() {
               title={collapsed ? t("nav.newItem") : ""}
               aria-label={collapsed ? t("nav.newItem") : undefined}
               style={{
-                display: "block",
-                textAlign: "center",
-                background: DS.blu,
-                color: DS.onAccent,
-                border: "none",
-                borderRadius: 6,
-                padding: "9px 0",
-                fontWeight: 700,
-                fontSize: collapsed ? 14 : 12,
-                fontFamily: DS.sans,
+                padding: "8px 0",
+                fontSize: collapsed ? DS.fs.lg : DS.fs.md,
                 whiteSpace: "nowrap",
-                width: "100%",
-                cursor: "pointer",
               }}
             >
               {collapsed ? "+" : t("nav.newItem")}
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -251,7 +243,7 @@ export function Sidebar() {
             width: collapsed ? 28 : "auto",
             height: collapsed ? 28 : "auto",
             padding: collapsed ? 0 : "4px 12px",
-            fontSize: collapsed ? 12 : 10,
+            fontSize: collapsed ? DS.fs.md : DS.fs.xs,
             fontWeight: 700,
             fontFamily: DS.mono,
             color: roleColor,
@@ -269,7 +261,7 @@ export function Sidebar() {
         {!collapsed && (
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.sbTxt2,
               textAlign: "center",
               fontFamily: DS.sans,
@@ -289,7 +281,7 @@ export function Sidebar() {
             padding: collapsed ? 0 : "6px 10px",
             cursor: "pointer",
             color: DS.sbTxt2,
-            fontSize: collapsed ? 14 : 11,
+            fontSize: collapsed ? DS.fs.lg : DS.fs.sm,
             fontFamily: DS.sans,
             transition: DS.transition,
             width: collapsed ? 28 : "100%",

@@ -1,6 +1,7 @@
 "use client";
 
 import { DS, tint } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 import type { AIAnalysis } from "@/lib/types/domain";
 import { useLang } from "@/lib/context/LangContext";
 
@@ -27,7 +28,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
     border: "1px solid " + border,
   });
   const cap = {
-    fontSize: 9,
+    fontSize: DS.fs.xs,
     color: DS.text3,
     textTransform: "uppercase" as const,
     letterSpacing: 1,
@@ -46,7 +47,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
     >
       <div
         style={{
-          fontSize: 10,
+          fontSize: DS.fs.xs,
           color: DS.grn,
           fontWeight: 800,
           textTransform: "uppercase",
@@ -59,12 +60,12 @@ export function AIResultCard({ result: r, onApply }: Props) {
       {r.componentName && (
         <div
           style={{
-            fontSize: 13,
+            fontSize: DS.fs.base,
             color: DS.text,
             marginBottom: 8,
           }}
         >
-          <span style={{ color: DS.text3, fontSize: 10, marginRight: 6 }}>
+          <span style={{ color: DS.text3, fontSize: DS.fs.xs, marginRight: 6 }}>
             COMPONENT
           </span>
           <span style={{ fontWeight: 700 }}>{r.componentName}</span>
@@ -76,7 +77,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
       >
         <div style={tile(DS.bord)}>
           <div style={cap}>{t("ai.type")}</div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: DS.text }}>
+          <div style={{ fontSize: DS.fs.md, fontWeight: 700, color: DS.text }}>
             {r.corrosionType}
           </div>
         </div>
@@ -84,7 +85,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
           <div style={cap}>{t("ai.prob")}</div>
           <div
             style={{
-              fontSize: 16,
+              fontSize: DS.fs.xl,
               fontWeight: 800,
               color: DS.text,
               fontFamily: "monospace",
@@ -97,7 +98,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
           <div style={cap}>{t("ai.cons")}</div>
           <div
             style={{
-              fontSize: 16,
+              fontSize: DS.fs.xl,
               fontWeight: 800,
               color: DS.text,
               fontFamily: "monospace",
@@ -108,7 +109,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
         </div>
         <div style={tile(tint(actClr, 31))}>
           <div style={cap}>{t("ai.action")}</div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: actClr }}>
+          <div style={{ fontSize: DS.fs.sm, fontWeight: 700, color: actClr }}>
             {r.immediateAction}
           </div>
         </div>
@@ -121,14 +122,14 @@ export function AIResultCard({ result: r, onApply }: Props) {
           <div style={cap}>{t("ai.area")}</div>
           <div
             style={{
-              fontSize: 18,
+              fontSize: DS.fs.h3,
               fontWeight: 800,
               color: DS.text,
               fontFamily: "monospace",
             }}
           >
             {r.affectedAreaPct}
-            <span style={{ fontSize: 11, marginLeft: 2 }}>%</span>
+            <span style={{ fontSize: DS.fs.sm, marginLeft: 2 }}>%</span>
           </div>
         </div>
         {r.pitDepthEstMM > 0 && (
@@ -136,21 +137,21 @@ export function AIResultCard({ result: r, onApply }: Props) {
             <div style={cap}>{t("ai.pitDepth")}</div>
             <div
               style={{
-                fontSize: 18,
+                fontSize: DS.fs.h3,
                 fontWeight: 800,
                 color: DS.ora,
                 fontFamily: "monospace",
               }}
             >
               {r.pitDepthEstMM}
-              <span style={{ fontSize: 11, marginLeft: 2 }}>mm</span>
+              <span style={{ fontSize: DS.fs.sm, marginLeft: 2 }}>mm</span>
             </div>
           </div>
         )}
       </div>
       <div
         style={{
-          fontSize: 12,
+          fontSize: DS.fs.md,
           color: DS.text2,
           lineHeight: 1.6,
           marginBottom: 6,
@@ -158,31 +159,18 @@ export function AIResultCard({ result: r, onApply }: Props) {
       >
         {r.findings}
       </div>
-      <div style={{ fontSize: 12, color: DS.blu, fontWeight: 600 }}>
+      <div style={{ fontSize: DS.fs.md, color: DS.blu, fontWeight: 600 }}>
         {r.recommendation}
       </div>
       {r.inspectionFrequency && (
-        <div style={{ fontSize: 11, color: DS.text3, marginTop: 6 }}>
+        <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginTop: 6 }}>
           <span style={{ fontWeight: 700 }}>Suggested frequency:</span>{" "}
           {r.inspectionFrequency}
         </div>
       )}
-      <button
-        onClick={onApply}
-        style={{
-          marginTop: 10,
-          background: DS.blu,
-          color: DS.onAccent,
-          border: "none",
-          borderRadius: 7,
-          padding: "7px 16px",
-          fontSize: 12,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
+      <Button size="sm" onClick={onApply} style={{ marginTop: 10 }}>
         Apply to Item Fields
-      </button>
+      </Button>
     </div>
   );
 }

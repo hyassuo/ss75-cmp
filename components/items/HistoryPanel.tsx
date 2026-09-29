@@ -31,12 +31,12 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
 
   if (loading) {
     return (
-      <div style={{ fontSize: 11, color: DS.text3 }}>Loading history…</div>
+      <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>Loading history…</div>
     );
   }
   if (!rows.length) {
     return (
-      <div style={{ fontSize: 12, color: DS.text3 }}>
+      <div style={{ fontSize: DS.fs.md, color: DS.text3 }}>
         No history recorded yet.
       </div>
     );
@@ -59,7 +59,7 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
           <div
             style={{
               fontFamily: "monospace",
-              fontSize: 10,
+              fontSize: DS.fs.xs,
               color: DS.text3,
               flexShrink: 0,
               paddingTop: 2,
@@ -71,7 +71,7 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
           <div>
             <div
               style={{
-                fontSize: 12,
+                fontSize: DS.fs.md,
                 fontWeight: 700,
                 color: DS.text2,
                 marginBottom: 2,
@@ -81,15 +81,15 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
               {h.field_changed ? ` · ${h.field_changed}` : ""}
             </div>
             {(h.prev_value || h.new_value) && (
-              <div style={{ fontSize: 11, color: DS.text3 }}>
+              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
                 {h.prev_value ?? "—"} → {h.new_value ?? "—"}
               </div>
             )}
             {h.note && (
-              <div style={{ fontSize: 11, color: DS.text3 }}>{h.note}</div>
+              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{h.note}</div>
             )}
             {h.by_user_email && (
-              <div style={{ fontSize: 10, color: DS.text3, marginTop: 2 }}>
+              <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 2 }}>
                 by {h.by_user_email}
               </div>
             )}

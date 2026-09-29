@@ -5,6 +5,7 @@ import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
+import { Button } from "@/components/ui/Button";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -35,10 +36,10 @@ export function Dashboard() {
       <div
         style={{ ...S.card, textAlign: "center", padding: "48px 24px" }}
       >
-        <div style={{ fontSize: 32, marginBottom: 12 }}>⊕</div>
+        <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>⊕</div>
         <div
           style={{
-            fontSize: 15,
+            fontSize: DS.fs.xl,
             color: DS.text3,
             fontWeight: 600,
             marginBottom: 6,
@@ -46,7 +47,7 @@ export function Dashboard() {
         >
           {t("dash.noItems")}
         </div>
-        <div style={{ fontSize: 13, color: DS.text3, marginBottom: 20 }}>
+        <div style={{ fontSize: DS.fs.base, color: DS.text3, marginBottom: 20 }}>
           {t("dash.noItemsCta")}
         </div>
         <div
@@ -58,30 +59,20 @@ export function Dashboard() {
           }}
         >
           {visibleZones.map((z) => (
-            <button
+            <Button
               key={z.zid}
+              variant="secondary"
+              size="sm"
               onClick={() => setTab("zones")}
-              style={{
-                background: DS.sur,
-                border: "1px solid " + DS.bord,
-                borderRadius: 8,
-                padding: "8px 14px",
-                cursor: "pointer",
-                fontSize: 12,
-                color: DS.blu,
-                fontWeight: 600,
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-              }}
+              style={{ color: DS.blu, gap: 6 }}
             >
               <span
-                style={{ fontFamily: DS.mono, fontSize: 10, color: DS.text3 }}
+                style={{ fontFamily: DS.mono, fontSize: DS.fs.xs, color: DS.text3 }}
               >
                 {z.zid}
               </span>
               {z.name}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -185,7 +176,7 @@ export function Dashboard() {
             <div>
               <div
                 style={{
-                  fontSize: 9,
+                  fontSize: DS.fs.xs,
                   color: DS.text3,
                   textTransform: "uppercase",
                   letterSpacing: 1.2,
@@ -196,7 +187,7 @@ export function Dashboard() {
               </div>
               <div
                 style={{
-                  fontSize: 26,
+                  fontSize: DS.fs.h1,
                   fontWeight: 800,
                   color: k.color,
                   fontFamily: "monospace",
@@ -206,7 +197,7 @@ export function Dashboard() {
                 {k.v}
               </div>
               <div
-                style={{ fontSize: 10, color: DS.text3, marginTop: 3 }}
+                style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 3 }}
               >
                 {k.sub}
               </div>
@@ -218,7 +209,7 @@ export function Dashboard() {
       <div style={{ ...S.card, marginBottom: 16 }}>
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -227,7 +218,7 @@ export function Dashboard() {
           }}
         >
           {t("dash.byZone")}{" "}
-          <span style={{ fontSize: 9, fontWeight: 400 }}>
+          <span style={{ fontSize: DS.fs.xs, fontWeight: 400 }}>
             {t("dash.weightedNote")}
           </span>
         </div>
@@ -256,7 +247,7 @@ export function Dashboard() {
                   <span
                     style={{
                       fontFamily: DS.mono,
-                      fontSize: 10,
+                      fontSize: DS.fs.xs,
                       color: DS.blu,
                       fontWeight: 700,
                       flexShrink: 0,
@@ -266,7 +257,7 @@ export function Dashboard() {
                   </span>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: DS.fs.md,
                       color: DS.text,
                       fontWeight: 600,
                       flex: 1,
@@ -280,7 +271,7 @@ export function Dashboard() {
                   <span
                     style={{
                       fontFamily: DS.mono,
-                      fontSize: 12,
+                      fontSize: DS.fs.md,
                       color: c,
                       fontWeight: 800,
                       flexShrink: 0,
@@ -290,7 +281,7 @@ export function Dashboard() {
                   </span>
                   <Badge text={tIntegrity(integrityLabel(sc))} color={c} sm />
                   <span
-                    style={{ fontSize: 10, color: DS.text3, flexShrink: 0 }}
+                    style={{ fontSize: DS.fs.xs, color: DS.text3, flexShrink: 0 }}
                   >
                     {items.length} {items.length !== 1 ? t("dash.items") : t("dash.item")}
                   </span>
@@ -338,7 +329,7 @@ export function Dashboard() {
                 <div>
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: DS.fs.sm,
                       color: PRIORITY_COLOR[p],
                       fontWeight: 700,
                       marginBottom: 2,
@@ -348,7 +339,7 @@ export function Dashboard() {
                   </div>
                   <div
                     style={{
-                      fontSize: 22,
+                      fontSize: DS.fs.h2,
                       fontWeight: 800,
                       color: DS.text,
                       fontFamily: "monospace",
@@ -358,7 +349,7 @@ export function Dashboard() {
                     {its.length}
                     <span
                       style={{
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         color: DS.text3,
                         marginLeft: 4,
                       }}
@@ -366,7 +357,7 @@ export function Dashboard() {
                       {t("dash.items")}
                     </span>
                   </div>
-                  <div style={{ fontSize: 10, color: DS.text3 }}>
+                  <div style={{ fontSize: DS.fs.xs, color: DS.text3 }}>
                     {its.filter((i) => i.sece).length} SECE
                   </div>
                 </div>

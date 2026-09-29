@@ -21,7 +21,7 @@ export function Gauge({ score, size = 52 }: GaugeProps) {
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: 9, color: DS.text3 }}>N/A</span>
+        <span style={{ fontSize: DS.fs.xs, color: DS.text3 }}>N/A</span>
       </div>
     );
   }
@@ -69,7 +69,7 @@ export function Gauge({ score, size = 52 }: GaugeProps) {
       >
         <span
           style={{
-            fontSize: size > 48 ? 13 : 10,
+            fontSize: size > 48 ? DS.fs.base : DS.fs.xs,
             fontWeight: 800,
             color: c,
             fontFamily: "monospace",

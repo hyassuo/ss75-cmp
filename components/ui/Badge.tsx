@@ -1,4 +1,4 @@
-import { tint } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 interface BadgeProps {
   text: string;
   color: string;
@@ -14,7 +14,7 @@ export function Badge({ text, color, sm }: BadgeProps) {
         border: "1px solid " + tint(color, 27),
         borderRadius: 5,
         padding: sm ? "2px 7px" : "3px 10px",
-        fontSize: sm ? 10 : 11,
+        fontSize: sm ? DS.fs.xs : DS.fs.sm,
         fontWeight: 700,
         whiteSpace: "nowrap",
       }}

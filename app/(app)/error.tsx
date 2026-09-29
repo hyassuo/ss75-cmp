@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
+import { Button } from "@/components/ui/Button";
 
 export default function AppError({
   error,
@@ -30,10 +31,10 @@ export default function AppError({
         borderLeft: "3px solid " + DS.red,
       }}
     >
-      <div style={{ fontSize: 32, marginBottom: 12 }}>⚠</div>
+      <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>⚠</div>
       <div
         style={{
-          fontSize: 15,
+          fontSize: DS.fs.xl,
           color: DS.text,
           fontWeight: 700,
           marginBottom: 6,
@@ -43,7 +44,7 @@ export default function AppError({
       </div>
       <div
         style={{
-          fontSize: 13,
+          fontSize: DS.fs.base,
           color: DS.text3,
           marginBottom: 20,
           maxWidth: 480,
@@ -57,21 +58,9 @@ export default function AppError({
           : "An unexpected error occurred while loading this view."}
         {!chunk && error.digest ? ` (ref ${error.digest})` : ""}
       </div>
-      <button
-        onClick={chunk ? () => window.location.reload() : reset}
-        style={{
-          background: DS.blu,
-          color: DS.onAccent,
-          border: "none",
-          borderRadius: 8,
-          padding: "10px 22px",
-          fontWeight: 700,
-          cursor: "pointer",
-          fontSize: 13,
-        }}
-      >
+      <Button size="lg" onClick={chunk ? () => window.location.reload() : reset}>
         {chunk ? "Reload" : "Try again"}
-      </button>
+      </Button>
     </div>
   );
 }
