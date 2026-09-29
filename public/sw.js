@@ -5,7 +5,8 @@
  *    per-user (auth) and must always be fresh — they are NEVER cached.
  *  - Hashed build assets (/_next/static) + static icons: cache-first —
  *    content-hashed filenames make them immutable.
- *  - /api/* and cross-origin (Supabase, Gemini) requests are untouched.
+ *  - /api/* and cross-origin (Supabase, Gemini) requests are untouched —
+ *    evidence photos (Supabase Storage) never land in Cache Storage.
  *
  * Bump VERSION to invalidate every cache on the next deploy of this file.
  */
