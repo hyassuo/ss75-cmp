@@ -67,7 +67,8 @@ export function useEvidenceFiles(files: FileRef[]) {
     void store.load(path).then((blob) => {
       if (!win || win.closed) return;
       if (blob) showBlobInTab(win, blob);
-      else win.close(); // the panel shows the error and a retry
+      // Failed or blocked: the panel says why (and offers a retry if any).
+      else win.close();
     });
   }, []);
 

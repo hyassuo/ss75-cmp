@@ -391,8 +391,12 @@ export function ExportTab() {
       while (next < jobs.length) {
         const job = jobs[next++];
         try {
+          // no-store: the photo must not stay in the browser's HTTP cache
+          // (on disk, after sign-out) — only the PDF takes it out (C7).
           const dl = Promise.resolve(
-            supabase.storage.from("evidence-photos").download(job.file_path)
+            supabase.storage
+              .from("evidence-photos")
+              .download(job.file_path, undefined, { cache: "no-store" })
           );
           const { data: blob, error } = await withTimeout(
             dl,

@@ -635,6 +635,14 @@ function EvidenceFile({
   onRetry: () => void;
 }) {
   const { t } = useLang();
+  // Never shown nor opened (see viewableBlob); retrying can't change that.
+  if (state?.status === "blocked") {
+    return (
+      <div role="status" style={{ fontSize: DS.fs.sm, color: DS.red }}>
+        {t("evidence.fileBlocked", name)}
+      </div>
+    );
+  }
   if (state?.status === "error") {
     return (
       <div
@@ -644,7 +652,13 @@ function EvidenceFile({
         <span style={{ fontSize: DS.fs.sm, color: DS.red }}>
           {t(image ? "evidence.photoFailed" : "evidence.fileFailed", name)}
         </span>
-        <Button variant="secondary" size="sm" onClick={onRetry}>
+        {/* Named after its file: several failed photos each have one. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRetry}
+          aria-label={`${t("common.tryAgain")}: ${name}`}
+        >
           {t("common.tryAgain")}
         </Button>
       </div>

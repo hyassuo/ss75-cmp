@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EvidenceFileStore, type FileState } from "@/lib/utils/evidenceFiles";
+import {
+  EvidenceFileStore,
+  OPENED_TAB_URL_TTL_MS,
+  showBlobInTab,
+  viewableBlob,
+  type FileState,
+} from "@/lib/utils/evidenceFiles";
 
 // A downloader whose calls the test resolves or rejects by hand.
 function manual() {
@@ -113,5 +119,81 @@ describe("EvidenceFileStore", () => {
     calls.get("a")!.resolve(blob("a2"));
     expect(await p).toBeInstanceOf(Blob);
     expect(last.a.status).toBe("ready");
+  });
+
+  it("never makes a URL for a file stored as SVG, HTML or an unknown type", async () => {
+    const { calls, download } = manual();
+    let last: Record<string, FileState> = {};
+    const store = new EvidenceFileStore(download, (s) => (last = s));
+    const types = { svg: "image/svg+xml", html: "text/html", none: "", xml: "application/xhtml+xml" };
+    store.sync(Object.keys(types).map((path) => ({ path, eager: true })));
+    for (const [path, type] of Object.entries(types)) {
+      calls.get(path)!.resolve(new Blob(["<svg onload=alert(1)>"], { type }));
+    }
+    await flush();
+    for (const path of Object.keys(types)) expect(last[path]).toEqual({ status: "blocked" });
+    expect(created).toEqual([]);
+    // Opening it: no second download, nothing to show.
+    calls.clear();
+    expect(await store.load("svg")).toBeNull();
+    expect(calls.size).toBe(0);
+  });
+
+  it("shows images and PDFs under their allow-listed type only", async () => {
+    const { calls, download } = manual();
+    const store = new EvidenceFileStore(download, () => {});
+    const p = store.load("a.pdf");
+    calls.get("a.pdf")!.resolve(new Blob(["%PDF-"], { type: "application/pdf;charset=binary" }));
+    expect((await p)?.type).toBe("application/pdf");
+    for (const t of ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"]) {
+      expect(viewableBlob(new Blob(["x"], { type: t }))?.type).toBe(t);
+    }
+    for (const t of ["image/svg+xml", "text/html", "text/plain", "application/octet-stream", ""]) {
+      expect(viewableBlob(new Blob(["x"], { type: t }))).toBeNull();
+    }
+  });
+
+  it("gives up on a download that hangs: error + retry, and its slot moves on", async () => {
+    vi.useFakeTimers();
+    try {
+      const { calls, download } = manual();
+      let last: Record<string, FileState> = {};
+      const store = new EvidenceFileStore(download, (s) => (last = s), 1, 5_000);
+      store.sync(["a", "b"].map((path) => ({ path, eager: true })));
+      const a = calls.get("a")!;
+      // The real downloader rejects when its signal aborts.
+      a.signal.addEventListener("abort", () => a.reject(new Error("aborted")));
+      expect(calls.has("b")).toBe(false);
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(last.a).toEqual({ status: "loading" });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(a.signal.aborted).toBe(true);
+      expect(last.a).toEqual({ status: "error" });
+      expect(calls.has("b")).toBe(true);
+      // A download that completes in time clears its timer.
+      calls.get("b")!.resolve(blob("b"));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(calls.get("b")!.signal.aborted).toBe(false);
+      expect(last.b.status).toBe("ready");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("showBlobInTab: its own URL, revoked later; an SVG is never shown", () => {
+    vi.useFakeTimers();
+    try {
+      const win = { location: { href: "" }, close: vi.fn() } as unknown as Window;
+      showBlobInTab(win, new Blob(["<svg/>"], { type: "image/svg+xml" }));
+      expect(win.close).toHaveBeenCalled();
+      expect(win.location.href).toBe("");
+      expect(created).toEqual([]);
+      showBlobInTab(win, blob("a"));
+      expect(win.location.href).toBe(created[0]);
+      vi.advanceTimersByTime(OPENED_TAB_URL_TTL_MS);
+      expect(revoked).toEqual([created[0]]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

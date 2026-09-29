@@ -237,10 +237,15 @@ opened, its photos are downloaded with the user's session
 that tab's memory; closing the item revokes them. A photo opened in a new
 tab gets its own `blob:` URL, revoked a minute later (the tab keeps
 showing it; a reload finds nothing). PDF attachments download on the first
-click. A file that fails to load (offline, storage error) shows a message
-and a retry of its own. The service worker never touches Supabase
-requests, so nothing lands in Cache Storage, and the CSP's `img-src` does
-not list the Supabase origin at all. Taking photos out of the app is an
+click. A file that fails to load (offline, storage error, no answer within
+2 minutes) shows a message and a retry of its own. Only raster images
+(JPEG, PNG, WebP, GIF, AVIF, HEIC) and PDFs are ever shown or opened, under
+that type: a file stored as anything else (SVG, HTML…) gets no URL at all
+and reads "file type not allowed" — a `blob:` SVG/HTML document would run
+in the app's own origin. The PDF export downloads with `no-store` too, so
+no photo stays in the browser's HTTP cache. The service worker never
+touches Supabase requests, so nothing lands in Cache Storage, and the
+CSP's `img-src` does not list the Supabase origin at all. Taking photos out of the app is an
 explicit action: the PDF export embeds them (with a note when some could
 not be loaded). CSV/XLSX exports list file names only, never a link.
 

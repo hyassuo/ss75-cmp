@@ -10,7 +10,39 @@
 export type FileState =
   | { status: "loading" }
   | { status: "ready"; url: string }
-  | { status: "error" };
+  | { status: "error" }
+  // Stored with a type the app never shows (SVG, HTML, unknown…).
+  | { status: "blocked" };
+
+// The only types a file is shown as — raster images and PDF. The type comes
+// from the storage response, i.e. from whoever uploaded the file: a
+// blob: URL of an SVG or HTML file would be a document in the app's own
+// origin (script, a fake sign-in form) when opened in a tab, so anything
+// else is never turned into a URL. The bucket's allowed_mime_types refuses
+// such uploads too; this does not rely on it.
+const VIEWABLE = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/avif",
+  "image/heic",
+  "image/heif",
+  "application/pdf",
+]);
+
+/** `blob` re-typed to its allow-listed type, or null if it has none. */
+export function viewableBlob(blob: Blob): Blob | null {
+  const type = blob.type.split(";")[0].trim().toLowerCase();
+  if (!VIEWABLE.has(type)) return null;
+  return blob.type === type ? blob : new Blob([blob], { type });
+}
+
+// A download that hangs (a dead satellite link can keep a request open
+// indefinitely) is aborted and shown as failed, with its retry, instead
+// of spinning forever and holding one of the parallel slots. Generous: a
+// 10 MB PDF (the bucket limit) at ~1 Mbit/s takes about 80 s.
+export const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export interface FileRef {
   path: string;
@@ -22,7 +54,7 @@ export interface FileRef {
 export type Downloader = (path: string, signal: AbortSignal) => Promise<Blob>;
 
 interface Entry {
-  status: "queued" | "loading" | "ready" | "error";
+  status: "queued" | "loading" | "ready" | "error" | "blocked";
   blob?: Blob;
   url?: string;
   ctrl: AbortController;
@@ -41,7 +73,8 @@ export class EvidenceFileStore {
     private onChange: (files: Record<string, FileState>) => void,
     // A satellite link does better with a few parallel downloads than
     // with 30 at once.
-    private limit = 4
+    private limit = 4,
+    private timeoutMs = DOWNLOAD_TIMEOUT_MS
   ) {}
 
   /** The files of the open item; drops (and revokes) the ones that left. */
@@ -61,7 +94,8 @@ export class EvidenceFileStore {
   /**
    * The file's bytes: the copy in memory, the download in flight, or a new
    * download (first open of an attachment, or a retry after an error).
-   * null when it fails or the store lets go of the file meanwhile.
+   * null when it fails, is blocked, or the store lets go of the file
+   * meanwhile.
    */
   load(path: string): Promise<Blob | null> {
     if (this.disposed) return Promise.resolve(null);
@@ -105,11 +139,19 @@ export class EvidenceFileStore {
       if (!e || e.status !== "queued") continue;
       e.status = "loading";
       this.active += 1;
+      const timer = setTimeout(() => e.ctrl.abort(), this.timeoutMs);
       this.download(path, e.ctrl.signal)
         .then(
-          (blob) => {
+          (raw) => {
             // Dropped meanwhile: never create a URL nobody would revoke.
             if (this.entries.get(path) !== e) return;
+            const blob = viewableBlob(raw);
+            if (!blob) {
+              e.status = "blocked";
+              this.emit();
+              e.settle(null);
+              return;
+            }
             e.blob = blob;
             e.url = URL.createObjectURL(blob);
             e.status = "ready";
@@ -124,6 +166,7 @@ export class EvidenceFileStore {
           }
         )
         .finally(() => {
+          clearTimeout(timer);
           // Queued and loading look the same: nothing new to report.
           this.active -= 1;
           this.pump();
@@ -138,8 +181,8 @@ export class EvidenceFileStore {
       out[path] =
         e.status === "ready"
           ? { status: "ready", url: e.url as string }
-          : e.status === "error"
-            ? { status: "error" }
+          : e.status === "error" || e.status === "blocked"
+            ? { status: e.status }
             : { status: "loading" };
     }
     this.onChange(out);
@@ -157,7 +200,14 @@ export const OPENED_TAB_URL_TTL_MS = 60_000;
  * which closing the item revokes while the tab may still be loading.
  */
 export function showBlobInTab(win: Window, blob: Blob) {
-  const url = URL.createObjectURL(blob);
+  // The store only hands out allow-listed blobs; checked again here so no
+  // caller can turn an SVG/HTML file into a document of this origin.
+  const safe = viewableBlob(blob);
+  if (!safe) {
+    win.close();
+    return;
+  }
+  const url = URL.createObjectURL(safe);
   win.location.href = url;
   setTimeout(() => URL.revokeObjectURL(url), OPENED_TAB_URL_TTL_MS);
 }

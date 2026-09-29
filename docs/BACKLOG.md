@@ -1,6 +1,6 @@
 # Backlog — SS-75 CMP
 
-Estado em 29/09/2026, após a v1.21.0 (PR #30). Reúne o que ficou em aberto
+Estado em 29/09/2026, após a v1.21.1. Reúne o que ficou em aberto
 da revisão completa (segurança + UI/UX) e das auditorias das etapas 1–4.
 Cada item foi conferido no código desta versão.
 
@@ -72,7 +72,7 @@ _(nenhum item aberto)_
 
 | # | Item | Como ficou |
 |---|------|-----------|
-| C1 | Reset de senha | O e-mail do "Reset PW" leva a `/auth/reset`, onde o usuário define a nova senha (mín. 8 caracteres). Login ganhou "Esqueci minha senha". Depende de A6 e A7 para os e-mails chegarem. |
+| C1 | Reset de senha | O e-mail do "Reset PW" leva a `/auth/reset`, onde o usuário define a nova senha (mín. 8 caracteres). Login ganhou "Esqueci minha senha". Depende de A6 para os e-mails chegarem. |
 | C2 | Sessões de usuário desativado | Desativar bloqueia a conta de autenticação (sem renovar sessão nem entrar de novo); reativar libera. |
 | D1 | Taxa de corrosão | Só com ≥ 2 medições reais no mesmo ponto e ≥ 90 dias entre elas; por ponto vale a pior entre longo e curto prazo, e o item assume o pior ponto. Sem isso aparece "dados insuficientes", sem alerta. |
 | C8 | ~~Logout de usuário inativo é global~~ | Descartado: para uma conta desativada, encerrar as sessões em todos os aparelhos é o comportamento certo. |
@@ -94,6 +94,6 @@ _(nenhum item aberto)_
 | A12 | Funções da Vercel perto do Supabase | Supabase em `us-west-2` (Oregon); funções movidas de `iad1` (Washington) para `pdx1` (Portland) em 29/09/2026 — cada ida e volta servidor↔Supabase caiu de ≈ 70 ms para poucos ms (2 por página; 1 com A11). |
 | A1 | Cadastro público | Cadastro público desativado e confirmação de e-mail exigida no Supabase. |
 | A7 | URL de redefinição de senha | Redirect URL `/auth/reset` liberada no Supabase. |
-| C7 | Fotos só dentro da sessão | Sem links compartilháveis (nem assinados nem públicos): cada foto é baixada com a sessão do usuário e mostrada da memória da aba (`blob:`), descartada ao fechar o item; nada no cache do navegador nem no service worker; o CSP não aceita imagem vinda do Supabase. Tirar fotos do app = exportar o PDF. |
+| C7 | Fotos só dentro da sessão | Sem links compartilháveis (nem assinados nem públicos): cada foto é baixada com a sessão do usuário e mostrada da memória da aba (`blob:`), descartada ao fechar o item; nada no cache do navegador (nem da exportação) nem no service worker; só imagens e PDF são exibidos — um arquivo gravado como SVG/HTML aparece como "tipo de arquivo não permitido"; download sem resposta desiste em 2 min, com "Tentar novamente"; o CSP não aceita imagem vinda do Supabase. Tirar fotos do app = exportar o PDF. |
 | A11 | Chaves JWT assimétricas | Chave atual ECC (P-256); o segredo HS256 antigo fica como *previous key* — não revogar enquanto o app usar as chaves anon/service_role legadas. O servidor confere o login localmente (`getClaims()`). |
 | A9 | ~~Variáveis do Supabase nos previews~~ | Descartado por ora: sem vaga para um projeto Supabase de teste no plano gratuito; os previews ficam só como verificação de build e o funcionamento é coberto pelos testes E2E do CI. Rever se o plano mudar (Pro permite branching). |
