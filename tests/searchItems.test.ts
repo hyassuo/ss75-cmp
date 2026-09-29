@@ -47,6 +47,15 @@ describe("searchItems", () => {
     expect(ids(searchItems(items, "z03"))).toEqual(["c"]);
   });
 
+  it("ignores punctuation in codes", () => {
+    expect(ids(searchItems(items, "313a1"))).toEqual(["b"]);
+    expect(ids(searchItems(items, "wo9981"))).toEqual(["e"]);
+  });
+
+  it("ignores anything past 100 characters", () => {
+    expect(ids(searchItems(items, "crane" + " ".repeat(200) + "zzz", zoneName))).toEqual(["a", "e", "d"]);
+  });
+
   it("caps the number of results", () => {
     const many = Array.from({ length: 50 }, (_, n) => makeItem({ id: `m${n}`, name: `Valve ${n}` }));
     expect(searchItems(many, "valve")).toHaveLength(20);

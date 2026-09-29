@@ -22,6 +22,8 @@ function cellLevel(p: number, c: number): Level {
 
 // Colour plus a shape per level: the four colours are close in brightness,
 // so colour-blind users (and a phone in direct sunlight) read the shape.
+// These are RPN bands of the matrix (risk.level.*), not the item Priority
+// (calcPriority also weighs SECE and due dates), hence their own names.
 const LEVEL: Record<Level, { color: string; glyph: string; range: string }> = {
   Low: { color: DS.grn, glyph: "\u25CB", range: "RPN \u2264 3" }, // white circle
   Medium: { color: DS.yel, glyph: "\u25C7", range: "RPN 4\u20137" }, // white diamond
@@ -278,7 +280,7 @@ export function RiskMatrix() {
                           }}
                         >
                           <div
-                            title={`${tPriority(level)} · RPN ${p * c}`}
+                            title={`${t(`risk.level.${level}`)} · RPN ${p * c}`}
                             style={{
                               fontFamily: "monospace",
                               fontSize: 10,
@@ -290,8 +292,10 @@ export function RiskMatrix() {
                             }}
                           >
                             <span>{p * c}</span>
-                            <span aria-hidden="true">{LEVEL[level].glyph}</span>
-                            <span className="sr-only">{tPriority(level)}</span>
+                            <span aria-hidden="true" style={{ fontSize: 12, lineHeight: 1 }}>
+                              {LEVEL[level].glyph}
+                            </span>
+                            <span className="sr-only">{t(`risk.level.${level}`)}</span>
                           </div>
                           {its.map((it) => (
                             <div
@@ -345,7 +349,7 @@ export function RiskMatrix() {
                 {LEVEL[lv].glyph}
               </span>
               <span style={{ fontSize: 11, color: DS.text3 }}>
-                {tPriority(lv)} ({LEVEL[lv].range})
+                {t(`risk.level.${lv}`)} ({LEVEL[lv].range})
               </span>
             </div>
           ))}

@@ -221,6 +221,11 @@ body {
     width: 100%;
   }
 }
+@media (pointer: coarse) {
+  .tb-search input {
+    height: 44px !important;
+  }
+}
 .tb-pills::-webkit-scrollbar {
   display: none;
 }

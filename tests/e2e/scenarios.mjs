@@ -2552,7 +2552,8 @@ async function main() {
       listbox: lb ? { role: lb.getAttribute("role"), label: lb.getAttribute("aria-label"),
         childRoles: [...lb.children].map((ch) => ch.getAttribute("role")) } : null,
       opts: opts.map((o) => ({ id: o.id, sel: o.getAttribute("aria-selected"), text: o.innerText.replace(/\s+/g, " ").trim() })),
-      status: lb?.querySelector('[role="status"]')?.textContent ?? null,
+      // The live region sits next to the listbox (a listbox may only hold options).
+      status: document.querySelector('#app-root .tb-search [role="status"]')?.textContent || null,
     };
   });
 
@@ -2845,7 +2846,7 @@ async function main() {
     m.forEach((row, i) => row.forEach((cell, j) => {
       const p = 5 - i, cc = j + 1, v = p * cc, lv = lvOf(v);
       if (cell.items) seen[lv] = (seen[lv] || 0) + cell.items;
-      if (cell.rpn !== String(v) || cell.glyph !== LV[lv] || cell.glyphHidden !== "true" || cell.sr !== lv || !cell.srHidden || cell.title !== `${lv} · RPN ${v}`)
+      if (cell.rpn !== String(v) || cell.glyph !== LV[lv] || cell.glyphHidden !== "true" || cell.sr !== `${lv} risk` || !cell.srHidden || cell.title !== `${lv} risk · RPN ${v}`)
         bad.push({ p, c: cc, cell });
     }));
     c.expect(m.length === 5 && m.every((r) => r.length === 5), "5x5 matrix");
@@ -2854,8 +2855,8 @@ async function main() {
     c.expect(["Low", "Medium", "High", "Critical"].every((l) => seen[l] > 0), "all four levels have items (non-empty) and show their glyph", seen);
     const lg = await readLegend(page);
     c.expect(JSON.stringify(lg) === JSON.stringify([
-      { glyph: LV.Low, hidden: "true", text: "Low (RPN ≤ 3)" }, { glyph: LV.Medium, hidden: "true", text: "Medium (RPN 4–7)" },
-      { glyph: LV.High, hidden: "true", text: "High (RPN 8–14)" }, { glyph: LV.Critical, hidden: "true", text: "Critical (RPN ≥ 15)" }]), "legend: 4 entries, glyph + level + range (EN)", lg);
+      { glyph: LV.Low, hidden: "true", text: "Low risk (RPN ≤ 3)" }, { glyph: LV.Medium, hidden: "true", text: "Medium risk (RPN 4–7)" },
+      { glyph: LV.High, hidden: "true", text: "High risk (RPN 8–14)" }, { glyph: LV.Critical, hidden: "true", text: "Critical risk (RPN ≥ 15)" }]), "legend: 4 entries, glyph + level + range (EN)", lg);
     // Which font actually draws the glyphs (Inter / Plex are latin-subset webfonts).
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
@@ -2883,9 +2884,9 @@ async function main() {
     await page.getByRole("button", { name: "PT", exact: true }).click();
     await page.waitForTimeout(500);
     const lgPt = await readLegend(page);
-    c.expect(JSON.stringify(lgPt.map((l) => l.text)) === JSON.stringify(["Baixa (RPN ≤ 3)", "Média (RPN 4–7)", "Alta (RPN 8–14)", "Crítica (RPN ≥ 15)"]), "legend translated (PT)", lgPt);
+    c.expect(JSON.stringify(lgPt.map((l) => l.text)) === JSON.stringify(["Risco baixo (RPN ≤ 3)", "Risco médio (RPN 4–7)", "Risco alto (RPN 8–14)", "Risco crítico (RPN ≥ 15)"]), "legend translated (PT)", lgPt);
     const mPt = await readMatrix(page);
-    c.expect(mPt[0][4].sr === "Crítica" && mPt[0][4].title === "Crítica · RPN 25" && mPt[4][0].sr === "Baixa", "sr-only text and tooltip translated (PT)", [mPt[0][4], mPt[4][0]]);
+    c.expect(mPt[0][4].sr === "Risco crítico" && mPt[0][4].title === "Risco crítico · RPN 25" && mPt[4][0].sr === "Risco baixo", "sr-only text and tooltip translated (PT)", [mPt[0][4], mPt[4][0]]);
     await shot(c, page, "matrix-pt");
     await page.context().close();
 
