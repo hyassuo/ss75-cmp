@@ -59,14 +59,15 @@ const USERS = {
 
 // A real 32x32 PNG (orange/rust gradient), built with zlib so it is valid
 // and visible in screenshots; far below the 500 KB client-compression cutoff.
-function tinyPng() {
-  const W = 32, H = 32;
+// tint makes distinct photos; a large size stored uncompressed (level 0)
+// goes past the cutoff, so the app's client-side compression runs.
+function tinyPng({ W = 32, H = 32, tint = 0, level } = {}) {
   const raw = Buffer.alloc((W * 3 + 1) * H);
   for (let y = 0; y < H; y++) {
     raw[y * (W * 3 + 1)] = 0;
     for (let x = 0; x < W; x++) {
       const o = y * (W * 3 + 1) + 1 + x * 3;
-      raw[o] = 200 + (x % 50); raw[o + 1] = 60 + y * 3; raw[o + 2] = 20;
+      raw[o] = 200 + (x % 50); raw[o + 1] = 60 + y * 3; raw[o + 2] = 20 + tint;
     }
   }
   const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -85,7 +86,7 @@ function tinyPng() {
   ihdr.writeUInt32BE(W, 0); ihdr.writeUInt32BE(H, 4); ihdr[8] = 8; ihdr[9] = 2;
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw)), chunk("IEND", Buffer.alloc(0)),
+    chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(raw, { level })), chunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
@@ -2905,6 +2906,201 @@ async function main() {
     c.expect(cramped.length === 0, "390px: RPN and glyph fit side by side in every cell", cramped.slice(0, 3));
     c.expect(lay.wrapOverflow <= 0 && lay.docOverflow <= 0 && lay.mainOverflow <= 0, "390px: matrix causes no horizontal overflow", lay);
     await shot(c, mob, "matrix-390");
+    await mob.context().close();
+  });
+
+  await run("e3photos", "E3: several photos at once from the gallery — preview + '+N more', AI on the first only, one row each, progress, 10 limit, partial failure + retry, PT, 390px", async (c) => {
+    const unit = (await one("SELECT id FROM units WHERE code = 'SS-75'")).id;
+    const IT = { en: "00000000-0000-0000-0000-0000000e2e14", pt: "00000000-0000-0000-0000-0000000e2e15" };
+    for (const [id, name] of [[IT.en, "E2E Multi Photo Target"], [IT.pt, "E2E Multi Photo Mobile"]]) {
+      await sql(
+        `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by)
+         VALUES ($1, $2, 'Z13', $3, 'Attention', 2, 2, $4) ON CONFLICT (id) DO NOTHING`,
+        [id, unit, name, USERS.insp1]
+      );
+    }
+    await sql("DELETE FROM rate_limits WHERE key LIKE 'photo%'");
+    const small = (name, tint) => ({ name, mimeType: "image/png", buffer: tinyPng({ tint }) });
+    // 512x512 stored uncompressed: ~770 KB each, past the compression cutoff.
+    const big = (n) => Array.from({ length: n }, (_, i) => ({
+      name: `e3-big-${String(i + 1).padStart(2, "0")}.png`, mimeType: "image/png", buffer: tinyPng({ W: 512, H: 512, tint: i * 9, level: 0 }),
+    }));
+    const rows = (id) => sql("SELECT description, file_name, file_path, ai_analysis FROM evidences WHERE item_id = $1 ORDER BY created_at, file_name", [id]);
+    const blobs = async (id) => (await one("SELECT count(*)::int n FROM storage.objects WHERE bucket_id = 'evidence-photos' AND name LIKE $1", [`${id}/%`])).n;
+    const gallery = (page) => modal(page).locator('input[type="file"]:not([capture])');
+    const descBox = (page, label) => modal(page).locator(`div:has(> label:text-is("${label}")) > textarea`);
+    // Every state the form goes through (live-region texts, the Save
+    // button's batch label, whether the pick buttons are disabled), so
+    // brief states are checked without racing them.
+    const watch = (page) => page.evaluate(() => {
+      window.__e3 = [];
+      const card = document.querySelector(".modal-card");
+      const rec = () => {
+        const btns = [...card.querySelectorAll("button")];
+        const st = {
+          status: [...card.querySelectorAll('[role="status"]')].map((e) => e.textContent).filter(Boolean).join(" | "),
+          label: btns.find((b) => /^(Saving|Salvando) \d+ (of|de) \d+/.test(b.textContent))?.textContent || "",
+          picksDisabled: btns.filter((b) => /Take photo|Gallery|Tirar foto|Galeria/.test(b.textContent)).every((b) => b.disabled),
+        };
+        const last = window.__e3[window.__e3.length - 1];
+        if (!last || JSON.stringify(last) !== JSON.stringify(st)) window.__e3.push(st);
+      };
+      new MutationObserver(rec).observe(card, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
+    const seen = (page) => page.evaluate(() => window.__e3);
+    // The base64 each AI request carried (to know which photo was analysed).
+    const aiSent = [];
+    const onAi = (r) => {
+      if (r.url().endsWith("/api/ai/analyze-photo") && r.method() === "POST") aiSent.push(JSON.parse(r.postData() || "{}").base64);
+    };
+    const geminiCalls = async () => (await (await fetch(`${GW}/__ctl/gemini`)).json()).calls;
+    const failSecondUpload = () => ctl.fault({ method: "POST", prefix: "/storage/v1/object/evidence-photos/", status: 503, skip: 1, times: 1 });
+
+    // ---- EN, desktop: 3 photos in one pick
+    const page = await newPage(c, "insp1");
+    page.on("request", onAi);
+    await login(page, "insp1@test.local");
+    await page.goto(`${APP}/dashboard?tab=zones&item=${IT.en}`);
+    await modal(page).waitFor({ timeout: 30000 });
+    const attrs = await modal(page).locator('input[type="file"]').evaluateAll((els) => els.map((e) => ({ capture: e.getAttribute("capture"), multiple: e.multiple })));
+    c.expect(attrs.length === 2 && attrs.some((a) => a.capture === "environment" && !a.multiple) && attrs.some((a) => a.capture === null && a.multiple),
+      "'Gallery / file' input is multiple; the camera input is not", attrs);
+    await watch(page);
+    const A = [small("e3-a.png", 0), small("e3-b.png", 60), small("e3-c.png", 120)];
+    await gallery(page).setInputFiles(A);
+    const prev = modal(page).locator('img[alt="Selected photo preview"]');
+    await prev.waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect((await prev.evaluate((i) => i.complete && i.naturalWidth).catch(() => 0)) === 32, "preview of the first photo shown");
+    const fileRow = prev.locator("xpath=..");
+    const rowText = await fileRow.innerText().catch(() => "");
+    c.expect(/e3-a\.png/.test(rowText) && /\+2 more/.test(rowText), "file row: first photo's name + '+2 more'", rowText);
+    c.expect((await gallery(page).evaluate((e) => e.value)) === "", "input value cleared after the pick (same files can be picked again)");
+    const saveBtn = modal(page).getByRole("button", { name: /^(Save \d+ evidence records|Save evidence record)$/ });
+    c.expect((await saveBtn.textContent()) === "Save 3 evidence records", "Save button names the batch", await saveBtn.textContent());
+    await descBox(page, "Finding / Description").fill("E3 batch: three flange photos");
+    const g0 = await geminiCalls();
+    await modal(page).getByRole("button", { name: /Analyse with AI/ }).click();
+    await modal(page).getByText("E2E stand-in: surface rust on the flange bolts.").first().waitFor({ timeout: 20000 }).catch(() => {});
+    c.expect((await geminiCalls()) === g0 + 1, "one AI analysis (gateway stand-in called once)", { before: g0, after: await geminiCalls() });
+    c.expect(aiSent.length === 1 && aiSent[0] === A[0].buffer.toString("base64"), "the AI got the first (previewed) photo", aiSent.map((b) => b?.slice(0, 24)));
+    c.expect((await descBox(page, "Finding / Description").inputValue()) === "E3 batch: three flange photos", "typed description kept (AI does not overwrite it)");
+    await shot(c, page, "picked-3");
+    await saveBtn.click();
+    c.expect(await toastSeen(page, "3 evidence records saved", 15000), "toast '3 evidence records saved'");
+    let st = await seen(page);
+    const labels = [...new Set(st.map((x) => x.label).filter(Boolean))];
+    c.expect(JSON.stringify(labels) === JSON.stringify(["Saving 1 of 3…", "Saving 2 of 3…", "Saving 3 of 3…"]), "Save button shows 'Saving i of 3…' in turn", labels);
+    c.expect(st.filter((x) => x.label).every((x) => x.picksDisabled), "pick buttons disabled while the batch saves");
+    c.expect(st.some((x) => /Saving 2 of 3…/.test(x.status)), "progress announced in a role=status region", st.map((x) => x.status));
+    let r = await rows(IT.en);
+    c.expect(r.length === 3 && r.every((x) => x.description === "E3 batch: three flange photos"), "3 evidence rows, same description", r.map((x) => [x.file_name, x.description]));
+    c.expect(JSON.stringify(r.map((x) => x.file_name).sort()) === JSON.stringify(["e3-a.png", "e3-b.png", "e3-c.png"]), "one row per photo", r.map((x) => x.file_name));
+    const withAi = r.filter((x) => x.ai_analysis);
+    c.expect(withAi.length === 1 && withAi[0].file_name === "e3-a.png", "only the first photo's row carries the AI analysis", withAi.map((x) => x.file_name));
+    c.expect((await blobs(IT.en)) === 3, "3 blobs stored", await blobs(IT.en));
+    for (const n of ["e3-a.png", "e3-b.png", "e3-c.png"]) await modal(page).locator(`img[alt="${n}"]`).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect((await modal(page).locator('img[alt^="e3-"]').count()) === 3, "3 thumbnails in the evidence list");
+    c.expect(!(await prev.count()) && (await saveBtn.textContent()) === "Save evidence record" && (await descBox(page, "Finding / Description").inputValue()) === "",
+      "form reset after the batch (no preview, single-record label, empty description)");
+    c.expect(!(await modal(page).getByText("E2E stand-in: surface rust on the flange bolts.").count()), "AI result card gone after its photo was saved");
+
+    // ---- 11 photos: only 10 kept; large ones are compressed first
+    await watch(page);
+    await gallery(page).setInputFiles(big(11));
+    await modal(page).getByText(/^\+9 more$/).waitFor({ timeout: 30000 }).catch(() => {});
+    st = await seen(page);
+    c.expect(st.some((x) => x.status === "Preparing 10 photos…" && x.picksDisabled), "'Preparing 10 photos…' (role=status) while compressing, picks disabled", st.map((x) => x.status));
+    const limit = modal(page).getByRole("alert").filter({ hasText: "Up to 10 photos at a time — only the first 10 were kept." });
+    c.expect(await limit.isVisible().catch(() => false), "limit message shown (role=alert)");
+    c.expect((await saveBtn.textContent()) === "Save 10 evidence records", "10 queued", await saveBtn.textContent());
+    const row11 = await fileRow.innerText().catch(() => "");
+    c.expect(/e3-big-01\.jpg/.test(row11) && /\+9 more/.test(row11), "first of the 10 previewed (compressed to JPEG), '+9 more'", row11);
+    const opt = await modal(page).getByText(/^Optimised /).textContent().catch(() => "");
+    c.expect(/^Optimised 7\.5 MB → \d+ KB$/.test(opt), "one 'Optimised' line for the whole pick", opt);
+    await shot(c, page, "limit-11");
+
+    // ---- partial failure: 2nd upload fails -> 1 saved, 2 kept; retry saves only those
+    await gallery(page).setInputFiles([small("e3-p1.png", 30), small("e3-p2.png", 90), small("e3-p3.png", 150)]);
+    await modal(page).getByText(/^\+2 more$/).waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect(!(await limit.count()), "a new pick clears the limit message");
+    await descBox(page, "Finding / Description").fill("E3 partial batch");
+    await failSecondUpload();
+    await saveBtn.click();
+    const err = modal(page).getByRole("alert").filter({ hasText: "Photo upload failed:" });
+    await err.waitFor({ timeout: 15000 }).catch(() => {});
+    const errText = await err.textContent().catch(() => "");
+    c.expect(/Injected fault 503/.test(errText) && /\(1 of 3 saved — Save again for the other 2\.\)$/.test(errText), "error says what failed and that 1 of 3 landed", errText);
+    r = (await rows(IT.en)).filter((x) => x.description === "E3 partial batch");
+    c.expect(r.length === 1 && r[0].file_name === "e3-p1.png", "only the first photo saved", r.map((x) => x.file_name));
+    const kept = await fileRow.innerText().catch(() => "");
+    c.expect(/e3-p2\.png/.test(kept) && /\+1 more/.test(kept) && (await saveBtn.textContent()) === "Save 2 evidence records", "the 2 unsaved photos stay queued (preview moved to the next)", { kept, btn: await saveBtn.textContent() });
+    c.expect((await descBox(page, "Finding / Description").inputValue()) === "E3 partial batch", "description kept for the retry");
+    await shot(c, page, "partial-failure");
+    // The AI step now works on the photo that is previewed, not the saved one.
+    await modal(page).getByRole("button", { name: /Analyse with AI/ }).click();
+    await modal(page).getByText("E2E stand-in: surface rust on the flange bolts.").first().waitFor({ timeout: 20000 }).catch(() => {});
+    c.expect(aiSent.length === 2 && aiSent[1] === tinyPng({ tint: 90 }).toString("base64"), "AI after the failure analyses the queued head (e3-p2), not the saved photo");
+    await saveBtn.click();
+    c.expect(await toastSeen(page, "2 evidence records saved", 15000), "retry: toast '2 evidence records saved'");
+    r = (await rows(IT.en)).filter((x) => x.description === "E3 partial batch");
+    c.expect(JSON.stringify(r.map((x) => x.file_name).sort()) === JSON.stringify(["e3-p1.png", "e3-p2.png", "e3-p3.png"]), "retry saved only the rest: 3 rows, no duplicates", r.map((x) => x.file_name));
+    c.expect(JSON.stringify(r.filter((x) => x.ai_analysis).map((x) => x.file_name)) === JSON.stringify(["e3-p2.png"]), "the retry's AI analysis landed on e3-p2 only", r.map((x) => [x.file_name, !!x.ai_analysis]));
+    const allRows = await rows(IT.en);
+    c.expect((await blobs(IT.en)) === allRows.length, "no orphan blob and no missing file (blobs = rows)", { blobs: await blobs(IT.en), rows: allRows.length });
+    await page.context().close();
+
+    // ---- PT, phone 390px
+    const mob = await newPage(c, "insp1-mobile-pt", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+    await mob.context().addCookies([{ name: "ss75-cmp.lang", value: "pt", url: APP }]);
+    await login(mob, "insp1@test.local");
+    await mob.goto(`${APP}/dashboard?tab=zones&item=${IT.pt}`);
+    await modal(mob).waitFor({ timeout: 30000 });
+    await watch(mob);
+    await gallery(mob).setInputFiles(big(11));
+    await modal(mob).getByText(/^\+9 arquivos$/).waitFor({ timeout: 30000 }).catch(() => {});
+    st = await seen(mob);
+    c.expect(st.some((x) => x.status === "Preparando 10 fotos…"), "PT: 'Preparando 10 fotos…'", st.map((x) => x.status));
+    c.expect(await modal(mob).getByRole("alert").filter({ hasText: "Até 10 fotos por vez — só as 10 primeiras foram mantidas." }).isVisible().catch(() => false), "PT: limit message");
+    const saveMob = modal(mob).getByRole("button", { name: /^Salvar (\d+ registros|registro) de evidência$/ });
+    c.expect((await saveMob.textContent()) === "Salvar 10 registros de evidência", "PT: 'Salvar 10 registros de evidência'", await saveMob.textContent());
+    const LONG = "e3-corroded-flange-bolt-portside-frame-112-close-up-before-cleaning.png";
+    await gallery(mob).setInputFiles([small(LONG, 10), small("e3-m2.png", 70)]);
+    await modal(mob).getByText(/^\+1 arquivo$/).waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect(await modal(mob).getByText(/^\+1 arquivo$/).isVisible().catch(() => false), "PT: '+1 arquivo' (singular)");
+    await gallery(mob).setInputFiles([small(LONG, 10), small("e3-m2.png", 70), small("e3-m3.png", 130)]);
+    await modal(mob).getByText(/^\+2 arquivos$/).waitFor({ timeout: 10000 }).catch(() => {});
+    const prevMob = modal(mob).locator('img[alt="Prévia da foto selecionada"]');
+    await prevMob.scrollIntoViewIfNeeded().catch(() => {});
+    const lay = await prevMob.evaluate((img) => {
+      const row = img.parentElement, [name, more] = [...row.querySelectorAll("span")];
+      const rr = row.getBoundingClientRect(), mr = more.getBoundingClientRect(), card = document.querySelector(".modal-card");
+      return {
+        rowOverflow: row.scrollWidth - row.clientWidth, moreInside: mr.right <= rr.right + 0.5 && mr.left >= rr.left,
+        nameEllipsis: name.scrollWidth > name.clientWidth, docOverflow: document.documentElement.scrollWidth - innerWidth,
+        cardOverflow: card.scrollWidth - card.clientWidth, more: more.textContent,
+      };
+    });
+    c.expect(lay.rowOverflow <= 0 && lay.moreInside && lay.nameEllipsis, "390px: long name ellipsized, '+2 arquivos' stays inside the row", lay);
+    c.expect(lay.docOverflow <= 0 && lay.cardOverflow <= 0, "390px: no horizontal overflow (page, modal)", lay);
+    c.expect((await saveMob.textContent()) === "Salvar 3 registros de evidência", "PT: 'Salvar 3 registros de evidência'", await saveMob.textContent());
+    await descBox(mob, "Achado / Descrição").fill("E3 lote no celular");
+    await shot(c, mob, "pt-390-picked");
+    await failSecondUpload();
+    await saveMob.click();
+    const errPt = modal(mob).getByRole("alert").filter({ hasText: "Falha no envio da foto:" });
+    await errPt.waitFor({ timeout: 15000 }).catch(() => {});
+    const errPtText = await errPt.textContent().catch(() => "");
+    c.expect(/\(1 de 3 salvas — salve de novo para as outras 2\.\)$/.test(errPtText), "PT: partial-failure note", errPtText);
+    c.expect((await saveMob.textContent()) === "Salvar 2 registros de evidência", "PT: 2 left in the queue", await saveMob.textContent());
+    await saveMob.click();
+    c.expect(await toastSeen(mob, "2 evidências salvas", 15000), "PT: toast '2 evidências salvas'");
+    st = await seen(mob);
+    const labelsPt = [...new Set(st.map((x) => x.label).filter(Boolean))];
+    c.expect(labelsPt.includes("Salvando 2 de 3…") && labelsPt.includes("Salvando 1 de 2…") && labelsPt.includes("Salvando 2 de 2…"), "PT: 'Salvando i de n…' labels", labelsPt);
+    r = await rows(IT.pt);
+    c.expect(r.length === 3 && new Set(r.map((x) => x.file_name)).size === 3 && r.every((x) => x.description === "E3 lote no celular" && !x.ai_analysis),
+      "PT: 3 distinct rows, same description, no AI", r.map((x) => x.file_name));
+    await shot(c, mob, "pt-390-saved");
     await mob.context().close();
   });
 

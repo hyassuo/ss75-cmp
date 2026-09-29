@@ -93,14 +93,19 @@ function bearer(req) {
 }
 
 // ------------------------------------------------------------ fault control
-// faults: [{method, prefix, status, times, body}] — first match wins; times
-// counts down (-1 = until cleared).
+// faults: [{method, prefix, status, times, skip, body}] — first match wins;
+// times counts down (-1 = until cleared); skip lets that many matching
+// requests through first (e.g. fail the 2nd upload of a batch).
 let faults = [];
 function matchFault(method, url) {
   const f = faults.find(
     (x) => (!x.method || x.method === method) && url.startsWith(x.prefix) && x.times !== 0
   );
   if (!f) return null;
+  if (f.skip > 0) {
+    f.skip -= 1;
+    return null;
+  }
   if (f.times > 0) f.times -= 1;
   return f;
 }
@@ -651,7 +656,7 @@ const server = http.createServer(async (req, res) => {
     if (url.startsWith("/__ctl")) {
       if (url === "/__ctl/fault" && req.method === "POST") {
         const f = json(await readBody(req));
-        faults.push({ method: f.method, prefix: f.prefix || "/", status: f.status ?? 503, times: f.times ?? -1, body: f.body, mode: f.mode, delay: f.delay });
+        faults.push({ method: f.method, prefix: f.prefix || "/", status: f.status ?? 503, times: f.times ?? -1, skip: f.skip ?? 0, body: f.body, mode: f.mode, delay: f.delay });
         return send(res, 200, { faults });
       }
       if (url === "/__ctl/fault" && req.method === "DELETE") {
