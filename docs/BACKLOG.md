@@ -1,6 +1,6 @@
 # Backlog — SS-75 CMP
 
-Estado em 29/09/2026, após a v1.20.0 (PR #28). Reúne o que ficou em aberto
+Estado em 29/09/2026, após a v1.21.0 (PR #30). Reúne o que ficou em aberto
 da revisão completa (segurança + UI/UX) e das auditorias das etapas 1–4.
 Cada item foi conferido no código desta versão.
 
@@ -17,7 +17,6 @@ para "Concluídos".
 | A1 | P1 | Desativar o cadastro público e exigir confirmação de e-mail | Seção A |
 | A2 | P1 | Secrets do GitHub + rodar o workflow **Backup** uma vez | Seção A |
 | A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Seção A |
-| A12 | P2 | Mesma região para as funções da Vercel e o Supabase | Seção A |
 | A11 | P2 | Chaves JWT assimétricas no Supabase | Seção A |
 | A3 | P2 | Ensaiar um restore | Seção A |
 | A4 | P2 | `supabase migration repair` | Seção A |
@@ -25,9 +24,9 @@ para "Concluídos".
 | F1 | P2 | Criar conta no Sentry e passar o DSN | Seção F |
 | F2 | P2 | Gerar um token de acesso do Supabase para o CI | Seção F |
 | C7 | P3 | Informar o prazo desejado para os links das fotos | Seção C |
-| A10 | P3 | Node.js 22.x nas configurações da Vercel | Seção A |
 | A5 | P3 | PITR, se o plano permitir | Seção A |
 | D3 | P3 | Definir os requisitos do módulo de espessura (UT) | Seção D |
+| A13 | P3 | Avaliar mover o Supabase para São Paulo (`sa-east-1`) | Seção A |
 
 Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der.
 
@@ -44,8 +43,7 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
 | A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Os deploys de preview (um por PR) não têm `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`: só `/login` abre, as outras páginas dão erro 500 (já era assim antes do Next 16). Vercel → Settings → Environment Variables → marcar *Preview* — de preferência apontando para um projeto Supabase de teste, não o de produção. |
 | A11 | P2 | Chaves de assinatura JWT assimétricas | Supabase → Project Settings → JWT Keys → criar uma chave *ECC (P-256)* em espera e rotacionar para ela (a chave antiga continua valendo até os tokens emitidos com ela vencerem; ninguém é deslogado). Com isso o app confere o login localmente (`getClaims()`), sem ir ao Supabase Auth: some 1 ida e volta Vercel↔Supabase antes de **toda** página (≈150 ms no teste com 150 ms de latência; no app de hoje ≈ a latência entre as regiões da Vercel e do Supabase) e a verificação em paralelo do layout deixa de ser uma requisição. O código já está pronto (F6) e é testado assim no E2E (`f6jwt`). Contrapartida: uma sessão encerrada ou um banimento só é percebido pelo servidor quando o token vence (até 1 h); a desativação no app continua imediata (perfil inativo = layout manda para o login, RLS não devolve dados). |
-| A12 | P2 | Funções da Vercel na mesma região do Supabase | Conferir a região do projeto no Supabase (Project Settings → General). As funções da Vercel estão em `iad1` (Washington); se o Supabase estiver em outra (ex.: `sa-east-1`, São Paulo), mudar em Vercel → Settings → Functions → Function Region para a equivalente (ex.: `gru1`). Cada página faz 2 idas e voltas servidor↔Supabase em série (1 com A11): entre continentes são ≈ 120–150 ms cada, na mesma região ≈ 2 ms. Se já forem a mesma região, nada a fazer. |
-| A10 | P3 | Alinhar a versão do Node na Vercel | Vercel → Settings → Build and Deployment → Node.js Version: está 24.x, mas o app declara 22.x (`engines`, que prevalece). Mudar para 22.x só evita confusão. |
+| A13 | P3 | Supabase mais perto dos usuários (São Paulo) | O banco está em `us-west-2` (Oregon) e os dados vão direto do navegador para ele: do Brasil/offshore cada ida e volta custa ≈ 150–200 ms. Com o projeto em `sa-east-1` (e as funções da Vercel em `gru1`) esse trajeto cai bastante. Exige criar um projeto novo, migrar banco (backup/restore — ver A2/A3), fotos do Storage, usuários e trocar as variáveis na Vercel; fazer como projeto à parte, com janela de manutenção. |
 
 ## B. Decisões tomadas (29/09/2026)
 
@@ -102,3 +100,5 @@ _(nenhum item aberto)_
 | F5 | Migração de versões major | Next 15 → 16 (build com Turbopack; `middleware.ts` virou `proxy.ts`, mesmo CSP com nonce), React 18 → 19, Vitest 4 → 5, ESLint 8 → 9 com config flat (`eslint .`, mesmas regras de antes). Sem mudança de comportamento; unitários, SQL e os 57 cenários E2E passando. |
 | F6 | Carregamento mais rápido (login e primeira tela) | Medido com latência simulada de 150 ms por requisição ao Supabase (`PERF=1 GW_LATENCY_MS=150 bash tests/e2e/run.sh`): login → dados na tela de 2,25 s para 1,4 s (idas e voltas em série ao Supabase: 12 → 6; mesmo aparelho de novo: 1,6 s → 1,08 s, 8 → 5); abrir o app já logado de 1,55 s para 0,9 s (8 → 5). JS da tela de login 185 → 128 KB (brotli), sem o supabase-js (carregado ao focar o formulário); fontes 5 arquivos/87 KB → 2/57 KB. Como: layout confere o JWT e lê o perfil em paralelo (`getClaims()`, rápido de verdade com A11), sem a segunda renderização após o login, dados começam a carregar no instante do login, páginas de itens e limpeza de rascunhos em paralelo, app instalado abre direto em `/dashboard`. Teste E2E `f6perf` confere a estrutura; `f6switch` (sair e entrar com um usuário de outra unidade no mesmo navegador: nada do primeiro aparece) e `f6jwt` (sessões ES256: token forjado, vencido ou de algoritmo desconhecido barrado no proxy; usuário desativado cai no login sem loop de redirecionamento) — 61 cenários. |
 | A8 | Migrations de 29/09 aplicadas | `20260929000000_rate_limits.sql` (C4) e `20260929000100_active_reads_insert_audit.sql` (C6 + D2) rodadas no Supabase de produção em 29/09/2026: limite de requisições compartilhado, tabelas de referência só para ativos e auditoria de inclusões ativos. |
+| A10 | Versão do Node na Vercel | Configuração do projeto alinhada em 22.x (a mesma declarada em `engines`, no `.nvmrc` e usada no CI). |
+| A12 | Funções da Vercel perto do Supabase | Supabase em `us-west-2` (Oregon); funções movidas de `iad1` (Washington) para `pdx1` (Portland) em 29/09/2026 — cada ida e volta servidor↔Supabase caiu de ≈ 70 ms para poucos ms (2 por página; 1 com A11). |
