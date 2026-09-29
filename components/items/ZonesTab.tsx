@@ -30,8 +30,10 @@ export function ZonesTab() {
     if (created) openItem(created.id, { isNew: true });
   }
 
+  // Active items only, like each zone's own count below (archived ones are
+  // shown per zone as "N archived").
   const totalItems = visibleZones.reduce(
-    (a, z) => a + itemsByZone(z.zid).length,
+    (a, z) => a + itemsByZone(z.zid).filter((i) => !i.archived).length,
     0
   );
 

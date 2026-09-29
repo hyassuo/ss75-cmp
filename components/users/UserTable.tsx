@@ -41,9 +41,11 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
     void load();
   }, [load]);
 
+  // Resolves true when the server accepted the change.
   async function call(url: string, body: unknown, okMsg: string) {
     setBusy(true);
     setMsg(null);
+    let ok = false;
     try {
       const r = await fetch(url, {
         method: "POST",
@@ -55,6 +57,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
         setMsg({ t: "err", m: data.error || "Request failed" });
       } else {
         setMsg({ t: "ok", m: okMsg });
+        ok = true;
       }
       // Always show the server's state, also after a failure.
       await load();
@@ -62,6 +65,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
       setMsg({ t: "err", m: "Request failed" });
     }
     setBusy(false);
+    return ok;
   }
 
   if (loading) {
@@ -104,7 +108,9 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                 "/api/users/create",
                 { email: invite, password: newPassword },
                 "User created."
-              ).then(() => {
+              ).then((ok) => {
+                // Keep the typed values after a refusal so they can be fixed.
+                if (!ok) return;
                 setInvite("");
                 setNewPassword("");
               })
