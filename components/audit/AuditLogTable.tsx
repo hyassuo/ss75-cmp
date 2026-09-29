@@ -48,10 +48,10 @@ export function AuditLogTable() {
       const res = await fetchAll<
         HistoryEntry & { items: { name: string } | null }
       >(
-        (lo, hi) => {
+        (lo, hi, withCount) => {
           let q = supabase
             .from("history")
-            .select("*, items(name)")
+            .select("*, items(name)", { count: withCount ? "exact" : undefined })
             .order("event_date", { ascending: false })
             .order("id");
           if (from) q = q.gte("event_date", dayStartIso(from));
