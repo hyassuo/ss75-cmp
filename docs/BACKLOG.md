@@ -54,8 +54,7 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 |---|---|------|----------|
 | F1 | P2 | Monitoramento de erros | Sentry ou similar (precisa de conta). |
 | F2 | P2 | Tipos do banco escritos à mão | `lib/types/database.types.ts` → gerar com `supabase gen types typescript --linked` e checar no CI. |
-| F3 | P3 | Lacunas dos testes E2E | Login e Storage são simulados; página de Usuários, câmera real, IA e Realtime não são cobertos. |
-| F4 | P3 | Planos antigos em `docs/plans/` | Os 5 planos parecem já executados (amostras conferidas: data local, penalidade única, PDF sem corte de zona, IA sem sobrescrever, rate limit nas rotas de usuários). Revisar os critérios de aceite e arquivar. |
+| F3 | P3 | Lacunas dos testes E2E | Login e Storage são simulados; página de Usuários, câmera real, IA e Realtime não são cobertos. Da revisão dos planos antigos (F4) faltam ainda testes de: item arquivado (fora das telas, dentro do CSV/XLSX; botão Arquivar/Desarquivar); IA no item (preenche só campos vazios, "Aplicar" sobrescreve, leitura estimada só grava no Salvar); objeto IFS SECE sobe a prioridade; PDF com todas as linhas e a nota de fotos; rotas de Usuários (JSON inválido → 400, limite do reset → 429, mensagens genéricas); prefetch sem cookie → login; SQL: admin de uma unidade não altera outra. |
 | F5 | P3 | Migração de versões major | Next 15 → 16, React 18 → 19, Vitest 4 → 5: o Dependabot passou a ignorar majors; fazer como projeto próprio, com os testes E2E como rede de segurança. |
 
 ## Concluídos
@@ -73,3 +72,4 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | E1 | Busca de item | Campo na barra superior (atalho `/`): nome, código IFS, OS, local funcional, zona, mecanismo ou notas; ignora acentos, maiúsculas e pontuação dos códigos; arquivados por último; funciona offline. |
 | E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ baixo, ◇ médio, △ alto, ▲ crítico) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
 | E3 | Várias fotos de uma vez | A galeria aceita até 10 arquivos por seleção; cada um vira um registro de evidência (mesma data e descrição), salvos em sequência com progresso. A IA analisa a primeira foto da fila. Se um envio falhar, os já salvos são informados e o restante fica na fila para tentar de novo, sem duplicar. |
+| F4 | Planos antigos | Os 5 planos de `docs/plans/` foram conferidos critério a critério contra o código: todos concluídos (alguns por soluções mais novas). Arquivados em `docs/plans/archive/` com um índice; o único resto no código (limites de taxa repetidos no painel de leituras) foi corrigido; os testes que faltavam foram para o F3. |

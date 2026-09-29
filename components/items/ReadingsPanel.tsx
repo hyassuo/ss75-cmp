@@ -6,7 +6,13 @@ import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
-import { calcRate, isAiEstimate, rateColor } from "@/lib/domain/calcRate";
+import {
+  calcRate,
+  isAiEstimate,
+  RATE_CRITICAL_MM_YR,
+  RATE_ELEVATED_MM_YR,
+  rateColor,
+} from "@/lib/domain/calcRate";
 import type { Reading } from "@/lib/types/domain";
 import { useFeedback } from "@/lib/context/FeedbackContext";
 
@@ -254,9 +260,9 @@ export function ReadingsPanel({
               color: rateColor(rate),
             }}
           >
-            {rate > 0.5
+            {rate > RATE_CRITICAL_MM_YR
               ? t("rate.critical")
-              : rate > 0.2
+              : rate > RATE_ELEVATED_MM_YR
                 ? t("rate.severe")
                 : rate > 0
                   ? t("rate.moderate")
