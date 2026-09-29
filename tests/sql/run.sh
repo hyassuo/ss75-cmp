@@ -239,6 +239,11 @@ suite() {
   check "admin of another unit cannot edit IFS register" "$(as $AB "UPDATE ifs_objects SET sece = false WHERE id = 'OBJ-1'")" "$DENIED"
   check "IFS register readable" "$(as $I1 "SELECT count(*) FROM ifs_objects")" "1"
   check "zones catalog read-only" "$(rows $A1 "UPDATE zones SET name = 'x' RETURNING 1")" "0|$DENIED"
+  # units_admin_all is scoped to the admin's own unit (hardening-4, FIX 3).
+  check "admin updates own unit row" "$(rows $A1 "UPDATE units SET name = name WHERE id = '$U1' RETURNING 1")" "1"
+  check "admin of another unit cannot update this unit's row" "$(rows $AB "UPDATE units SET name = 'Hijacked' WHERE id = '$U1' RETURNING 1")" "0|$DENIED"
+  check "...nor this unit's admin the other unit's row" "$(rows $A1 "UPDATE units SET name = 'Hijacked' WHERE code = 'OTHER' RETURNING 1")" "0|$DENIED"
+  check "...and both names are unchanged" "$(su_sql "SELECT count(*) FROM units WHERE name = 'Hijacked'")" "0"
 
   echo " unit isolation"
   check "other unit's admin sees none of this unit's items" "$(as $AB "SELECT count(*) FROM items WHERE unit_id = '$U1'")" "0"

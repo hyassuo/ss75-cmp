@@ -97,6 +97,8 @@ const en = {
     `${od} overdue / ${d30} due in 30d`,
   "dash.items": "items",
   "dash.item": "item",
+  "dash.zones": "zones",
+  "dash.zone": "zone",
 
 
   // Integrity labels
@@ -558,6 +560,8 @@ const pt: Translations = {
     `${od} vencidos / ${d30} em 30 dias`,
   "dash.items": "itens",
   "dash.item": "item",
+  "dash.zones": "zonas",
+  "dash.zone": "zona",
 
   // Integrity
   "integrity.GOOD": "BOM",

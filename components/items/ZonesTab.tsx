@@ -30,15 +30,18 @@ export function ZonesTab() {
     if (created) openItem(created.id, { isNew: true });
   }
 
+  // Active items only, like each zone's own count below (archived ones are
+  // shown per zone as "N archived").
   const totalItems = visibleZones.reduce(
-    (a, z) => a + itemsByZone(z.zid).length,
+    (a, z) => a + itemsByZone(z.zid).filter((i) => !i.archived).length,
     0
   );
 
   return (
     <div>
       <div style={{ fontSize: 11, color: DS.text3, marginBottom: 16 }}>
-        {visibleZones.length} {visibleZones.length !== 1 ? t("dash.items") : t("dash.item")} · {totalItems} items
+        {visibleZones.length} {visibleZones.length !== 1 ? t("dash.zones") : t("dash.zone")} ·{" "}
+        {totalItems} {totalItems !== 1 ? t("dash.items") : t("dash.item")}
       </div>
 
       {visibleZones.map((z) => {

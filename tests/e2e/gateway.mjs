@@ -4,9 +4,11 @@
 //   /auth/v1/*     -> minimal GoTrue: password + refresh_token grants,
 //                     GET+PUT /user (password change), /recover + /verify
 //                     (recovery email, implicit flow), /logout, admin
-//                     PUT /admin/users/:id (ban_duration). Per-user passwords
-//                     and bans live in auth.users (encrypted_password,
-//                     banned_until); a ban blocks sign-in, refresh and /user.
+//                     POST /admin/users (createUser), PUT /admin/users/:id
+//                     (ban_duration), DELETE /admin/users/:id. Per-user
+//                     passwords and bans live in auth.users
+//                     (encrypted_password, banned_until); a ban blocks
+//                     sign-in, refresh and /user.
 //   /storage/v1/*  -> minimal Storage API. Every object row is written/read/
 //                     deleted in Postgres AS THE CALLER (SET ROLE + JWT claims),
 //                     so the schema's real storage.objects RLS policies decide.
@@ -301,8 +303,40 @@ async function handleAuth(req, res, sub, query) {
     });
     return send(res, 303, null, { Location: `${o.redirectTo}#${frag}` });
   }
-  // Admin API (service_role key): only ban_duration is implemented.
+  // Admin API (service_role key): createUser, ban_duration, deleteUser.
+  const isService = () => verify(bearer(req), SECRET)?.role === "service_role";
+  if (req.method === "POST" && sub === "/admin/users") {
+    const body = json(await readBody(req));
+    if (!isService()) return authErr(res, 403, "not_admin", "User not allowed");
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return authErr(res, 400, "validation_failed", "Unable to validate email address: invalid format");
+    if (await userRow("lower(email)", email)) {
+      return authErr(res, 422, "email_exists", "A user with this email address has already been registered");
+    }
+    if (typeof body.password === "string" && body.password.length < 6) {
+      return authErr(res, 422, "weak_password", "Password should be at least 6 characters.", { weak_password: { reasons: ["length"] } });
+    }
+    // The schema's handle_new_user trigger creates the (inactive) profile.
+    const { rows } = await pool.query(
+      `INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+       VALUES (gen_random_uuid(), $1, $2, $3) RETURNING id`,
+      [email, typeof body.password === "string" ? hashPw(body.password) : null, body.user_metadata || {}]
+    );
+    record({ t: Date.now(), kind: "admin-create-user", user: email });
+    return send(res, 200, userJson(await userRow("id", rows[0].id)));
+  }
   const adminUser = /^\/admin\/users\/([0-9a-f-]{36})$/.exec(sub);
+  if (req.method === "DELETE" && adminUser) {
+    await readBody(req);
+    if (!isService()) return authErr(res, 403, "not_admin", "User not allowed");
+    const u = await userRow("id", adminUser[1]);
+    if (!u) return authErr(res, 404, "user_not_found", "User not found");
+    // Cascades to public.profiles (ON DELETE CASCADE), as in Supabase.
+    await pool.query("DELETE FROM auth.users WHERE id = $1", [u.id]);
+    for (const [tok, rt] of refreshTokens) if (rt.uid === u.id) refreshTokens.delete(tok);
+    record({ t: Date.now(), kind: "admin-delete-user", user: u.email });
+    return send(res, 200, userJson(u));
+  }
   if (req.method === "PUT" && adminUser) {
     const body = json(await readBody(req));
     const claims = verify(bearer(req), SECRET);
