@@ -12,6 +12,8 @@
 //                     so the schema's real storage.objects RLS policies decide.
 //                     File bytes live on disk under $STORAGE_DIR.
 //   /__ctl/*       -> test control: fault injection, request log, mail outbox
+//   /gemini/*      -> stand-in for the Gemini API (GEMINI_API_BASE): a fixed,
+//                     schema-valid photo analysis; counts calls
 //
 // Response shapes follow @supabase/auth-js and @supabase/storage-js v2.
 import http from "node:http";
@@ -607,6 +609,33 @@ function proxyRest(req, res, sub, search) {
   req.pipe(up);
 }
 
+// ------------------------------------------------------------------- gemini
+// Stand-in for POST /v1beta/models/<model>:generateContent. Answers with a
+// fixed analysis that passes the app's sanitizer; the request must carry a
+// key and an inline image, like the real API requires.
+let geminiCalls = 0;
+const GEMINI_ANALYSIS = {
+  corrosionType: "Atmospheric",
+  componentName: "E2E flange bolts",
+  probability: 3,
+  consequence: 3,
+  affectedAreaPct: 15,
+  pitDepthEstMM: 0.4,
+  immediateAction: "Monitor",
+  inspectionFrequency: "Quarterly",
+  findings: "E2E stand-in: surface rust on the flange bolts.",
+  recommendation: "E2E stand-in: clean and recoat within the quarter.",
+};
+async function handleGemini(req, res, url) {
+  const body = json(await readBody(req));
+  if (req.method !== "POST" || !/:generateContent$/.test(url)) return send(res, 404, { error: { code: 404, message: "not found" } });
+  if (!req.headers["x-goog-api-key"]) return send(res, 403, { error: { code: 403, message: "API key missing" } });
+  const parts = body?.contents?.[0]?.parts ?? [];
+  if (!parts.some((p) => p.inline_data?.data)) return send(res, 400, { error: { code: 400, message: "no image" } });
+  geminiCalls += 1;
+  send(res, 200, { candidates: [{ content: { parts: [{ text: JSON.stringify(GEMINI_ANALYSIS) }] } }] });
+}
+
 // ------------------------------------------------------------------- server
 const server = http.createServer(async (req, res) => {
   const t0 = Date.now();
@@ -638,6 +667,7 @@ const server = http.createServer(async (req, res) => {
         const since = Number(u.searchParams.get("since") || 0);
         return send(res, 200, outbox.filter((m) => m.t >= since));
       }
+      if (url === "/__ctl/gemini") return send(res, 200, { calls: geminiCalls });
       if (url === "/__ctl/health") return send(res, 200, { ok: true });
       return send(res, 404, { error: "unknown ctl" });
     }
@@ -669,6 +699,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, fault.status, fault.body ?? { code: "E2E_FAULT", message: `Injected fault ${fault.status}`, details: null, hint: null });
     }
 
+    if (url.startsWith("/gemini/")) return await handleGemini(req, res, url);
     if (url.startsWith("/rest/v1")) return proxyRest(req, res, url.slice("/rest/v1".length) || "/", u.search);
     if (url.startsWith("/auth/v1")) return await handleAuth(req, res, url.slice("/auth/v1".length), u.searchParams);
     if (url.startsWith("/storage/v1")) return await handleStorage(req, res, url.slice("/storage/v1".length), u.searchParams);

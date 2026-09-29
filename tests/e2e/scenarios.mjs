@@ -2403,12 +2403,16 @@ async function main() {
     const reset = () => sql("DELETE FROM rate_limits WHERE key LIKE 'photo%' OR key LIKE 'forgot-%'");
     const page = await newPage(c, "insp2");
     await login(page, "insp2@test.local");
-    // No image in the body: past the limits the route answers 400, so Gemini
-    // is never called (the harness key is a dummy).
-    const post = async () => {
-      const r = await page.request.post(`${APP}/api/ai/analyze-photo`, { headers: { Origin: APP }, data: {} });
+    // A 1x1 PNG: past the limits the route calls the gateway's Gemini
+    // stand-in (200). postEmpty() sends no image (400 before the quotas).
+    const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const call = async (data) => {
+      const r = await page.request.post(`${APP}/api/ai/analyze-photo`, { headers: { Origin: APP }, data });
       return { status: r.status(), retry: Number(r.headers()["retry-after"] || 0), body: await r.json().catch(() => ({})) };
     };
+    const post = () => call({ base64: PNG, mediaType: "image/png" });
+    const postEmpty = () => call({});
+    const sha = (t) => crypto.createHash("sha256").update(t).digest("hex");
     try {
       await reset();
       // Per-minute burst limit: the counter lives in the database.
@@ -2418,15 +2422,18 @@ async function main() {
       c.expect((await count(K.mine)) === 0, "a request refused per minute doesn't touch the daily quota");
       await sql("DELETE FROM rate_limits WHERE key = $1", [K.min]);
       const ok = await post();
-      c.expect(ok.status === 400 && (await count(K.min)) === 1, "counter cleared in the database -> allowed again (then 400: no image)", ok);
-      c.step(`daily quota rows after a 400 (bad body): mine=${await count(K.mine)} all=${await count(K.all)}`);
+      c.expect(ok.status === 200 && (await count(K.min)) === 1, "counter cleared in the database -> allowed again (stand-in analysis)", ok);
+      c.expect((await count(K.mine)) === 1 && (await count(K.all)) === 1, "an analysis spends one unit of each daily quota");
+      const bad = await postEmpty();
+      c.expect(bad.status === 400 && (await count(K.mine)) === 1 && (await count(K.all)) === 1, "a bad request (no image) doesn't spend daily quota", { bad, mine: await count(K.mine) });
 
       // Daily quota per user.
       await seed(K.mine, 60);
       const allBefore = await count(K.all);
       const mine = await post();
       c.expect(mine.status === 429 && /Daily photo-analysis limit/.test(mine.body.error || ""), "61st photo of the day for one user -> 429 daily limit", mine);
-      c.expect(mine.retry >= 1 && mine.retry <= 86400, "daily 429 carries a Retry-After", mine.retry);
+      const toMidnight = Math.ceil((Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1) - Date.now()) / 1000);
+      c.expect(Math.abs(mine.retry - toMidnight) <= 5, "daily 429: Retry-After = seconds to the next UTC midnight", { retry: mine.retry, toMidnight });
       c.expect((await count(K.all)) === allBefore, "a request refused by the per-user quota doesn't count toward the app-wide quota");
 
       // Daily quota for the whole app.
@@ -2443,7 +2450,7 @@ async function main() {
       const fb = [];
       for (let n = 0; n < 11; n++) fb.push((await post()).status);
       await ctl.clear();
-      c.expect(fb.slice(0, 10).every((s) => s === 400) && fb[10] === 429, "RPC down -> memory fallback still allows 10/min then 429 (no 500s)", fb.join(","));
+      c.expect(fb.slice(0, 10).every((s) => s === 200) && fb[10] === 429, "RPC down -> memory fallback still allows 10/min then 429 (no 500s)", fb.join(","));
       c.expect((await count(K.min)) === 0, "nothing written to the database while the RPC fails");
 
       // Forgot password (public): per-address limit, shared.
@@ -2452,11 +2459,12 @@ async function main() {
       const f = [];
       for (let n = 0; n < 4; n++) f.push(await forgot("c4-nobody@test.local"));
       c.expect(f.join(",") === "200,200,200,429", "forgot: 3 per address per hour, then 429", f.join(","));
-      c.expect((await count("forgot-email:c4-nobody@test.local")) === 4, "forgot counter lives in Postgres");
+      c.expect((await count(`forgot-email:${sha("c4-nobody@test.local")}`)) === 4, "forgot counter lives in Postgres, keyed by the address's hash");
+      c.expect((await one("SELECT count(*)::int AS n FROM rate_limits WHERE key LIKE '%@%'")).n === 0, "no email address stored in rate_limits");
       await sql("UPDATE rate_limits SET count = 5 WHERE key LIKE 'forgot-ip:%'");
       const ipBlocked = await forgot("c4-other@test.local");
       c.expect(ipBlocked === 429, "forgot: per-client limit -> 429", ipBlocked);
-      c.step(`address counter written although the client was refused: ${await count("forgot-email:c4-other@test.local")}`);
+      c.expect((await count(`forgot-email:${sha("c4-other@test.local")}`)) === 0, "a refused client doesn't touch per-address counters");
       await anon.context().close();
     } finally {
       await ctl.clear();

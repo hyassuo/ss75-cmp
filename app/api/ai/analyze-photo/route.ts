@@ -221,23 +221,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Checked after the configuration so a missing key doesn't eat quota.
-  const day = new Date().toISOString().slice(0, 10);
-  const mine = await rateLimitShared(
-    `photo-day:${guard.ctx.userId}:${day}`,
-    DAILY_PER_USER,
-    DAY_MS
-  );
-  const all = mine.allowed
-    ? await rateLimitShared(`photo-day:all:${day}`, DAILY_TOTAL, DAY_MS)
-    : mine;
-  if (!all.allowed) {
-    return NextResponse.json(
-      { error: "Daily photo-analysis limit reached. Try again tomorrow." },
-      { status: 429, headers: { "Retry-After": String(all.retryAfter) } }
-    );
-  }
-
   const body = await readJson<{ base64?: string; mediaType?: string }>(request);
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -255,6 +238,36 @@ export async function POST(request: Request) {
   const media: AiMediaType = ALLOWED.includes(mediaType as AiMediaType)
     ? (mediaType as AiMediaType)
     : "image/jpeg";
+
+  // Daily quotas, counted only for a request that will reach the model (a
+  // missing key, bad body or oversize image doesn't spend them). The
+  // per-user quota goes first so a user over it doesn't eat the app-wide
+  // one; the reverse (a user's count rising while only the app-wide quota
+  // refuses) is accepted — it lasts at most until midnight UTC.
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  const mine = await rateLimitShared(
+    `photo-day:${guard.ctx.userId}:${day}`,
+    DAILY_PER_USER,
+    DAY_MS
+  );
+  const all = mine.allowed
+    ? await rateLimitShared(`photo-day:all:${day}`, DAILY_TOTAL, DAY_MS)
+    : mine;
+  if (!all.allowed) {
+    // The keys carry the UTC date, so the quota reopens at the next UTC
+    // midnight, whatever the counter's own window says.
+    const nextMidnight = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 1
+    );
+    const retryAfter = Math.max(1, Math.ceil((nextMidnight - now.getTime()) / 1000));
+    return NextResponse.json(
+      { error: "Daily photo-analysis limit reached. Try again tomorrow." },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+    );
+  }
 
   try {
     const text = await aiGenerate({

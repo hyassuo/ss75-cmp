@@ -19,6 +19,9 @@ CREATE TABLE IF NOT EXISTS public.rate_limits (
   window_start timestamptz NOT NULL,
   count        integer NOT NULL
 );
+-- For the periodic cleanup in rate_limit_hit.
+CREATE INDEX IF NOT EXISTS rate_limits_window_start_idx
+  ON public.rate_limits (window_start);
 -- Not an API table: RLS on with no policies, and no grants.
 ALTER TABLE public.rate_limits ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.rate_limits FROM anon, authenticated;
@@ -54,9 +57,17 @@ BEGIN
   RETURNING r.count, r.window_start INTO v_count, v_start;
 
   -- Now and then, drop windows that ended long ago (keys include dates and
-  -- addresses, so the table would otherwise only grow).
+  -- client addresses, so the table would otherwise only grow). In small
+  -- batches, skipping rows another request holds: two cleanups can't
+  -- deadlock, and no request waits behind one.
   IF random() < 0.01 THEN
-    DELETE FROM public.rate_limits WHERE window_start < now() - interval '2 days';
+    DELETE FROM public.rate_limits
+    WHERE key IN (
+      SELECT key FROM public.rate_limits
+      WHERE window_start < now() - interval '2 days'
+      LIMIT 500
+      FOR UPDATE SKIP LOCKED
+    );
   END IF;
 
   allowed := v_count <= p_limit;

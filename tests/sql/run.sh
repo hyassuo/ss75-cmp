@@ -261,7 +261,8 @@ scenario() { # scenario <name> <files...>
   suite
 }
 
-MIGRATIONS="supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql supabase/migrations/20260929000000_rate_limits.sql"
+# Every migration, in file-name (= timestamp) order.
+MIGRATIONS=$(cd "$ROOT" && ls supabase/migrations/*.sql | sort)
 # shellcheck disable=SC2086 # word-split on purpose: one file per word
 scenario fresh $MIGRATIONS $MIGRATIONS
 echo " demo seed"
