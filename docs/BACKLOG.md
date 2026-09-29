@@ -45,7 +45,6 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Sugestão |
 |---|---|------|----------|
-| E3 | P3 | Câmera: uma foto por vez | Permitir várias fotos (`multiple` na galeria). |
 | E4 | P3 | Tema escuro | Útil à noite e em ambientes escuros. |
 | E5 | P3 | Padronização visual | Ainda há três sistemas de estilo (inline, CSS próprio, Tailwind configurado e não usado) e muitos tamanhos de fonte. Continuar migrando para os componentes base em `components/ui/`. |
 
@@ -73,3 +72,4 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | D2 | Auditoria de inclusões | Adicionar leitura ou evidência gera evento (`reading_added` / `evidence_added`) com autor; rascunho de "Novo item" continua cancelável com fotos/leituras. |
 | E1 | Busca de item | Campo na barra superior (atalho `/`): nome, código IFS, OS, local funcional, zona, mecanismo ou notas; ignora acentos, maiúsculas e pontuação dos códigos; arquivados por último; funciona offline. |
 | E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ baixo, ◇ médio, △ alto, ▲ crítico) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
+| E3 | Várias fotos de uma vez | A galeria aceita até 10 arquivos por seleção; cada um vira um registro de evidência (mesma data e descrição), salvos em sequência com progresso. A IA analisa a primeira foto da fila. Se um envio falhar, os já salvos são informados e o restante fica na fila para tentar de novo, sem duplicar. |

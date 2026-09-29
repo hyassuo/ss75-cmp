@@ -17,6 +17,9 @@ import { useFeedback } from "@/lib/context/FeedbackContext";
 const BUCKET = "evidence-photos";
 // Gemini on a VSAT link can be slow, but a spinner must never hang forever.
 const AI_TIMEOUT_MS = 60_000;
+// Photos picked in one go from the gallery. Each becomes its own evidence
+// record (same date and description); kept small for satellite uploads.
+const MAX_BATCH = 10;
 
 type Outcome = { ok: true } | { ok: false; error: string };
 
@@ -57,7 +60,13 @@ export function EvidencePanel({
   const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  // Queue of photos to save. The first is the one previewed and analysed by
+  // AI; the rest (a multi-pick from the gallery) share its date and text.
+  const [files, setFiles] = useState<File[]>([]);
+  const file = files[0] ?? null;
+  const [progress, setProgress] = useState("");
+  // Photos of the current pick still being compressed (0 = none).
+  const [preparing, setPreparing] = useState(0);
   const [b64, setB64] = useState<string | null>(null);
   const [compressInfo, setCompressInfo] = useState("");
   const [mediaType, setMediaType] = useState<string>("");
@@ -82,9 +91,31 @@ export function EvidencePanel({
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // Base64 of the head photo for the AI step, re-read whenever the head
+  // changes (a new pick, or the queue moving on after a partial save) so
+  // the analysis always describes the photo it will be saved with.
   useEffect(() => {
-    onDirtyChange?.(!!file || !!desc.trim());
-  }, [file, desc, onDirtyChange]);
+    setB64(null);
+    setMediaType("");
+    setAiResult(null);
+    setAiErr("");
+    if (!file || !file.type.startsWith("image")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setB64((reader.result as string).split(",")[1]);
+      setMediaType(file.type);
+    };
+    reader.readAsDataURL(file);
+    return () => reader.abort();
+  }, [file]);
+
+  useEffect(() => {
+    onDirtyChange?.(!!file || !!desc.trim() || preparing > 0);
+  }, [file, desc, preparing, onDirtyChange]);
+
+  // Picking, the AI call and saving all work on the queue's head photo:
+  // one at a time, so none of them acts on a photo that another replaced.
+  const busy = preparing > 0 || uploading || aiLoading;
 
   useEffect(() => {
     let active = true;
@@ -116,31 +147,38 @@ export function EvidencePanel({
   }, [evidences]);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const raw = e.target.files?.[0];
-    if (!raw) return;
+    const picked = Array.from(e.target.files ?? []);
+    // Cleared so that picking the same file(s) again still fires onChange.
+    e.target.value = "";
+    if (!picked.length) return;
     setCompressInfo("");
+    setSaveErr("");
+    const kept = picked.slice(0, MAX_BATCH);
+    setPreparing(kept.length);
     // Compress phone-sized photos (5–8 MB) down to ~300–500 KB before any
     // upload / base64 conversion. PDFs and small images pass through.
-    const { file: fl, compressed, originalBytes, finalBytes } =
-      await compressImage(raw);
-    setFile(fl);
-    if (compressed) {
+    const out: File[] = [];
+    let before = 0;
+    let after = 0;
+    let anyCompressed = false;
+    try {
+      for (const raw of kept) {
+        const r = await compressImage(raw);
+        out.push(r.file);
+        before += r.originalBytes;
+        after += r.finalBytes;
+        anyCompressed ||= r.compressed;
+      }
+    } finally {
+      setPreparing(0);
+    }
+    setFiles(out);
+    if (anyCompressed) {
       setCompressInfo(
-        `${t("f.optimised")} ${(originalBytes / 1024 / 1024).toFixed(1)} MB → ${(finalBytes / 1024).toFixed(0)} KB`
+        `${t("f.optimised")} ${(before / 1024 / 1024).toFixed(1)} MB → ${(after / 1024).toFixed(0)} KB`
       );
     }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      if (fl.type.startsWith("image")) {
-        setB64(result.split(",")[1]);
-        setMediaType(fl.type);
-      } else {
-        setB64(null);
-        setMediaType("");
-      }
-    };
-    reader.readAsDataURL(fl);
+    if (picked.length > MAX_BATCH) setSaveErr(t("evidence.batchLimit", MAX_BATCH));
   }
 
   async function runAI() {
@@ -183,69 +221,86 @@ export function EvidencePanel({
     }
   }
 
-  async function add() {
-    if (!desc.trim() || uploading) return;
-    setUploading(true);
-    setSaveErr("");
+  // Uploads one photo (if any) and records the evidence row. On failure the
+  // blob just uploaded is removed again — unless the insert did land and
+  // only its response was lost on the link: then the blob is in use.
+  async function saveOne(
+    f: File | null,
+    ai: AIAnalysis | null
+  ): Promise<Outcome> {
     const supabase = createClient();
     let filePath: string | null = null;
+    if (f) {
+      const safeName = f.name.replace(/[^\w.\-]/g, "_");
+      const path = `${itemId}/${crypto.randomUUID()}_${safeName}`;
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, f, { contentType: f.type });
+      // Abort instead of saving an evidence row with no file.
+      if (error) return { ok: false, error: t("f.uploadFailed") + " " + error.message };
+      filePath = path;
+    }
+    const res = await onAdd({
+      evidence_date: date,
+      description: desc,
+      file_path: filePath,
+      file_name: f?.name ?? null,
+      file_type: f?.type ?? null,
+      file_size: f?.size ?? null,
+      ai_analysis: ai,
+    });
+    if (!res.ok) {
+      if (filePath) {
+        const { data: landed } = await supabase
+          .from("evidences")
+          .select("id")
+          .eq("file_path", filePath)
+          .limit(1);
+        if (!landed?.length) {
+          await supabase.storage.from(BUCKET).remove([filePath]);
+        }
+      }
+      return { ok: false, error: t("evidence.saveFailed") + " " + res.error };
+    }
+    return { ok: true };
+  }
+
+  async function add() {
+    if (!desc.trim() || busy) return;
+    setUploading(true);
+    setSaveErr("");
+    // Saved one by one, dropping each from the queue as it lands: a failure
+    // keeps the unsaved rest (and the form) for a retry.
+    const queue: Array<File | null> = files.length ? [...files] : [null];
+    const total = queue.length;
+    let saved = 0;
     try {
-      if (file) {
-        const safeName = file.name.replace(/[^\w.\-]/g, "_");
-        const path = `${itemId}/${crypto.randomUUID()}_${safeName}`;
-        const { error } = await supabase.storage
-          .from(BUCKET)
-          .upload(path, file, { contentType: file.type });
-        if (error) {
-          // Abort instead of silently saving an evidence row with no file —
-          // the form keeps its state so the user can retry.
-          setSaveErr(t("f.uploadFailed") + " " + error.message);
+      while (queue.length) {
+        if (total > 1) setProgress(t("evidence.batchProgress", saved + 1, total));
+        // Only the first (previewed) photo carries the AI analysis.
+        const res = await saveOne(queue[0], saved === 0 ? aiResult : null);
+        if (!res.ok) {
+          // Say what did land, so nobody re-picks (and duplicates) those.
+          setSaveErr(
+            saved ? `${res.error} ${t("evidence.batchKept", saved, total)}` : res.error
+          );
           return;
         }
-        filePath = path;
+        queue.shift();
+        saved += 1;
+        setFiles(queue.filter((f): f is File => f !== null));
       }
-      const res = await onAdd({
-        evidence_date: date,
-        description: desc,
-        file_path: filePath,
-        file_name: file?.name ?? null,
-        file_type: file?.type ?? null,
-        file_size: file?.size ?? null,
-        ai_analysis: aiResult,
-      });
-      if (!res.ok) {
-        // Keep the form for a retry and drop the blob just uploaded (the
-        // retry uploads a fresh copy) — unless the insert did land and only
-        // its response was lost on the link: then the blob is in use.
-        if (filePath) {
-          const { data: landed } = await supabase
-            .from("evidences")
-            .select("id")
-            .eq("file_path", filePath)
-            .limit(1);
-          if (!landed?.length) {
-            await supabase.storage.from(BUCKET).remove([filePath]);
-          }
-        }
-        setSaveErr(t("evidence.saveFailed") + " " + res.error);
-        return;
-      }
-      toast(t("toast.evidenceSaved"));
+      toast(total > 1 ? t("toast.evidencesSaved", total) : t("toast.evidenceSaved"));
       setDate(today());
       setDesc("");
-      setFile(null);
-      setB64(null);
-      setMediaType("");
+      setFiles([]);
       setCompressInfo("");
-      setAiResult(null);
-      setAiErr("");
-      if (fileRef.current) fileRef.current.value = "";
-      if (cameraRef.current) cameraRef.current.value = "";
     } catch (e) {
       setSaveErr(
         t("evidence.saveFailed") + " " + (e instanceof Error ? e.message : String(e))
       );
     } finally {
+      setProgress("");
       setUploading(false);
     }
   }
@@ -309,6 +364,7 @@ export function EvidencePanel({
             ref={fileRef}
             type="file"
             accept="image/*,.pdf"
+            multiple
             onChange={handleFile}
             tabIndex={-1}
             aria-hidden="true"
@@ -318,14 +374,16 @@ export function EvidencePanel({
             <button
               type="button"
               onClick={() => cameraRef.current?.click()}
-              style={pickBtn(true)}
+              disabled={busy}
+              style={pickBtn(true, busy)}
             >
               📷 {t("f.takePhoto")}
             </button>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              style={pickBtn(false)}
+              disabled={busy}
+              style={pickBtn(false, busy)}
             >
               🖼 {t("f.fromGallery")}
             </button>
@@ -367,8 +425,19 @@ export function EvidencePanel({
               >
                 {file.name}
               </span>
+              {files.length > 1 && (
+                <span style={{ color: DS.text3, flexShrink: 0 }}>
+                  {t("evidence.morePhotos", files.length - 1)}
+                </span>
+              )}
             </div>
           )}
+          <div
+            role="status"
+            style={{ fontSize: 11, color: DS.text3, marginTop: preparing ? 6 : 0 }}
+          >
+            {preparing > 0 && t("evidence.preparing", preparing)}
+          </div>
           {compressInfo && (
             <div style={{ fontSize: 10, color: DS.grn, marginTop: 6 }}>
               {compressInfo}
@@ -382,7 +451,7 @@ export function EvidencePanel({
             <Label>{t("f.step2")}</Label>
             <button
               onClick={() => void runAI()}
-              disabled={aiLoading}
+              disabled={busy}
               style={{
                 width: "100%",
                 background: aiLoading ? "transparent" : DS.vio,
@@ -391,7 +460,8 @@ export function EvidencePanel({
                 borderRadius: 7,
                 padding: "10px 14px",
                 fontWeight: 700,
-                cursor: aiLoading ? "default" : "pointer",
+                cursor: busy ? "default" : "pointer",
+                opacity: busy && !aiLoading ? 0.6 : 1,
                 fontSize: 13,
                 fontFamily: DS.sans,
                 transition: DS.transition,
@@ -429,7 +499,7 @@ export function EvidencePanel({
         {/* Step 4 — save */}
         <button
           onClick={() => void add()}
-          disabled={uploading || !desc.trim()}
+          disabled={busy || !desc.trim()}
           style={{
             width: "100%",
             background: !desc.trim() ? DS.bord : DS.blu,
@@ -438,15 +508,24 @@ export function EvidencePanel({
             borderRadius: 7,
             padding: "12px 18px",
             fontWeight: 700,
-            cursor: uploading || !desc.trim() ? "default" : "pointer",
+            cursor: busy || !desc.trim() ? "default" : "pointer",
             fontSize: 14,
-            opacity: uploading ? 0.6 : 1,
+            opacity: busy ? 0.6 : 1,
           }}
         >
-          {uploading ? t("common.saving") : t("f.saveEvidence")}
+          {uploading
+            ? progress || t("common.saving")
+            : files.length > 1
+              ? t("evidence.saveMany", files.length)
+              : t("f.saveEvidence")}
         </button>
+        {/* The label change above is not announced; this is. */}
+        <div role="status" className="sr-only">
+          {progress}
+        </div>
         {saveErr && (
           <div
+            role="alert"
             style={{
               background: DS.redBg,
               border: "1px solid " + DS.redBord,
@@ -624,7 +703,7 @@ export function EvidencePanel({
   );
 }
 
-function pickBtn(primary: boolean): React.CSSProperties {
+function pickBtn(primary: boolean, disabled: boolean): React.CSSProperties {
   return {
     background: primary ? DS.vio : DS.sur,
     color: primary ? "#fff" : DS.text,
@@ -634,6 +713,7 @@ function pickBtn(primary: boolean): React.CSSProperties {
     padding: "8px 10px",
     fontSize: 13,
     fontWeight: 700,
-    cursor: "pointer",
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.6 : 1,
   };
 }
