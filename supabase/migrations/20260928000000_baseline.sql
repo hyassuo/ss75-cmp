@@ -479,9 +479,13 @@ RETURNS boolean AS $$
       AND i.accessory_type IS NULL
       AND i.notes IS NULL
   )
+  -- Readings/evidences don't count (above), so neither do their audit
+  -- events: adding (or adding then removing) a photo keeps it a draft.
   AND NOT EXISTS (
     SELECT 1 FROM public.history h
-    WHERE h.item_id = p_item AND h.action <> 'created'
+    WHERE h.item_id = p_item
+      AND h.action NOT IN ('created', 'reading_added', 'reading_deleted',
+                           'evidence_added', 'evidence_deleted')
   )
 $$ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public;
 -- INVOKER: called from the RLS policy it runs as the querying user, so the
@@ -822,8 +826,9 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 
 -- units
 DROP POLICY IF EXISTS "units_select_authenticated" ON public.units;
+-- Active users only (inactive accounts read nothing; see 20260929000100).
 CREATE POLICY "units_select_authenticated" ON public.units
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO authenticated USING (public.current_user_role() IS NOT NULL);
 -- Admins may touch only their own unit row (hardening round 4): a global
 -- admin policy would let any admin rename/delete other units via direct
 -- PostgREST, and a unit delete cascades to that unit's data.
@@ -874,8 +879,9 @@ GRANT UPDATE (full_name, dept) ON public.profiles TO authenticated;
 
 -- zones
 DROP POLICY IF EXISTS "zones_select_authenticated" ON public.zones;
+-- Active users only (inactive accounts read nothing; see 20260929000100).
 CREATE POLICY "zones_select_authenticated" ON public.zones
-  FOR SELECT TO authenticated USING (true);
+  FOR SELECT TO authenticated USING (public.current_user_role() IS NOT NULL);
 -- The zone catalog (Z01..Z14) is SHARED, read-only reference data
 -- (hardening round 4). Dropping the admin policy leaves only zones_select,
 -- so RLS denies INSERT/UPDATE/DELETE to all authenticated users. Manage

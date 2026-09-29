@@ -44,9 +44,13 @@ BEGIN
     SELECT i.id FROM public.items i
     JOIN public.demo_seed_items d ON d.id = i.id
     WHERE i.unit_id = v_unit
+      -- Touched = any audit event besides the seed's own: 'created' and the
+      -- unattributed 'reading_added'/'evidence_added' its inserts log.
       AND NOT EXISTS (
         SELECT 1 FROM public.history h
         WHERE h.item_id = i.id AND h.action <> 'created'
+          AND NOT (h.action IN ('reading_added', 'evidence_added')
+                   AND h.by_user IS NULL)
       )
       AND NOT EXISTS (
         SELECT 1 FROM public.readings r
