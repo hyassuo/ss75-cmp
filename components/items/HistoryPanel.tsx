@@ -3,13 +3,20 @@
 import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { fmt } from "@/lib/utils/format";
-import { historyNote } from "@/lib/utils/historyNote";
+import {
+  historyAction,
+  historyField,
+  historyNoteText,
+  historyValue,
+} from "@/lib/i18n/history";
+import { useLang } from "@/lib/context/LangContext";
 import { createClient } from "@/lib/supabase/client";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 export function HistoryPanel({ itemId }: { itemId: string }) {
   const [rows, setRows] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const { lang, t } = useLang();
 
   useEffect(() => {
     let active = true;
@@ -32,13 +39,13 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
 
   if (loading) {
     return (
-      <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>Loading history…</div>
+      <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{t("history.loading")}</div>
     );
   }
   if (!rows.length) {
     return (
       <div style={{ fontSize: DS.fs.md, color: DS.text3 }}>
-        No history recorded yet.
+        {t("history.empty")}
       </div>
     );
   }
@@ -67,7 +74,7 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
               minWidth: 96,
             }}
           >
-            {fmt(h.event_date.split("T")[0])}
+            {fmt(h.event_date.split("T")[0], lang)}
           </div>
           <div>
             <div
@@ -78,20 +85,21 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
                 marginBottom: 2,
               }}
             >
-              {h.action.replace(/_/g, " ")}
-              {h.field_changed ? ` · ${h.field_changed}` : ""}
+              {historyAction(h.action, lang)}
+              {h.field_changed ? ` · ${historyField(h.field_changed, lang)}` : ""}
             </div>
             {(h.prev_value || h.new_value) && (
               <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
-                {h.prev_value ?? "-"} → {h.new_value ?? "-"}
+                {historyValue(h.field_changed, h.prev_value, lang)} →{" "}
+                {historyValue(h.field_changed, h.new_value, lang)}
               </div>
             )}
             {h.note && (
-              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{historyNote(h.note)}</div>
+              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{historyNoteText(h.note, lang)}</div>
             )}
             {h.by_user_email && (
               <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 2 }}>
-                by {h.by_user_email}
+                {t("history.by", h.by_user_email)}
               </div>
             )}
           </div>

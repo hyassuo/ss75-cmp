@@ -17,6 +17,8 @@ import {
   takePreloadedAppData,
 } from "@/lib/supabase/loadAppData";
 import { pruneItemDrafts } from "@/lib/utils/itemDraft";
+import { useLang } from "@/lib/context/LangContext";
+import { t as tDict } from "@/lib/i18n/dict";
 import type {
   AIAnalysis,
   Evidence,
@@ -107,6 +109,13 @@ export function DataProvider({
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Fallback error texts in the UI language. A ref, so a language switch
+  // doesn't re-create every callback below.
+  const { lang } = useLang();
+  const langRef = useRef(lang);
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [subareas, setSubareas] = useState<Subarea[]>([]);
   const [allItems, setAllItems] = useState<ItemWithRelations[]>([]);
@@ -250,7 +259,7 @@ export function DataProvider({
         .single();
       if (e || !data) {
         // Unique violation (duplicate name) or RLS denial surfaces here.
-        setError(e?.message || "Create sub-area failed");
+        setError(e?.message || tDict(langRef.current, "data.createSubareaFailed"));
         return null;
       }
       const created = data as Subarea;
@@ -309,7 +318,7 @@ export function DataProvider({
         .select(ITEM_SELECT)
         .single();
       if (e || !data) {
-        setError(e?.message || "Create failed");
+        setError(e?.message || tDict(langRef.current, "data.createFailed"));
         return null;
       }
       const created = data as unknown as ItemWithRelations;
@@ -372,7 +381,7 @@ export function DataProvider({
         // Gone: drop it from the lists (the open modal keeps its own copy).
         replaceItem(id, current);
         if (!current) {
-          return { ok: false, error: "Item not found", notFound: true };
+          return { ok: false, error: tDict(langRef.current, "data.notFound"), notFound: true };
         }
         if (
           opts.expectedUpdatedAt &&
@@ -391,9 +400,9 @@ export function DataProvider({
                 JSON.stringify(v ?? null)
             );
           if (mine) return { ok: true, data: current };
-          return { ok: false, error: "Changed by someone else", conflict: true };
+          return { ok: false, error: tDict(langRef.current, "data.conflict"), conflict: true };
         }
-        return { ok: false, error: "Update not permitted" };
+        return { ok: false, error: tDict(langRef.current, "data.updateDenied") };
       }
       const updated = rows[0];
       replaceItem(id, updated);
@@ -441,7 +450,7 @@ export function DataProvider({
         .eq("id", id)
         .select("id");
       if (e || !gone?.length) {
-        return { ok: false, error: e?.message || "Delete not permitted" };
+        return { ok: false, error: e?.message || tDict(langRef.current, "data.deleteDenied") };
       }
       if (!opts.discardDraft) await removeFiles();
       setAllItems((prev) => prev.filter((i) => i.id !== id));
@@ -460,7 +469,7 @@ export function DataProvider({
         .select("*")
         .single();
       if (e || !data) {
-        return { ok: false, error: e?.message || "Add reading failed" };
+        return { ok: false, error: e?.message || tDict(langRef.current, "data.addReadingFailed") };
       }
       const created = data as Reading;
       setAllItems((prev) =>
@@ -483,7 +492,7 @@ export function DataProvider({
         .eq("id", id)
         .select("id");
       if (e || !gone?.length) {
-        return { ok: false, error: e?.message || "Delete not permitted" };
+        return { ok: false, error: e?.message || tDict(langRef.current, "data.deleteDenied") };
       }
       setAllItems((prev) =>
         prev.map((i) =>
@@ -511,7 +520,7 @@ export function DataProvider({
         .select("*")
         .single();
       if (e || !data) {
-        return { ok: false, error: e?.message || "Add evidence failed" };
+        return { ok: false, error: e?.message || tDict(langRef.current, "data.addEvidenceFailed") };
       }
       const created = data as Evidence;
       setAllItems((prev) =>
@@ -539,7 +548,7 @@ export function DataProvider({
         .eq("id", id)
         .select("id");
       if (e || !gone?.length) {
-        return { ok: false, error: e?.message || "Delete not permitted" };
+        return { ok: false, error: e?.message || tDict(langRef.current, "data.deleteDenied") };
       }
       if (evidence?.file_path) {
         const { error: se } = await supabase.storage

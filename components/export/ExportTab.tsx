@@ -6,7 +6,8 @@ import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useData } from "@/lib/context/DataContext";
-import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { fmtCompact, fmtNum, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { tOr } from "@/lib/i18n/dict";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
@@ -124,7 +125,10 @@ function showPdfInTab(win: Window | null, blob: Blob, name: string) {
 
 export function ExportTab() {
   const { lang, t, tPriority, tStatus, tDept } = useLang();
-  // Excel in pt-BR expects ";" (the comma is the decimal separator).
+  // CSV and XLSX are data for other tools: fixed English headers, stored
+  // values, ISO dates and decimal points in both languages. Only the CSV
+  // separator follows the language: Excel in pt-BR expects ";" (the comma
+  // is its decimal separator).
   const csvSep = lang === "pt" ? ";" : ",";
   const { toast } = useFeedback();
   const { zones: allZones, itemsByZone, subareas } = useData();
@@ -137,7 +141,7 @@ export function ExportTab() {
   const zones = deptOnly
     ? allZones.filter((z) => z.system === sysFilter)
     : allZones;
-  const scopeLabel = deptOnly ? sysFilter : "All departments";
+  const scopeLabel = deptOnly ? tDept(sysFilter) : t("exp.scopeAll");
   const deptSlug = sysFilter.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const fileBase = `ss75-cmp_${deptOnly ? deptSlug + "_" : ""}${today()}`;
   const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
@@ -438,14 +442,14 @@ export function ExportTab() {
       // default about:blank black in dark mode, which made the placeholder
       // text invisible and looked like "the new tab is just black".
       win.document.write(
-        "<!doctype html><html><head>" +
+        `<!doctype html><html lang='${lang === "pt" ? "pt-BR" : "en"}'><head>` +
           "<meta name='color-scheme' content='light'>" +
-          "<title>Generating PDF…</title></head>" +
+          `<title>${t("exp.win.title")}</title></head>` +
           "<body style='margin:0;background:#ffffff;color:#1e2d3d;" +
           "font-family:system-ui,sans-serif;padding:32px;font-size:16px'>" +
           "<div style='font-weight:700;margin-bottom:8px'>" +
-          "SS-75 CMP · PDF export</div>" +
-          "<div id='cmp-status' style='color:#445566'>Preparing export…</div>" +
+          `${t("exp.win.heading")}</div>` +
+          `<div id='cmp-status' style='color:#445566'>${t("exp.win.preparing")}</div>` +
           "</body></html>"
       );
     }
@@ -464,31 +468,41 @@ export function ExportTab() {
           subarea: (it.subarea_id && subareaName.get(it.subarea_id)) || "",
           name: it.name,
           ifs: it.ifs_obj_id ?? "",
-          priority: effectivePriority(it) ?? "",
-          status: it.status,
+          priority: effectivePriority(it) ? tPriority(effectivePriority(it)) : "",
+          status: tStatus(it.status),
           sece: it.sece,
-          last_insp: it.last_insp ? fmtCompact(it.last_insp) : "",
-          next_insp: it.next_insp ? fmtCompact(it.next_insp) : "",
-          rate: rt !== null ? rt.toFixed(3) : "",
+          last_insp: it.last_insp ? fmtCompact(it.last_insp, lang) : "",
+          next_insp: it.next_insp ? fmtCompact(it.next_insp, lang) : "",
+          rate: rt !== null ? fmtNum(rt, lang, 3) : "",
           action: it.action_type
-            ? `Tratativa: ${it.action_type} · ${it.action_status || "Sem planejamento"}` +
-              (it.action_due ? ` · prazo ${fmtCompact(it.action_due)}` : "")
+            ? t(
+                "pdf.action",
+                tOr(lang, `actionType.${it.action_type}`, it.action_type),
+                tOr(
+                  lang,
+                  `actionStatus.${it.action_status || "Sem planejamento"}`,
+                  it.action_status || "Sem planejamento"
+                )
+              ) +
+              (it.action_due
+                ? " · " + t("pdf.actionDue", fmtCompact(it.action_due, lang))
+                : "")
             : "",
         };
       });
       let photoLoad: PhotoLoad | undefined;
       if (includePhotos) {
-        status("Looking up photos…");
+        status(t("exp.win.lookingUp"));
         photoLoad = await loadPhotos((loaded, total) =>
           status(
             total
-              ? `Loading photos… ${loaded} of ${total}`
-              : "No photos to load"
+              ? t("exp.win.loadingPhotos", loaded, total)
+              : t("exp.win.noPhotos")
           )
         );
       }
       const photosByItem = photoLoad?.photos;
-      status("Rendering PDF…");
+      status(t("exp.win.rendering"));
       // If the user asked for photos and image evidence exists but nothing
       // loaded, say so rather than silently shipping a photo-less PDF.
       // This distinguishes a load/format problem from "there simply are no
@@ -515,24 +529,24 @@ export function ExportTab() {
       // the one failure mode a compliance document can't afford.
       let note = "";
       if (includePhotos && photoLoad) {
-        const parts = [`${photoCount} photos embedded`];
+        const parts = [t("pdf.photosEmbedded", photoCount)];
         if (photoLoad.failed > 0) {
-          parts.push(`${photoLoad.failed} failed to load`);
+          parts.push(t("pdf.photosFailed", photoLoad.failed));
         }
         if (photoLoad.skippedItems > 0) {
           parts.push(
-            `capped at ${MAX_ITEMS_WITH_PHOTOS} items with photos (` +
-              `${photoLoad.skippedItems} more items have photos not shown)`
+            t("pdf.photosCapped", MAX_ITEMS_WITH_PHOTOS, photoLoad.skippedItems)
           );
         }
-        note = "Photos: " + parts.join(" · ");
+        note = t("pdf.photosNote", parts.join(" · "));
       }
       console.info(
         `[pdf] rendering ${items.length} items, ${photoCount} photos`
       );
       const blob = await pdf(
         <PdfDocument
-          generated={fmtCompact(today())}
+          lang={lang}
+          generated={fmtCompact(today(), lang)}
           total={activeFlat.length}
           sece={activeFlat.filter((i) => i.sece).length}
           critical={activeFlat.filter((i) => effectivePriority(i) === "Critical").length}
@@ -547,9 +561,12 @@ export function ExportTab() {
         throw new Error(`PDF render produced an empty file (${blob.size} B)`);
       }
       status(
-        `PDF ready (${(blob.size / 1024).toFixed(0)} KB, ${photoCount} photos` +
-          (photoLoad?.failed ? `, ${photoLoad.failed} failed` : "") +
-          "). Opening…"
+        t(
+          "exp.win.ready",
+          (blob.size / 1024).toFixed(0),
+          photoCount,
+          photoLoad?.failed ?? 0
+        )
       );
       showPdfInTab(win, blob, `${fileBase}.pdf`);
     } catch (e) {
@@ -681,16 +698,16 @@ export function ExportTab() {
             <thead>
               <tr style={{ borderBottom: "2px solid " + DS.bord2 }}>
                 {[
-                  "Zone",
-                  "Item",
-                  "IFS Object",
-                  "Priority",
-                  "Status",
-                  "SECE",
-                  "Last",
-                  "Next",
-                  "WO",
-                  "Rate",
+                  t("exp.col.zone"),
+                  t("exp.col.item"),
+                  t("exp.col.ifs"),
+                  t("exp.col.priority"),
+                  t("exp.col.status"),
+                  t("exp.col.sece"),
+                  t("exp.col.last"),
+                  t("exp.col.next"),
+                  t("exp.col.wo"),
+                  t("exp.col.rate"),
                 ].map((h) => (
                   <th
                     key={h}
@@ -787,7 +804,7 @@ export function ExportTab() {
                         color: it.last_insp ? DS.text3 : DS.text3,
                       }}
                     >
-                      {fmtCompact(it.last_insp)}
+                      {fmtCompact(it.last_insp, lang)}
                     </td>
                     <td
                       style={{
@@ -798,7 +815,7 @@ export function ExportTab() {
                       }}
                     >
                       {(isOverdue(it.next_insp) ? "! " : "") +
-                        fmtCompact(it.next_insp)}
+                        fmtCompact(it.next_insp, lang)}
                     </td>
                     <td
                       style={{
@@ -818,7 +835,7 @@ export function ExportTab() {
                         color: rateColor(rt),
                       }}
                     >
-                      {rt !== null ? rt.toFixed(3) : "-"}
+                      {rt !== null ? fmtNum(rt, lang, 3) : "-"}
                     </td>
                   </tr>
                 );

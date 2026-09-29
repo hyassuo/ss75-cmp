@@ -1,29 +1,69 @@
-const MONTHS_PT = [
-  "jan.", "fev.", "mar.", "abr.", "mai.", "jun.",
-  "jul.", "ago.", "set.", "out.", "nov.", "dez.",
-];
-const MONTHS_EN_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+import type { Lang } from "@/lib/i18n/dict";
 
-// Brazilian long-form date: matches iOS native date input rendering.
-export function fmt(d: string | null | undefined): string {
-  if (!d) return "-";
+// Dates and numbers follow the UI language: PT is pt-BR, EN is en-GB
+// ("9 Oct 2026": day first like the rest of the crew's paperwork, and the
+// month in letters so it reads the same to Brazilian, Norwegian and
+// American users). The month tables are written out instead of calling
+// Intl: the server (Node's ICU) and every browser then produce exactly the
+// same text, so server-rendered pages hydrate without a mismatch.
+const MONTHS: Record<Lang, string[]> = {
+  pt: ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."],
+  en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+};
+
+function ymd(d: string): [string, number, number] | null {
   const parts = d.split("-");
-  if (parts.length < 3) return d;
-  const [y, m, day] = parts;
-  return `${parseInt(day, 10)} de ${MONTHS_PT[parseInt(m, 10) - 1]} de ${y}`;
+  if (parts.length < 3) return null;
+  const m = parseInt(parts[1], 10);
+  const day = parseInt(parts[2], 10);
+  if (!(m >= 1 && m <= 12) || !(day >= 1)) return null;
+  return [parts[0], m, day];
 }
 
-// Compact English form for reports / tables: "22-Jun-2026".
-export function fmtCompact(d: string | null | undefined): string {
+// Medium date for screens: "9 Oct 2026" (EN), "9 de out. de 2026" (PT,
+// as iOS renders a pt-BR date input).
+export function fmt(d: string | null | undefined, lang: Lang): string {
   if (!d) return "-";
-  const parts = d.split("-");
-  if (parts.length < 3) return d;
-  const [y, m, day] = parts;
-  const dd = day.padStart(2, "0");
-  return `${dd}-${MONTHS_EN_SHORT[parseInt(m, 10) - 1]}-${y}`;
+  const p = ymd(d);
+  if (!p) return d;
+  const [y, m, day] = p;
+  const mon = MONTHS[lang][m - 1];
+  return lang === "pt" ? `${day} de ${mon} de ${y}` : `${day} ${mon} ${y}`;
+}
+
+// Compact form for tables and the PDF: "09-Oct-2026" (EN), "09-out-2026" (PT).
+export function fmtCompact(d: string | null | undefined, lang: Lang): string {
+  if (!d) return "-";
+  const p = ymd(d);
+  if (!p) return d;
+  const [y, m, day] = p;
+  const mon = MONTHS[lang][m - 1].replace(".", "");
+  return `${String(day).padStart(2, "0")}-${mon}-${y}`;
+}
+
+// Date and time of a local instant (epoch ms), in the device's time zone:
+// "9 Oct 2026, 14:05" / "9 de out. de 2026, 14:05".
+export function fmtDateTime(ms: number, lang: Lang): string {
+  const d = new Date(ms);
+  if (isNaN(d.getTime())) return "-";
+  const date = fmt(localYmd(d), lang);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${date}, ${hh}:${mm}`;
+}
+
+// A number for display: fixed decimals when `digits` is given, and the
+// decimal comma in PT ("1,5"), the decimal point in EN ("1.5").
+export function fmtNum(n: number, lang: Lang, digits?: number): string {
+  const s = digits === undefined ? String(n) : n.toFixed(digits);
+  return lang === "pt" ? s.replace(".", ",") : s;
+}
+
+function localYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 // Local calendar date. toISOString() would give the UTC date, which rolls
@@ -31,15 +71,11 @@ export function fmtCompact(d: string | null | undefined): string {
 // early. isOverdue/daysUntil compare plain YYYY-MM-DD values, so the local
 // date keeps every schedule comparison on the user's calendar day.
 export function today(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return localYmd(new Date());
 }
 
-// "DD/MM/YYYY" short form for header chrome where the long Portuguese
-// month form is too verbose.
+// "DD/MM/YYYY" short form for the top bar, where the medium form is too
+// long on phones. Day first is right in both languages (pt-BR and en-GB).
 export function fmtShort(d: string | null | undefined): string {
   if (!d) return "-";
   const parts = d.split("-");

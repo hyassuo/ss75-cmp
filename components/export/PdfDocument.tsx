@@ -9,6 +9,18 @@ import {
   StyleSheet,
 } from "@react-pdf/renderer";
 import type { ReactNode } from "react";
+import { translate, type DictKey, type Lang } from "@/lib/i18n/dict";
+import { fmtCompact } from "@/lib/utils/format";
+
+// The report follows the UI language of whoever exports it, like the
+// screens: labels from the dictionary, dates and numbers already formatted
+// by the caller (ExportTab).
+function tf(lang: Lang, key: DictKey, ...args: unknown[]): string {
+  const v = translate(lang, key);
+  return typeof v === "function"
+    ? (v as (...a: unknown[]) => string)(...args)
+    : String(v);
+}
 
 const s = StyleSheet.create({
   page: { padding: 32, fontSize: 9, color: "#1e2d3d" },
@@ -78,6 +90,7 @@ export interface PdfItem {
   subarea: string;
   name: string;
   ifs: string;
+  // Display labels in the report's language.
   priority: string;
   status: string;
   sece: boolean;
@@ -97,6 +110,7 @@ export interface PdfPhoto {
 }
 
 export interface PdfDocProps {
+  lang: Lang;
   generated: string;
   total: number;
   sece: number;
@@ -111,6 +125,7 @@ export interface PdfDocProps {
 }
 
 export function PdfDocument({
+  lang,
   generated,
   total,
   sece,
@@ -125,12 +140,12 @@ export function PdfDocument({
   return (
     <Document>
       <Page size="A4" style={s.page}>
-        <Text style={s.title}>Corrosion Management Plan</Text>
+        <Text style={s.title}>{tf(lang, "header.title")}</Text>
         <Text style={s.sub}>
-          SS-75 Noble Courage · {scope} · Generated {generated}
+          SS-75 Noble Courage · {scope} · {tf(lang, "pdf.generated", generated)}
         </Text>
         <Text style={s.sub}>
-          Total {total} · SECE {sece} · Critical {critical} · NORSOK M-001 /
+          {tf(lang, "pdf.totals", total, sece, critical)} · NORSOK M-001 /
           DNV-RP-G101 / ISO 21457 / NACE MR0175
         </Text>
         {note ? <Text style={s.sub}>{note}</Text> : null}
@@ -155,7 +170,7 @@ export function PdfDocument({
               lastSub = it.subarea;
               rows.push(
                 <Text key={`s${idx}`} style={s.subarea}>
-                  {it.subarea || "No sub-area"}
+                  {it.subarea || tf(lang, "subarea.none")}
                 </Text>
               );
             }
@@ -186,7 +201,9 @@ export function PdfDocument({
                     <View key={pi} style={s.photoCell}>
                       {/* eslint-disable-next-line jsx-a11y/alt-text */}
                       <Image style={s.photoImg} src={p.data} />
-                      <Text style={s.photoCaption}>{p.evidence_date}</Text>
+                      <Text style={s.photoCaption}>
+                        {fmtCompact(p.evidence_date, lang)}
+                      </Text>
                     </View>
                   ))}
                 </View>
@@ -204,12 +221,12 @@ export function PdfDocument({
                   {zid} · {zname}
                 </Text>
                 <View style={s.h}>
-                  <Text style={[s.cName, s.hc]}>Item</Text>
-                  <Text style={[s.cIfs, s.hc]}>IFS</Text>
-                  <Text style={[s.cPri, s.hc]}>Priority</Text>
-                  <Text style={[s.cSta, s.hc]}>Status</Text>
-                  <Text style={[s.cLast, s.hc]}>Last</Text>
-                  <Text style={[s.cNext, s.hc]}>Next</Text>
+                  <Text style={[s.cName, s.hc]}>{tf(lang, "pdf.col.item")}</Text>
+                  <Text style={[s.cIfs, s.hc]}>{tf(lang, "pdf.col.ifs")}</Text>
+                  <Text style={[s.cPri, s.hc]}>{tf(lang, "pdf.col.priority")}</Text>
+                  <Text style={[s.cSta, s.hc]}>{tf(lang, "pdf.col.status")}</Text>
+                  <Text style={[s.cLast, s.hc]}>{tf(lang, "pdf.col.last")}</Text>
+                  <Text style={[s.cNext, s.hc]}>{tf(lang, "pdf.col.next")}</Text>
                 </View>
               </View>
               {rows}

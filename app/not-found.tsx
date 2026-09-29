@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { DS } from "@/lib/design/tokens";
+import { t } from "@/lib/i18n/dict";
+import { serverLang } from "@/lib/i18n/serverLang";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const lang = (await serverLang()) ?? "en";
   return (
     <div
       style={{
@@ -27,7 +30,7 @@ export default function NotFound() {
           404
         </div>
         <div style={{ fontSize: DS.fs.lg, color: DS.text3, margin: "8px 0 20px" }}>
-          Page not found
+          {t(lang, "nf.title")}
         </div>
         <Link
           href="/dashboard"
@@ -41,7 +44,7 @@ export default function NotFound() {
             textDecoration: "none",
           }}
         >
-          Back to Dashboard
+          {t(lang, "nf.back")}
         </Link>
       </div>
     </div>

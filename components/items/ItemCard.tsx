@@ -4,7 +4,7 @@ import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useLang } from "@/lib/context/LangContext";
 import { Gauge } from "@/components/ui/Gauge";
-import { fmt, isOverdue, daysUntil, today } from "@/lib/utils/format";
+import { fmt, fmtNum, isOverdue, daysUntil, today } from "@/lib/utils/format";
 import { itemScore } from "@/lib/domain/itemScore";
 import { effectiveStatus } from "@/lib/domain/effectiveStatus";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
@@ -13,6 +13,7 @@ import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 import { effectivePriority } from "@/lib/domain/calcPriority";
 import { pressable } from "@/lib/utils/a11y";
+import { tOr } from "@/lib/i18n/dict";
 
 export function ItemCard({
   item,
@@ -21,7 +22,7 @@ export function ItemCard({
   item: ItemWithRelations;
   onClick: () => void;
 }) {
-  const { t, tPriority, tStatus } = useLang();
+  const { lang, t, tPriority, tStatus } = useLang();
   const priority = effectivePriority(item);
   const sc = itemScore(item);
   const rt = calcRate(item.readings);
@@ -92,7 +93,11 @@ export function ItemCard({
           {item.sece && <Badge text="SECE" color={DS.red} sm />}
           {item.is_accessory && (
             <Badge
-              text={item.accessory_type || t("f.isAccessory")}
+              text={
+                item.accessory_type
+                  ? tOr(lang, `accType.${item.accessory_type}`, item.accessory_type)
+                  : t("f.isAccessory")
+              }
               color={DS.blu}
               sm
             />
@@ -106,14 +111,14 @@ export function ItemCard({
           )}
           {rt !== null && (
             <Badge
-              text={rt.toFixed(2) + "mm/yr"}
+              text={fmtNum(rt, lang, 2) + " " + t("unit.mmYr")}
               color={rateColor(rt)}
               sm
             />
           )}
           {item.evidences.length > 0 && (
             <Badge
-              text={item.evidences.length + " ev."}
+              text={t("card.evidences", item.evidences.length)}
               color={DS.vio}
               sm
             />
@@ -132,9 +137,9 @@ export function ItemCard({
           {isOverdue(item.next_insp)
             ? tStatus("Overdue").toUpperCase() + " "
             : dd !== null && dd <= 30
-              ? dd + "d → "
+              ? t("card.dueIn", dd)
               : ""}
-          {fmt(item.next_insp)}
+          {fmt(item.next_insp, lang)}
         </div>
       </div>
     </div>

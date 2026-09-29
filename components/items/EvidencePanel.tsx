@@ -11,7 +11,8 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { AIResultCard } from "@/components/items/AIResultCard";
-import { fmt, today } from "@/lib/utils/format";
+import { fmt, fmtNum, today } from "@/lib/utils/format";
+import { tApiError, tOr } from "@/lib/i18n/dict";
 import { createClient } from "@/lib/supabase/client";
 import { compressImage } from "@/lib/utils/compressImage";
 import { useLang } from "@/lib/context/LangContext";
@@ -62,7 +63,7 @@ export function EvidencePanel({
   onAIApply,
   onDirtyChange,
 }: Props) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const { confirm, toast } = useFeedback();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
@@ -160,7 +161,7 @@ export function EvidencePanel({
     setFiles(out);
     if (anyCompressed) {
       setCompressInfo(
-        `${t("f.optimised")} ${(before / 1024 / 1024).toFixed(1)} MB → ${(after / 1024).toFixed(0)} KB`
+        `${t("f.optimised")} ${fmtNum(before / 1024 / 1024, lang, 1)} MB → ${(after / 1024).toFixed(0)} KB`
       );
     }
     if (picked.length > MAX_BATCH) setSaveErr(t("evidence.batchLimit", MAX_BATCH));
@@ -182,12 +183,13 @@ export function EvidencePanel({
       });
       const data = await r.json();
       if (!r.ok) {
-        setAiErr(data.error || "AI analysis failed.");
+        setAiErr(data.error ? tApiError(lang, data.error) : t("ai.failed"));
       } else {
         const result = data as AIAnalysis;
         setAiResult(result);
         if (!desc && result.findings) {
-          setDesc(`${result.findings} Action: ${result.immediateAction}.`);
+          const act = tOr(lang, `aiAction.${result.immediateAction}`, result.immediateAction);
+          setDesc(`${result.findings} ${t("ai.action")}: ${act}.`);
         }
         // Auto-apply fills only fields the user hasn't set (force=false).
         // The card stays visible as a review surface; its Apply button
@@ -198,7 +200,7 @@ export function EvidencePanel({
       setAiErr(
         e instanceof DOMException && e.name === "AbortError"
           ? t("ai.timeout")
-          : "AI analysis request failed."
+          : t("ai.requestFailed")
       );
     } finally {
       clearTimeout(timer);
@@ -572,7 +574,7 @@ export function EvidencePanel({
                   color: DS.blu,
                 }}
               >
-                {fmt(ev.evidence_date)}
+                {fmt(ev.evidence_date, lang)}
               </span>
             </div>
             <div

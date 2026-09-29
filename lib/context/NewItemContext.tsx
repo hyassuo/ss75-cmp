@@ -22,7 +22,7 @@ const NewItemContext = createContext<NewItemState | null>(null);
 export function NewItemProvider({ children }: { children: ReactNode }) {
   const { zones, createItem } = useData();
   const { sysFilter, sidebarCollapsed, openItem } = useShell();
-  const { t } = useLang();
+  const { t, tDept } = useLang();
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -137,7 +137,7 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
                       {z.name}
                     </div>
                     <div style={{ fontSize: DS.fs.xs, color: DS.text3 }}>
-                      {z.system}
+                      {tDept(z.system)}
                     </div>
                   </div>
                 </div>

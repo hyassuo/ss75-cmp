@@ -6,6 +6,7 @@ import { TriangleAlert } from "lucide-react";
 import { Icon } from "@/components/ui/Icon";
 import { DS } from "@/lib/design/tokens";
 import { Button } from "@/components/ui/Button";
+import { useLang } from "@/lib/context/LangContext";
 
 export default function AppError({
   error,
@@ -14,6 +15,7 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const { t } = useLang();
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -44,7 +46,7 @@ export default function AppError({
           marginBottom: 6,
         }}
       >
-        {chunk ? "This screen couldn't be downloaded" : "Something went wrong"}
+        {chunk ? t("err.chunkTitle") : t("common.error")}
       </div>
       <div
         style={{
@@ -57,13 +59,11 @@ export default function AppError({
       >
         {/* Raw error messages can carry internals (SQL, stack details):
             show a generic line plus the digest the server log is keyed by. */}
-        {chunk
-          ? "Check the connection, then reload."
-          : "An unexpected error occurred while loading this view."}
-        {!chunk && error.digest ? ` (ref ${error.digest})` : ""}
+        {chunk ? t("err.chunkHint") : t("err.unexpected")}
+        {!chunk && error.digest ? t("err.ref", error.digest) : ""}
       </div>
       <Button size="lg" onClick={chunk ? () => window.location.reload() : reset}>
-        {chunk ? "Reload" : "Try again"}
+        {chunk ? t("common.reload") : t("common.tryAgain")}
       </Button>
     </div>
   );

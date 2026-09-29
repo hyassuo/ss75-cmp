@@ -72,6 +72,7 @@ export function Topbar() {
               onClick={toggleSidebar}
               aria-label={t("nav.menu")}
               aria-expanded={!sidebarCollapsed}
+              className="nav-ctl"
               style={{
                 background: "transparent",
                 border: "1px solid " + DS.sbBord,
@@ -108,7 +109,7 @@ export function Topbar() {
             {/* Language toggle (EN | PT) */}
             <div
               role="group"
-              aria-label="Language"
+              aria-label={t("header.language")}
               style={{
                 display: "inline-flex",
                 background: "rgba(0,0,0,0.22)",
@@ -125,13 +126,13 @@ export function Topbar() {
                     key={l}
                     onClick={() => setLang(l)}
                     aria-pressed={active}
+                    className="nav-ctl"
                     style={{
                       background: active ? DS.sbAct : "transparent",
                       color: active ? "#ffffff" : DS.sbTxt2,
                       border: "none",
                       borderRadius: 4,
                       padding: "6px 10px",
-                      minHeight: 32,
                       fontSize: DS.fs.xs,
                       fontWeight: 700,
                       fontFamily: DS.mono,
@@ -191,7 +192,7 @@ export function Topbar() {
             className="tb-sub"
             style={{ color: DS.sbTxt2, fontFamily: DS.mono }}
           >
-            Noble Courage SS-75
+            {t("header.subtitle")}
           </div>
           <div
             style={{
@@ -232,7 +233,7 @@ export function Topbar() {
         </span>
         <div
           role="group"
-          aria-label="Department filter"
+          aria-label={t("header.deptFilter")}
           className="tb-pills"
           style={{
             background: "rgba(0,0,0,0.22)",
@@ -246,7 +247,7 @@ export function Topbar() {
                 key={s}
                 onClick={() => setSysFilter(s)}
                 aria-pressed={active}
-                className="tb-pill"
+                className="tb-pill nav-ctl"
                 style={{
                   background: active ? DS.sbAct : "transparent",
                   color: active ? "#ffffff" : DS.sbTxt2,

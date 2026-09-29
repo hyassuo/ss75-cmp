@@ -5,6 +5,7 @@ import { PwaRegister } from "@/components/layout/PwaRegister";
 import { RecoveryRedirect } from "@/components/layout/RecoveryRedirect";
 import { LangProvider } from "@/lib/context/LangContext";
 import { serverLang } from "@/lib/i18n/serverLang";
+import { t } from "@/lib/i18n/dict";
 import { serverTheme } from "@/lib/theme/serverTheme";
 import { THEME_COLOR } from "@/lib/theme/theme";
 import "./globals.css";
@@ -39,17 +40,22 @@ function supabaseOrigin(): string | null {
   }
 }
 
-export const metadata: Metadata = {
-  title: "CMP | Noble Courage",
-  description: "Corrosion Management Plan for SS-75 Noble Courage",
-  applicationName: "SS-75 CMP",
-  // iOS standalone mode (Add to Home Screen). The manifest handles Android.
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "SS-75 CMP",
-  },
-};
+// The layout already reads the language cookie, so the description can
+// follow it at no extra cost.
+export async function generateMetadata(): Promise<Metadata> {
+  const lang = (await serverLang()) ?? "en";
+  return {
+    title: "CMP | Noble Courage",
+    description: t(lang, "meta.description"),
+    applicationName: "SS-75 CMP",
+    // iOS standalone mode (Add to Home Screen). The manifest handles Android.
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: "SS-75 CMP",
+    },
+  };
+}
 
 export async function generateViewport(): Promise<Viewport> {
   const theme = await serverTheme();

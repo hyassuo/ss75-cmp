@@ -46,6 +46,7 @@ export function Sidebar() {
   const router = useRouter();
 
   const isAdmin = profile.role === "admin";
+  const roleLabel = t(`role.${profile.role}`);
   const isReadOnly = profile.role === "viewer";
   const collapsed = sidebarCollapsed;
   const onMain = pathname === "/dashboard";
@@ -158,6 +159,8 @@ export function Sidebar() {
           return (
             <button
               key={nav.tab}
+              type="button"
+              className="nav-ctl"
               onClick={() => goTab(nav.tab)}
               title={collapsed ? label : ""}
               aria-label={collapsed ? label : undefined}
@@ -178,6 +181,7 @@ export function Sidebar() {
                 key={n.href}
                 href={n.href}
                 onClick={closeDrawer}
+                className="nav-ctl"
                 title={collapsed ? label : ""}
                 aria-label={collapsed ? label : undefined}
                 aria-current={active ? "page" : undefined}
@@ -207,6 +211,7 @@ export function Sidebar() {
               aria-label={collapsed ? t("nav.newItem") : undefined}
               style={{
                 padding: "8px 0",
+                minHeight: 44,
                 fontSize: collapsed ? DS.fs.lg : DS.fs.md,
                 whiteSpace: "nowrap",
               }}
@@ -231,7 +236,7 @@ export function Sidebar() {
         <div
           title={
             collapsed
-              ? `${profile.role.toUpperCase()}: ${profile.full_name ?? ""}`
+              ? `${roleLabel.toUpperCase()}: ${profile.full_name ?? ""}`
               : ""
           }
           style={{
@@ -253,8 +258,8 @@ export function Sidebar() {
           }}
         >
           {collapsed
-            ? profile.role.charAt(0).toUpperCase()
-            : profile.role.toUpperCase()}
+            ? roleLabel.charAt(0).toUpperCase()
+            : roleLabel.toUpperCase()}
         </div>
         {!collapsed && (
           <div
@@ -268,10 +273,15 @@ export function Sidebar() {
             {profile.full_name ?? profile.email}
           </div>
         )}
+        {/* Same target as the other sidebar controls: 44px tall and, when
+            collapsed, as wide as the "+" button above (it used to be a
+            28px square). */}
         <button
+          type="button"
           onClick={() => void signOut()}
           title={collapsed ? t("nav.signOut") : ""}
           aria-label={collapsed ? t("nav.signOut") : undefined}
+          className="nav-ctl"
           style={{
             background: "transparent",
             border: "1px solid " + DS.sbBord,
@@ -282,15 +292,15 @@ export function Sidebar() {
             fontSize: collapsed ? DS.fs.lg : DS.fs.sm,
             fontFamily: DS.sans,
             transition: DS.transition,
-            width: collapsed ? 28 : "100%",
-            height: collapsed ? 28 : "auto",
+            width: collapsed ? "calc(100% - 12px)" : "100%",
+            minHeight: 44,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 6,
           }}
         >
-          <Icon icon={LogOut} size={collapsed ? "md" : "sm"} />
+          <Icon icon={LogOut} size={collapsed ? "lg" : "sm"} />
           {!collapsed && t("nav.signOut")}
         </button>
       </div>

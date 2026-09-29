@@ -65,6 +65,7 @@ export function BottomNav() {
           <button
             key={n.tab}
             type="button"
+            className="nav-ctl"
             onClick={() => setTab(n.tab)}
             aria-current={active ? "page" : undefined}
             style={item(active)}
@@ -86,6 +87,7 @@ export function BottomNav() {
       {canCreate && (
         <button
           type="button"
+          className="nav-ctl"
           onClick={openNewItem}
           aria-label={t("nav.newItem")}
           style={{ ...item(false), color: DS.onAccent }}
