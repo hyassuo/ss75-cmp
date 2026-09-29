@@ -68,15 +68,36 @@ export async function updateSession(
       },
     });
 
+    const path = request.nextUrl.pathname;
+
     // Verifies the JWT and refreshes an expiring session (new cookies via
     // setAll above). With asymmetric JWT signing keys the check is local
     // (JWKS cached per server instance): no round-trip to Supabase Auth
     // before the page renders. With the legacy shared secret it calls
     // /auth/v1/user, like getUser(). See lib/supabase/appSession.ts.
-    const { data } = await supabase.auth.getClaims();
-    const user = data?.claims ?? null;
+    // getClaims() throws (rather than returning an error) on some forged
+    // tokens, e.g. an unknown "alg": that is no user, not a pass-through.
+    //
+    // /login asks Supabase Auth itself instead (getUser; no request without
+    // a session). The local check keeps accepting the token of a session
+    // that was signed out or banned until it expires, and the (app) layout
+    // signs such a user (inactive profile) out and sends them here:
+    // bouncing them back to /dashboard would loop. getUser also clears the
+    // cookies of a session Auth reports gone.
+    const user =
+      path === "/login"
+        ? (await supabase.auth.getUser()).data.user
+        : ((await supabase.auth.getClaims().catch(() => null))?.data?.claims ??
+          null);
 
-    const path = request.nextUrl.pathname;
+    // Redirects carry any session cookies set above (a refreshed session —
+    // its old refresh token has just been spent — or a cleared one).
+    const redirectTo = (url: URL) => {
+      const res = NextResponse.redirect(url);
+      for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
+      return res;
+    };
+
     const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
     if (!user && !isPublic) {
@@ -86,21 +107,17 @@ export async function updateSession(
       url.pathname = "/login";
       url.search = "";
       url.searchParams.set("next", path + request.nextUrl.search);
-      return NextResponse.redirect(url);
+      return redirectTo(url);
     }
 
     // Signed in: "/" (bookmarks, apps installed with the old start_url) and
     // /login go straight to the dashboard — no render + second verification
     // of "/" (app/page.tsx) just to redirect.
-    // The redirect carries any session cookies refreshed above: the old
-    // refresh token has just been spent.
     if (user && (path === "/login" || path === "/")) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       url.search = "";
-      const redirect = NextResponse.redirect(url);
-      for (const c of supabaseResponse.cookies.getAll()) redirect.cookies.set(c);
-      return redirect;
+      return redirectTo(url);
     }
 
     return supabaseResponse;
