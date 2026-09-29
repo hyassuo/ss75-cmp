@@ -9,7 +9,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary: the main action · accent: AI / camera · danger: destructive ·
    *  secondary: bordered neutral · ghost: text only (close ×, links). */
   variant?: ButtonVariant;
-  /** lg is a 44 px touch target everywhere. */
+  /** lg is 44 px tall everywhere; every size is 44 px on touch screens. */
   size?: ButtonSize;
   fullWidth?: boolean;
   /** Busy: a spinner before the label, clicks blocked, colours kept. */
@@ -63,16 +63,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref
 ) {
   const off = !!disabled && !loading;
-  // Filled buttons are main actions: 44 px tall on touch screens too
-  // (.touch-target in globals.css).
-  const touch = size !== "lg" && variant in FILL;
+  // .touch-target (globals.css): 44 px minimum on touch screens (gloves),
+  // whatever the variant or size.
   return (
     <button
       ref={ref}
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={["btn-" + size, touch ? "touch-target" : "", className ?? ""].join(" ").trim()}
+      className={["btn-" + size, "touch-target", className ?? ""].join(" ").trim()}
       style={{
         display: "inline-flex",
         alignItems: "center",

@@ -55,14 +55,12 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
         body: JSON.stringify(body),
       });
       const data = await r.json();
-      if (!r.ok) {
-        setMsg({ t: "err", m: data.error || "Request failed" });
-      } else {
-        setMsg({ t: "ok", m: okMsg });
-        ok = true;
-      }
-      // Always show the server's state, also after a failure.
+      ok = r.ok;
+      // Always show the server's state, also after a failure; the message
+      // (a live region) comes after the reload so it never announces a
+      // change the table does not show yet.
       await load();
+      setMsg(ok ? { t: "ok", m: okMsg } : { t: "err", m: data.error || "Request failed" });
     } catch {
       setMsg({ t: "err", m: "Request failed" });
     }

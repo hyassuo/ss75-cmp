@@ -738,6 +738,7 @@ function ItemModalInner({
                   setAddingSubarea(false);
                   setNewSubareaName("");
                 }}
+                aria-label={t("common.cancel")}
                 style={{ padding: "0 12px" }}
               >
                 ×
@@ -888,9 +889,15 @@ function ItemModalInner({
         }}
       >
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {/* Destructive action lives here, away from the close button. */}
+          {/* Destructive action lives here, away from the close button. Soft
+              red, not filled: it must not compete with Save (the
+              confirmation dialog carries the filled danger button). */}
           {!isNew && isAdmin && (
-            <Button variant="danger" onClick={() => void remove()}>
+            <Button
+              variant="secondary"
+              onClick={() => void remove()}
+              style={{ background: DS.redBg, color: DS.red, borderColor: DS.redBord }}
+            >
               {t("common.delete")}
             </Button>
           )}

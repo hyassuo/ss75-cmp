@@ -853,8 +853,8 @@ body {
 .btn-lg { min-height: 44px; }
 
 /* Touch screens (gloves, motion offshore): form controls and buttons in
-   the item modal, and every filled <Button> (.touch-target), get a 44px
-   minimum target. */
+   the item modal, and every <Button> (.touch-target), get a 44px minimum
+   target. */
 @media (pointer: coarse) {
   .modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
   .modal-card select {
