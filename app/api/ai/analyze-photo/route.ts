@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readJson, requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
-import { rateLimit } from "@/lib/utils/rateLimit";
+import { rateLimitShared } from "@/lib/utils/rateLimit";
 import { FREQUENCIES } from "@/lib/utils/constants";
 import {
   aiGenerate,
@@ -88,6 +88,11 @@ const MAX_BASE64_LENGTH = 14_000_000;
 // Vision calls are expensive; cap per admin per minute.
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60_000;
+// Daily quotas (UTC days) on top of the per-minute burst limit: one person
+// can't spend the project's Gemini quota, and the whole app has a ceiling.
+const DAILY_PER_USER = 60;
+const DAILY_TOTAL = 500;
+const DAY_MS = 86_400_000;
 
 const SYSTEM = [
   "You are a corrosion assessment expert for offshore drilling units.",
@@ -197,7 +202,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const rl = rateLimit(`photo:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
+  const rl = await rateLimitShared(
+    `photo:${guard.ctx.userId}`,
+    RATE_LIMIT,
+    RATE_WINDOW_MS
+  );
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },
@@ -209,6 +218,23 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "AI provider not configured" },
       { status: 503 }
+    );
+  }
+
+  // Checked after the configuration so a missing key doesn't eat quota.
+  const day = new Date().toISOString().slice(0, 10);
+  const mine = await rateLimitShared(
+    `photo-day:${guard.ctx.userId}:${day}`,
+    DAILY_PER_USER,
+    DAY_MS
+  );
+  const all = mine.allowed
+    ? await rateLimitShared(`photo-day:all:${day}`, DAILY_TOTAL, DAY_MS)
+    : mine;
+  if (!all.allowed) {
+    return NextResponse.json(
+      { error: "Daily photo-analysis limit reached. Try again tomorrow." },
+      { status: 429, headers: { "Retry-After": String(all.retryAfter) } }
     );
   }
 

@@ -318,6 +318,11 @@ export interface Database {
         Args: Record<string, never>;
         Returns: string[];
       };
+      // Service role only (20260929000000_rate_limits.sql).
+      rate_limit_hit: {
+        Args: { p_key: string; p_limit: number; p_window_seconds: number };
+        Returns: { allowed: boolean; retry_after: number }[];
+      };
     };
     Enums: {
       user_role: UserRole;

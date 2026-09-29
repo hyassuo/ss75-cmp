@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readJson, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendRecoveryEmail } from "@/lib/supabase/recoveryMail";
-import { rateLimit } from "@/lib/utils/rateLimit";
+import { rateLimitShared } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -21,8 +21,8 @@ export async function POST(request: Request) {
   if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Invalid email" }, { status: 400 });
   }
-  const byIp = rateLimit(`forgot-ip:${ip}`, 5, 15 * 60_000);
-  const byEmail = rateLimit(`forgot-email:${email}`, 3, 60 * 60_000);
+  const byIp = await rateLimitShared(`forgot-ip:${ip}`, 5, 15 * 60_000);
+  const byEmail = await rateLimitShared(`forgot-email:${email}`, 3, 60 * 60_000);
   if (!byIp.allowed || !byEmail.allowed) {
     const retryAfter = Math.max(byIp.retryAfter, byEmail.retryAfter);
     return NextResponse.json(
