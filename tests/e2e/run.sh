@@ -63,11 +63,14 @@ echo "[1/5] postgres: fresh cluster at $PG_DIR (port $PG_PORT)"
 
 # --- 2. PostgREST
 echo "[2/5] postgrest on :$PGRST_PORT"
+# JWTs: the shared secret (HS256) and a per-run ES256 key, as a JWKS — the
+# gateway signs with either (asymmetric signing keys, see gateway.mjs).
+node lib/jwt.mjs jwks "$STATE_DIR/jwt-es256.pem" > "$STATE_DIR/jwks.json"
 cat > "$STATE_DIR/pgrst.conf" <<CONF
 db-uri = "postgres://authenticator:authenticator@127.0.0.1:$PG_PORT/$PG_DB"
 db-schemas = "public"
 db-anon-role = "anon"
-jwt-secret = "$JWT_SECRET"
+jwt-secret = "@$STATE_DIR/jwks.json"
 db-max-rows = 1000
 server-host = "127.0.0.1"
 server-port = $PGRST_PORT

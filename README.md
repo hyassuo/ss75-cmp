@@ -170,7 +170,10 @@ a throwaway local stack — no Supabase project, Docker or secrets needed:
   the app uses — Storage writes/reads/deletes `storage.objects` *as the
   caller*, so the real storage policies decide; GoTrue keeps per-user
   passwords and bans in `auth.users`, "sends" recovery emails to an outbox
-  (`/__ctl/mail`) whose links redirect like the real `/verify` — and offers fault injection
+  (`/__ctl/mail`) whose links redirect like the real `/verify`, signs
+  sessions with the shared secret (HS256) or, switched per scenario
+  (`/__ctl/jwt`), with an ES256 key published as a JWKS (asymmetric signing
+  keys; PostgREST trusts both) — and offers fault injection
   (HTTP errors, dropped connections, "commit then lose the response",
   delays) for the offline/concurrency scenarios;
 - `next build` + `next start` with the local keys, then
@@ -209,6 +212,7 @@ sign-in → data on screen, opening the app, warm navigation — with every
 Supabase request delayed by `GW_LATENCY_MS` in the gateway (test-only, to
 make serial round-trips visible). Medians in the log, raw numbers in
 `artifacts/perf.json`.
+
 ## Storage (evidence photos)
 
 Inspection photos uploaded from the item modal go to the **private**
