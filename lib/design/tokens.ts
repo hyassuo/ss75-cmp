@@ -1,36 +1,55 @@
 // industrial-inspection-design-system v1.0 — Helcio Yassuo
+// Colours are CSS custom properties (app/globals.css) so the light and
+// dark themes swap without re-rendering: the values below are var()
+// references, usable anywhere a CSS colour is (inline styles, SVG style).
+// Every text/background pair meets WCAG AA (4.5:1) in both themes,
+// including 10px badge text on its tinted chip (tint(color, 13) on sur2).
+// Field use: tablets in direct sun or dimmed at night.
+// To add transparency use tint() — appending hex alpha ("…" + "20") does
+// not work on a var().
 export const DS = {
   // Surfaces
-  bg: "#f0f4f8",
-  sur: "#ffffff",
-  sur2: "#f7f9fc",
+  bg: "var(--ds-bg)",
+  sur: "var(--ds-sur)",
+  sur2: "var(--ds-sur2)",
 
   // Borders
-  bord: "#dde4ed",
-  bord2: "#c8d3df",
+  bord: "var(--ds-bord)",
+  bord2: "var(--ds-bord2)",
 
-  // Text — every text/background pair used by the UI meets WCAG AA (4.5:1),
-  // including 10px badge text on its tinted chip (color + "20" on sur2).
-  // Field use: tablets in direct sun or dimmed at night.
-  text: "#1e2d3d",
-  text2: "#445566",
-  text3: "#4f677f",
+  // Text
+  text: "var(--ds-text)",
+  text2: "var(--ds-text2)",
+  text3: "var(--ds-text3)",
 
   // Semantic
-  red: "#b0301f", redBg: "#fdf2f2", redBord: "#f5c6c2",
-  ora: "#a4470f", oraBg: "#fdf6f0", oraBord: "#f5d0b8",
-  yel: "#7a5d00", yelBg: "#fdfbee", yelBord: "#f0e0a0",
-  grn: "#1a7040", grnBg: "#f0faf4", grnBord: "#a8dfc0",
-  blu: "#1a5cb5", bluBg: "#eef5ff", bluBord: "#aac8f0",
-  vio: "#5b3aa0", vioBg: "#f3eeff", vioBord: "#c9b8f0",
+  red: "var(--ds-red)",
+  redBg: "var(--ds-red-bg)",
+  redBord: "var(--ds-red-bord)",
+  ora: "var(--ds-ora)",
+  oraBg: "var(--ds-ora-bg)",
+  oraBord: "var(--ds-ora-bord)",
+  yel: "var(--ds-yel)",
+  yelBg: "var(--ds-yel-bg)",
+  yelBord: "var(--ds-yel-bord)",
+  grn: "var(--ds-grn)",
+  grnBg: "var(--ds-grn-bg)",
+  grnBord: "var(--ds-grn-bord)",
+  blu: "var(--ds-blu)",
+  bluBg: "var(--ds-blu-bg)",
+  bluBord: "var(--ds-blu-bord)",
+  vio: "var(--ds-vio)",
+  vioBg: "var(--ds-vio-bg)",
+  vioBord: "var(--ds-vio-bord)",
+  onAccent: "var(--ds-on-accent)",
 
   // Dark topbar / sidebar
-  sbBg: "#2c3e52",
-  sbBord: "#374f66",
-  sbTxt: "#c5d6e8",
-  sbTxt2: "#9db5cc",
-  sbAct: "#3b5570",
-  sbActTxt: "#93d4f5",
+  sbBg: "var(--ds-sb-bg)",
+  sbBord: "var(--ds-sb-bord)",
+  sbTxt: "var(--ds-sb-txt)",
+  sbTxt2: "var(--ds-sb-txt2)",
+  sbAct: "var(--ds-sb-act)",
+  sbActTxt: "var(--ds-sb-act-txt)",
 
   // Typography — values use CSS variables loaded by next/font in app/layout.tsx
   // (Inter for sans, IBM Plex Mono for mono). Without var(--font-sans) inline
@@ -41,5 +60,10 @@ export const DS = {
   // Motion
   transition: "all 0.18s ease",
 } as const;
+
+// A colour at pct% opacity (the chip / tinted-cell backgrounds).
+export function tint(color: string, pct: number): string {
+  return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
+}
 
 export type DSToken = typeof DS;

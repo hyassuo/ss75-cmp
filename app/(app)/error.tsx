@@ -61,7 +61,7 @@ export default function AppError({
         onClick={chunk ? () => window.location.reload() : reset}
         style={{
           background: DS.blu,
-          color: "#fff",
+          color: DS.onAccent,
           border: "none",
           borderRadius: 8,
           padding: "10px 22px",

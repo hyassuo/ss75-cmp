@@ -729,7 +729,7 @@ function ItemModalInner({
                 }}
                 style={{
                   background: DS.blu,
-                  color: "#fff",
+                  color: DS.onAccent,
                   border: "none",
                   borderRadius: 7,
                   padding: "0 14px",
@@ -993,7 +993,7 @@ function ItemModalInner({
               disabled={saving}
               style={{
                 background: DS.blu,
-                color: "#fff",
+                color: DS.onAccent,
                 border: "none",
                 borderRadius: 8,
                 padding: "10px 28px",

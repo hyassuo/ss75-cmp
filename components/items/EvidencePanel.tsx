@@ -455,7 +455,7 @@ export function EvidencePanel({
               style={{
                 width: "100%",
                 background: aiLoading ? "transparent" : DS.vio,
-                color: aiLoading ? DS.text3 : "#fff",
+                color: aiLoading ? DS.text3 : DS.onAccent,
                 border: "1px solid " + DS.vio,
                 borderRadius: 7,
                 padding: "10px 14px",
@@ -503,7 +503,7 @@ export function EvidencePanel({
           style={{
             width: "100%",
             background: !desc.trim() ? DS.bord : DS.blu,
-            color: !desc.trim() ? DS.text3 : "#fff",
+            color: !desc.trim() ? DS.text3 : DS.onAccent,
             border: "none",
             borderRadius: 7,
             padding: "12px 18px",
@@ -706,7 +706,7 @@ export function EvidencePanel({
 function pickBtn(primary: boolean, disabled: boolean): React.CSSProperties {
   return {
     background: primary ? DS.vio : DS.sur,
-    color: primary ? "#fff" : DS.text,
+    color: primary ? DS.onAccent : DS.text,
     border: "1px solid " + (primary ? DS.vio : DS.bord),
     borderRadius: 7,
     minHeight: 44,

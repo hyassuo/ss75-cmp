@@ -8,6 +8,7 @@ import { useShell } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
 import { ItemSearch } from "@/components/layout/ItemSearch";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 // Subtle band tones for the two-tone header.
 const TOP_BAND = DS.sbBg; // #2c3e52
@@ -107,6 +108,7 @@ export function Topbar() {
               flexShrink: 0,
             }}
           >
+            <ThemeToggle />
             {/* Language toggle (EN | PT) */}
             <div
               role="group"

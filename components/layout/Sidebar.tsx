@@ -209,7 +209,7 @@ export function Sidebar() {
                 display: "block",
                 textAlign: "center",
                 background: DS.blu,
-                color: "#fff",
+                color: DS.onAccent,
                 border: "none",
                 borderRadius: 6,
                 padding: "9px 0",

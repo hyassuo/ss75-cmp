@@ -561,7 +561,7 @@ export function ExportTab() {
       className="exp-btn"
       style={{
         background: DS.blu,
-        color: "#fff",
+        color: DS.onAccent,
         border: "none",
         borderRadius: 8,
         padding: "10px 22px",

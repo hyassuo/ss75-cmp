@@ -147,7 +147,7 @@ export function AlertBar() {
             <span
               style={{
                 background: DS.red,
-                color: "#fff",
+                color: DS.onAccent,
                 borderRadius: 8,
                 padding: "3px 8px",
                 fontWeight: 700,
@@ -171,7 +171,7 @@ export function AlertBar() {
             <span
               style={{
                 background: DS.ora,
-                color: "#fff",
+                color: DS.onAccent,
                 borderRadius: 8,
                 padding: "3px 8px",
                 fontWeight: 700,
@@ -225,7 +225,7 @@ export function AlertBar() {
               fontSize: 13,
               color: DS.red,
               fontWeight: 800,
-              background: "#fff",
+              background: DS.sur,
               border: "1px solid " + DS.redBord,
               borderRadius: 6,
               transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
@@ -275,7 +275,7 @@ export function AlertBar() {
                   fontWeight: 800,
                   marginTop: 1,
                   background: isDanger ? DS.red : DS.ora,
-                  color: "#fff",
+                  color: DS.onAccent,
                 }}
               >
                 {isDanger ? "!" : "~"}

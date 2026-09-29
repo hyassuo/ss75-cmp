@@ -163,7 +163,7 @@ export function AuditLogTable() {
           disabled={!filtered.length}
           style={{
             background: DS.blu,
-            color: "#fff",
+            color: DS.onAccent,
             border: "none",
             borderRadius: 8,
             padding: "8px 18px",

@@ -4,6 +4,7 @@ import { PwaRegister } from "@/components/layout/PwaRegister";
 import { RecoveryRedirect } from "@/components/layout/RecoveryRedirect";
 import { LangProvider } from "@/lib/context/LangContext";
 import { serverLang } from "@/lib/i18n/serverLang";
+import { serverTheme } from "@/lib/theme/serverTheme";
 import "./globals.css";
 
 const inter = Inter({
@@ -45,8 +46,9 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const lang = await serverLang();
+  const theme = await serverTheme();
   return (
-    <html lang={lang === "pt" ? "pt-BR" : "en"}>
+    <html lang={lang === "pt" ? "pt-BR" : "en"} data-theme={theme ?? undefined}>
       <body className={`${inter.variable} ${ibmPlexMono.variable}`}>
         <PwaRegister />
         <RecoveryRedirect />

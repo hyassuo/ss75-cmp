@@ -112,7 +112,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             disabled={busy || !invite || newPassword.length < 8}
             style={{
               background: DS.blu,
-              color: "#fff",
+              color: DS.onAccent,
               border: "none",
               borderRadius: 8,
               padding: "9px 20px",
@@ -333,7 +333,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             disabled={busy}
                             style={{
                               background: DS.red,
-                              color: "#fff",
+                              color: DS.onAccent,
                               border: "none",
                               borderRadius: 6,
                               padding: "4px 10px",
