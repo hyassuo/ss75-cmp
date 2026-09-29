@@ -202,6 +202,13 @@ normal user or as root. Useful variables: `ONLY=c,d1` (subset),
 `NEXT_PUBLIC_*` values — rebuild before deploying from the same checkout.
 CI runs it on every pull request (`.github/workflows/e2e.yml`) and uploads
 `tests/e2e/artifacts/` when it fails.
+
+Load performance: `PERF=1 GW_LATENCY_MS=150 bash tests/e2e/run.sh` runs
+`tests/e2e/perf.mjs` instead of the scenarios — login page bytes and TTFB,
+sign-in → data on screen, opening the app, warm navigation — with every
+Supabase request delayed by `GW_LATENCY_MS` in the gateway (test-only, to
+make serial round-trips visible). Medians in the log, raw numbers in
+`artifacts/perf.json`.
 ## Storage (evidence photos)
 
 Inspection photos uploaded from the item modal go to the **private**
