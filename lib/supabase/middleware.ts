@@ -4,8 +4,19 @@ import type { Database } from "@/lib/types/database.types";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+// requestHeaders: extra headers for the page renderer (the CSP carrying
+// the nonce). Added on every forward, after any cookie refresh below, so
+// server components see both the new session and the nonce.
+export async function updateSession(
+  request: NextRequest,
+  requestHeaders: Record<string, string> = {}
+) {
+  const forward = () => {
+    const headers = new Headers(request.headers);
+    for (const [k, v] of Object.entries(requestHeaders)) headers.set(k, v);
+    return NextResponse.next({ request: { headers } });
+  };
+  let supabaseResponse = forward();
 
   // Prefetch requests are background hovers/viewport hints — skip the
   // Supabase auth round-trip so section switching stays snappy for
@@ -44,7 +55,7 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = forward();
           cookiesToSet.forEach(({ name, value, options }) => {
             // Session-only cookies: drop maxAge/expires so the session
             // ends when the browser closes.
