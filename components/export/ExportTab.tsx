@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import { csvRow } from "@/lib/utils/csv";
 import { latestNameByRef } from "@/lib/utils/historyNames";
+import { historyNote } from "@/lib/utils/historyNote";
 import { download } from "@/lib/utils/download";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
@@ -304,7 +305,7 @@ export function ExportTab() {
             Field: h.field_changed ?? "",
             Previous: h.prev_value ?? "",
             New: h.new_value ?? "",
-            Note: h.note ?? "",
+            Note: historyNote(h.note),
             User: h.by_user_email ?? "",
           }))
         ),

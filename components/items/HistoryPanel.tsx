@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { fmt } from "@/lib/utils/format";
+import { historyNote } from "@/lib/utils/historyNote";
 import { createClient } from "@/lib/supabase/client";
 import type { HistoryEntry } from "@/lib/types/domain";
 
@@ -86,7 +87,7 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
               </div>
             )}
             {h.note && (
-              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{h.note}</div>
+              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{historyNote(h.note)}</div>
             )}
             {h.by_user_email && (
               <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 2 }}>

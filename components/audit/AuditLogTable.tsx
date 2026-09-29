@@ -13,6 +13,7 @@ import { addDays } from "@/lib/utils/format";
 import { useLang } from "@/lib/context/LangContext";
 import { download } from "@/lib/utils/download";
 import { latestNameByRef } from "@/lib/utils/historyNames";
+import { historyNote } from "@/lib/utils/historyNote";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
@@ -124,7 +125,7 @@ export function AuditLogTable() {
           r.field_changed,
           r.prev_value,
           r.new_value,
-          r.note,
+          historyNote(r.note),
           r.by_user_email,
         ], csvSep)
       ),
