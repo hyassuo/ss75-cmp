@@ -59,7 +59,9 @@ export function AIResultCard({ result: r, onApply }: Props) {
       >
         {t("ai.resultTitle")}
       </div>
-      {r.componentName && (
+      {/* The sanitizer's "Unknown" placeholder is no name: no row (it
+          would be English in the PT UI; ItemModal ignores it too). */}
+      {r.componentName && r.componentName.toLowerCase() !== "unknown" && (
         <div
           style={{
             fontSize: DS.fs.base,
