@@ -43,8 +43,11 @@ export function calcRate(readings: Reading[] | null | undefined): number | null 
   }
   let worst: number | null = null;
   for (const list of byPoint.values()) {
-    const sorted = [...list].sort((a, b) =>
-      a.reading_date.localeCompare(b.reading_date)
+    // Same-day readings: the one recorded last counts as the latest.
+    const sorted = [...list].sort(
+      (a, b) =>
+        a.reading_date.localeCompare(b.reading_date) ||
+        (a.created_at ?? "").localeCompare(b.created_at ?? "")
     );
     const last = sorted[sorted.length - 1];
     const earlier = sorted.filter(

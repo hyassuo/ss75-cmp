@@ -117,6 +117,18 @@ describe("calcRate — comparable measurements only", () => {
   });
 });
 
+describe("calcRate — same-day readings", () => {
+  it("takes the one recorded last as the latest, whatever the input order", () => {
+    const readings = [
+      makeReading({ reading_date: "2025-01-01", depth_mm: 1.0 }),
+      makeReading({ id: "r-late", reading_date: "2026-01-01", depth_mm: 3.0, created_at: "2026-01-01T12:00:00Z" }),
+      makeReading({ id: "r-early", reading_date: "2026-01-01", depth_mm: 2.0, created_at: "2026-01-01T08:00:00Z" }),
+    ];
+    expect(calcRate(readings)).toBeCloseTo(2.0, 5);
+    expect(calcRate([...readings].reverse())).toBeCloseTo(2.0, 5);
+  });
+});
+
 describe("rateColor", () => {
   it("bands: null / >0.5 / >0.2 / >0 / 0", () => {
     expect(rateColor(null)).toBe(DS.text3);

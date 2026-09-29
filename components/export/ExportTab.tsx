@@ -136,7 +136,8 @@ export function ExportTab() {
     ? allZones.filter((z) => z.system === sysFilter)
     : allZones;
   const scopeLabel = deptOnly ? sysFilter : "All departments";
-  const fileBase = `ss75-cmp_${deptOnly ? sysFilter.toLowerCase().replace(/\s+/g, "-") + "_" : ""}${today()}`;
+  const deptSlug = sysFilter.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const fileBase = `ss75-cmp_${deptOnly ? deptSlug + "_" : ""}${today()}`;
   const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
   const [busy, setBusy] = useState<string | null>(null);
   // Default ON so a fresh user sees the expected, complete PDF (photos
@@ -236,8 +237,10 @@ export function ExportTab() {
         "history fetch"
       );
       if (res.error) throw new Error(`history fetch: ${res.error}`);
-      const history = res.data.filter(
-        (h) => h.item_id === null || itemIds.has(h.item_id)
+      // Deleted items' events (item_id NULL) carry no zone, so a
+      // department export can't tell whose they are: whole-unit only.
+      const history = res.data.filter((h) =>
+        h.item_id === null ? !deptOnly : itemIds.has(h.item_id)
       );
       const nameById = new Map(flat.map((i) => [i.id, i]));
       const deletedNames = latestNameByRef(history);

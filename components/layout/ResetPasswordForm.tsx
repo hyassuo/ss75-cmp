@@ -12,16 +12,15 @@ export const MIN_PASSWORD = 8;
 
 type Phase = "checking" | "ready" | "invalid" | "saving" | "done";
 
-// Two ways in, both from a reset email:
-//  - admin-sent (implicit flow): #access_token=…&refresh_token=…&type=recovery
-//  - "Forgot password?" on the login page (PKCE): ?code=… — only redeemable
-//    in the browser that asked for it.
-// Without either, the page refuses: an already signed-in session is not
-// enough to change the password here.
+// Landing page of the reset email (sent by lib/supabase/recoveryMail.ts,
+// implicit flow): #access_token=…&refresh_token=…&type=recovery. Only such a
+// link opens the form — being signed in is not enough to change the
+// password here. The tokens are read and stripped from the URL before the
+// Supabase browser client is created (it is a singleton that inspects the
+// URL when first constructed), so nothing else consumes them.
 export function ResetPasswordForm() {
   const { t } = useLang();
   const [phase, setPhase] = useState<Phase>("checking");
-  const [linkErr, setLinkErr] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [err, setErr] = useState("");
@@ -34,30 +33,22 @@ export function ResetPasswordForm() {
     if (started.current) return;
     started.current = true;
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    const query = new URLSearchParams(window.location.search);
     // Tokens must not stay in the address bar or the history.
     window.history.replaceState(null, "", window.location.pathname);
     void (async () => {
       const supabase = createClient();
       const access = hash.get("access_token");
       const refresh = hash.get("refresh_token");
-      const code = query.get("code");
-      const failed = hash.get("error_description") || query.get("error_description");
       let ok = false;
-      if (failed) {
-        ok = false;
-      } else if (access && refresh) {
+      if (hash.get("type") === "recovery" && access && refresh) {
         ok = !(await supabase.auth.setSession({
           access_token: access,
           refresh_token: refresh,
         })).error;
-      } else if (code) {
-        ok = !(await supabase.auth.exchangeCodeForSession(code)).error;
-        if (!ok) setLinkErr(t("reset.otherDevice"));
       }
       setPhase(ok ? "ready" : "invalid");
     })();
-  }, [t]);
+  }, []);
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -76,9 +67,13 @@ export function ResetPasswordForm() {
     if (error) {
       setPhase("ready");
       setErr(
-        /fetch|network|load failed/i.test(error.message)
-          ? t("login.network")
-          : error.message
+        error.code === "same_password"
+          ? t("reset.same")
+          : error.code === "weak_password"
+            ? t("reset.weak")
+            : /fetch|network|load failed/i.test(error.message)
+              ? t("login.network")
+              : error.message
       );
       return;
     }
@@ -140,7 +135,7 @@ export function ResetPasswordForm() {
         {phase === "invalid" && (
           <div role="alert">
             <p style={{ fontSize: 13, color: DS.text2, lineHeight: 1.6, margin: "0 0 16px" }}>
-              {linkErr || t("reset.invalid")}
+              {t("reset.invalid")}
             </p>
             <a href="/login" style={{ color: DS.blu, fontSize: 13, fontWeight: 600 }}>
               {t("reset.backToLogin")}

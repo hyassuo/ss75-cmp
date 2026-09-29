@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNext } from "@/lib/utils/safeNext";
 import { S } from "@/lib/design/styles";
@@ -23,16 +23,6 @@ export function LoginForm() {
   const pwId = useId();
   const errId = useId();
 
-  // A reset email whose link fell back to the Site URL (the app's
-  // /auth/reset not in Supabase's Redirect URLs) lands here with the
-  // tokens — or the "link expired" error — in the fragment.
-  useEffect(() => {
-    const h = window.location.hash;
-    if (/(^|[#&])(access_token|error_code)=/.test(h)) {
-      window.location.replace("/auth/reset" + h);
-    }
-  }, []);
-
   async function forgot() {
     if (loading) return;
     setInfo("");
@@ -42,19 +32,25 @@ export function LoginForm() {
     }
     setErr("");
     setLoading(true);
-    const { error } = await createClient().auth.resetPasswordForEmail(
-      email.trim(),
-      { redirectTo: `${window.location.origin}/auth/reset` }
-    );
+    // Sent by the server (implicit flow): the link then works in any
+    // browser, e.g. opened from Mail while the app is installed on iOS.
+    let status = 0;
+    try {
+      const r = await fetch("/api/auth/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      status = r.status;
+    } catch {
+      status = 0;
+    }
     setLoading(false);
     // Same answer whether or not the address exists (no account probing).
-    if (error && /fetch|network|load failed/i.test(error.message)) {
-      setErr(t("login.network"));
-    } else if (error && /rate limit|too many/i.test(error.message)) {
-      setErr(t("login.forgotLimit"));
-    } else {
-      setInfo(t("login.forgotSent"));
-    }
+    if (status === 0) setErr(t("login.network"));
+    else if (status === 429) setErr(t("login.forgotLimit"));
+    else if (status === 400) setErr(t("login.forgotNeedEmail"));
+    else setInfo(t("login.forgotSent"));
   }
 
   async function doLogin(e?: FormEvent) {
@@ -77,6 +73,8 @@ export function LoginForm() {
       setErr(
         /invalid login credentials/i.test(error.message)
           ? t("login.invalid")
+          : error.code === "user_banned" || /banned/i.test(error.message)
+            ? t("login.inactive")
           : /fetch|network|load failed/i.test(error.message)
             ? t("login.network")
             : error.message || t("login.invalid")

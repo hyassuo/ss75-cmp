@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import { PwaRegister } from "@/components/layout/PwaRegister";
+import { RecoveryRedirect } from "@/components/layout/RecoveryRedirect";
 import { LangProvider } from "@/lib/context/LangContext";
 import { serverLang } from "@/lib/i18n/serverLang";
 import "./globals.css";
@@ -48,6 +49,7 @@ export default async function RootLayout({
     <html lang={lang === "pt" ? "pt-BR" : "en"}>
       <body className={`${inter.variable} ${ibmPlexMono.variable}`}>
         <PwaRegister />
+        <RecoveryRedirect />
         <LangProvider initialLang={lang}>{children}</LangProvider>
       </body>
     </html>

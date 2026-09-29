@@ -61,8 +61,8 @@ bootstrap account); every other account is created by an admin on the
 only delivers to members of the project's team (2/hour), so configure a
 custom SMTP server (Authentication → Emails → SMTP Settings). Under
 Authentication → URL Configuration set the *Site URL* to the app's address
-and add `https://<app>/auth/reset` to *Redirect URLs* — reset links land
-there to set the new password.
+and add `https://<app>/auth/reset` to *Redirect URLs* (exact address, no
+wildcards) — reset links land there to set the new password.
 
 ### Existing database (created before the baseline)
 

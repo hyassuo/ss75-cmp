@@ -55,8 +55,9 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
         setMsg({ t: "err", m: data.error || "Request failed" });
       } else {
         setMsg({ t: "ok", m: okMsg });
-        await load();
       }
+      // Always show the server's state, also after a failure.
+      await load();
     } catch {
       setMsg({ t: "err", m: "Request failed" });
     }
