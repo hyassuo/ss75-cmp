@@ -45,8 +45,6 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Sugestão |
 |---|---|------|----------|
-| E1 | P2 | Busca de item | Não existe busca global (só a busca IFS dentro do modal). |
-| E2 | P2 | Matriz de risco depende só da cor | Os badges têm texto, mas as células da matriz não. Adicionar letra/ícone por nível (daltonismo, sol forte). |
 | E3 | P3 | Câmera: uma foto por vez | Permitir várias fotos (`multiple` na galeria). |
 | E4 | P3 | Tema escuro | Útil à noite e em ambientes escuros. |
 | E5 | P3 | Padronização visual | Ainda há três sistemas de estilo (inline, CSS próprio, Tailwind configurado e não usado) e muitos tamanhos de fonte. Continuar migrando para os componentes base em `components/ui/`. |
@@ -73,3 +71,5 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | C4 | Limite de requisições compartilhado | Contadores no Postgres (`rate_limit_hit`), com reserva em memória se a função não existir; cotas diárias de IA (60 por usuário, 500 no total, por dia UTC). |
 | C6 | Tabelas de referência só para ativos | `units`, `zones` e `ifs_objects` só são lidas por usuário ativo (qualquer policy antiga aberta é removida). |
 | D2 | Auditoria de inclusões | Adicionar leitura ou evidência gera evento (`reading_added` / `evidence_added`) com autor; rascunho de "Novo item" continua cancelável com fotos/leituras. |
+| E1 | Busca de item | Campo na barra superior (atalho `/`): nome, código IFS, OS, local funcional, zona, mecanismo ou notas; ignora acentos, maiúsculas e pontuação dos códigos; arquivados por último; funciona offline. |
+| E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ △ ◆ ■) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
