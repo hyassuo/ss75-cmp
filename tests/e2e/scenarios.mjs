@@ -3554,6 +3554,7 @@ async function main() {
       await gotoTab(page, "Zones & Items");
       const hdr = await page.getByText(/· \d+ items/).first().textContent();
       c.expect(hdr.endsWith(`· ${active} items`), `Zones header counts ${active} active items`, hdr);
+      c.expect(/^\d+ zones? · /.test(hdr.trim()), "Zones header names zones first (not 'items')", hdr);
       c.expect((await page.getByText(NAME, { exact: true }).count()) === 0, "no card for the archived item");
       c.expect((await page.getByText(LIVE, { exact: true }).count()) === 1, "…while its active neighbour is listed");
       let badges = await archivedBadges(page);

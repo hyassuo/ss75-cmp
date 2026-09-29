@@ -40,7 +40,8 @@ export function ZonesTab() {
   return (
     <div>
       <div style={{ fontSize: 11, color: DS.text3, marginBottom: 16 }}>
-        {visibleZones.length} {visibleZones.length !== 1 ? t("dash.items") : t("dash.item")} · {totalItems} items
+        {visibleZones.length} {visibleZones.length !== 1 ? t("dash.zones") : t("dash.zone")} ·{" "}
+        {totalItems} {totalItems !== 1 ? t("dash.items") : t("dash.item")}
       </div>
 
       {visibleZones.map((z) => {
