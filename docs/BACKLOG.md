@@ -72,4 +72,4 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | C6 | Tabelas de referência só para ativos | `units`, `zones` e `ifs_objects` só são lidas por usuário ativo (qualquer policy antiga aberta é removida). |
 | D2 | Auditoria de inclusões | Adicionar leitura ou evidência gera evento (`reading_added` / `evidence_added`) com autor; rascunho de "Novo item" continua cancelável com fotos/leituras. |
 | E1 | Busca de item | Campo na barra superior (atalho `/`): nome, código IFS, OS, local funcional, zona, mecanismo ou notas; ignora acentos, maiúsculas e pontuação dos códigos; arquivados por último; funciona offline. |
-| E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ △ ◆ ■) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
+| E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ baixo, ◇ médio, △ alto, ▲ crítico) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
