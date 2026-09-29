@@ -375,6 +375,23 @@ async function gotoTab(page, label) {
 const modal = (page) => page.locator('.modal-card[role="dialog"]');
 const confirmDlg = (page) => page.locator('[role="alertdialog"]');
 const nameInput = (page) => modal(page).locator('div:has(> label:text-is("Item Name / Tag")) > input');
+// Size of every visible control under `scope` (E8 touch targets).
+const controlSizes = (page, scope) => page.evaluate((scope) => {
+  const out = [];
+  for (const root of document.querySelectorAll(scope)) {
+    for (const el of root.querySelectorAll('button, a[href], input:not([type="hidden"]), select, [role="button"]')) {
+      if (!el.checkVisibility({ visibilityProperty: true })) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      out.push({
+        w: Math.round(r.width * 10) / 10,
+        h: Math.round(r.height * 10) / 10,
+        label: (el.getAttribute("aria-label") || el.getAttribute("title") || el.textContent || el.placeholder || el.className || "").trim().slice(0, 30),
+      });
+    }
+  }
+  return { coarse: matchMedia("(pointer: coarse)").matches, list: out };
+}, scope);
 const notesArea = (page) => modal(page).locator('div:has(> div:text-is("NOTES")) textarea');
 
 
@@ -1357,7 +1374,7 @@ async function main() {
     await page.context().close();
   });
 
-  await run("n7", "Mobile 390x844: bottom nav, drawer, 44px controls, sticky footer, name error focus, zone picker", async (c) => {
+  await run("n7", "Mobile 390x844: bottom nav, drawer, 44px controls (modal, bottom nav, top bar, drawer), sticky footer, name error focus, zone picker", async (c) => {
     const mob = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
     const page = await newPage(c, "insp1-mobile", mob);
     await login(page, "insp1@test.local");
@@ -1368,9 +1385,17 @@ async function main() {
     c.expect((await bn.locator('button[aria-label="+ New Item"]').count()) === 1, "'+' (new item) for inspector");
     c.expect(!(await page.locator(".app-sidebar").isVisible()), "sidebar hidden");
     await shot(c, page, "bottom-nav");
+    // E8: every control of the bottom nav and the top bar is a 44 px target.
+    const chrome = await controlSizes(page, "nav.bottom-nav, .tb-band-top, .tb-band-bottom");
+    c.expect(chrome.coarse && chrome.list.length >= 14, `touch screen: ${chrome.list.length} bottom-nav / top-bar controls measured`, chrome);
+    c.expect(chrome.list.every((x) => x.h >= 44 && x.w >= 44), "bottom nav + top bar: every control >= 44x44 px", chrome.list.filter((x) => x.h < 44 || x.w < 44));
     await page.getByRole("button", { name: "Menu" }).click();
     const drawer = page.locator('.app-sidebar[data-collapsed="false"]');
     c.expect((await drawer.isVisible()) && (await page.locator(".sidebar-backdrop").isVisible()), "hamburger opens the drawer with a backdrop");
+    // E8: the drawer (expanded sidebar), sign-out included.
+    const dr = await controlSizes(page, '.app-sidebar[data-collapsed="false"]');
+    c.expect(dr.list.length >= 7 && dr.list.some((x) => /Sign out/.test(x.label)), `drawer: ${dr.list.length} controls measured, 'Sign out' among them`, dr.list);
+    c.expect(dr.list.every((x) => x.h >= 44 && x.w >= 44), "drawer: every control >= 44x44 px (sign-out included)", dr.list.filter((x) => x.h < 44 || x.w < 44));
     await shot(c, page, "drawer");
     await drawer.getByRole("button", { name: /Zones & Items/ }).click();
     await page.waitForTimeout(400);
@@ -4084,7 +4109,7 @@ async function main() {
     }
   });
 
-  await run("e5ui", "E5: Button/Notice: Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; X delete buttons (icon only) named in EN/PT", async (c) => {
+  await run("e5ui", "E5: Button/Notice: Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; sidebar (collapsed and expanded) and top-bar controls >= 32 px with a mouse and >= 44 px on a touch screen, the collapsed sign-out like the other sidebar icon buttons; X delete buttons (icon only) named in EN/PT", async (c) => {
     const E5 = "00000000-0000-0000-0000-0000000e5a01";
     const NAME = "E2E E5 UI Target";
     await sql(
@@ -4242,7 +4267,38 @@ async function main() {
           c.expect((await one("SELECT count(*)::int n FROM readings WHERE item_id = $1", [E5])).n === 2, "Cancel kept the reading");
         }
       }
+      // ---- 3b. E8: desktop pointer: every sidebar (collapsed and expanded)
+      //      and top-bar control >= 32 px; the collapsed sign-out is the
+      //      same 44 px target as the other sidebar icon buttons (was 28 px).
+      await desk.goto(`${APP}/dashboard`);
+      await waitLoaded(desk);
+      const side = await controlSizes(desk, '.app-sidebar[data-collapsed="true"]');
+      const top = await controlSizes(desk, ".tb-band-top, .tb-band-bottom");
+      c.expect(!side.coarse && side.list.length >= 9 && top.list.length >= 9, `1440 px: ${side.list.length} collapsed-sidebar and ${top.list.length} top-bar controls measured`, { side: side.list, top: top.list });
+      const small32 = [...side.list, ...top.list].filter((x) => x.h < 32 || x.w < 32);
+      c.expect(small32.length === 0, "1440 px: every collapsed-sidebar and top-bar control >= 32x32 px", small32);
+      const so = side.list.find((x) => x.label === "Sign out");
+      const tabBtn = side.list.find((x) => x.label === "Dashboard");
+      const plus = side.list.find((x) => x.label === "+ New Item");
+      c.expect(!!so && so.h >= 44 && so.h === tabBtn?.h && so.w === plus?.w, "collapsed sign-out: as tall as the tab buttons (44 px) and as wide as the '+' button", { so, tabBtn, plus });
+      await desk.getByRole("button", { name: "Menu" }).click();
+      await desk.locator('.app-sidebar[data-collapsed="false"]').waitFor();
+      const open = await controlSizes(desk, '.app-sidebar[data-collapsed="false"]');
+      c.expect(open.list.length >= 8 && open.list.every((x) => x.h >= 32 && x.w >= 32), `1440 px expanded sidebar: all ${open.list.length} controls >= 32 px`, open.list.filter((x) => x.h < 32 || x.w < 32));
       await desk.context().close();
+
+      // ---- 3c. E8: tablet (iPad landscape, touch): the collapsed sidebar
+      //      stays on screen, so every control in it, sign-out included, and
+      //      in the top bar is a 44 px target.
+      const pad = await newPage(c, "admin1-ipad", { viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+      await login(pad, "admin1@test.local");
+      const ps = await controlSizes(pad, '.app-sidebar[data-collapsed="true"]');
+      const pt = await controlSizes(pad, ".tb-band-top, .tb-band-bottom");
+      c.expect(ps.coarse && ps.list.length >= 9 && ps.list.some((x) => x.label === "Sign out"), `iPad: ${ps.list.length} collapsed-sidebar controls measured, sign-out among them`, ps.list);
+      const small44 = [...ps.list, ...pt.list].filter((x) => x.h < 44 || x.w < 44);
+      c.expect(small44.length === 0, `iPad: every collapsed-sidebar and top-bar control >= 44x44 px (${ps.list.length + pt.list.length})`, small44);
+      await shot(c, pad, "ipad-sidebar");
+      await pad.context().close();
 
       // ---- 4. phone 390 px with a touch screen: text sizes and 44 px Buttons.
       const mob = await newPage(c, "admin1-390", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
