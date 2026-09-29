@@ -4245,6 +4245,72 @@ async function main() {
     }
   });
 
+  // --------------------------------------------------- F6: load performance
+  // Structural checks only (what is requested, and in which order), never
+  // wall-clock thresholds. Delays injected at the gateway make the ordering
+  // observable without a real network.
+  await run("f6perf", "F6: login page without the Supabase client (fetched on focus), fonts it draws only; one render after sign-in, data preloaded during it; server verifies the JWT and reads the profile in parallel; item pages + draft sweep go out together", async (c) => {
+    const page = await newPage(c, "admin1");
+    const scripts = [];
+    page.on("response", async (r) => {
+      if (r.request().resourceType() !== "script" || !r.url().startsWith(APP)) return;
+      const body = await r.body().catch(() => null);
+      // auth-js's password grant: only in the supabase-js chunk.
+      scripts.push({ url: r.url().slice(APP.length), auth: !!body && body.includes("grant_type=password") });
+    });
+    const fonts = [];
+    page.on("request", (q) => { if (q.resourceType() === "font") fonts.push(q.url().slice(APP.length)); });
+    await page.goto(`${APP}/login`, { waitUntil: "networkidle" });
+    const initial = scripts.length;
+    c.expect(initial > 3 && !scripts.some((x) => x.auth), `login page: none of its ${initial} scripts carries the Supabase client`, scripts.filter((x) => x.auth));
+    c.expect(fonts.length <= 2, `login page fetches only the font files it draws (${fonts.length})`, fonts);
+    await page.locator('input[type="email"]').focus();
+    for (let i = 0; i < 50 && !scripts.some((x) => x.auth); i++) await page.waitForTimeout(100);
+    c.expect(scripts.slice(initial).some((x) => x.auth), "focusing the form fetches the Supabase client ahead of the submit");
+
+    // Sign-in, with GoTrue's /user and the profile read slowed down.
+    await ctl.fault({ method: "GET", prefix: "/auth/v1/user", mode: "delay", delay: 400 });
+    await ctl.fault({ method: "GET", prefix: "/rest/v1/profiles", mode: "delay", delay: 400 });
+    const renders = [];
+    page.on("request", (q) => {
+      if (q.url().startsWith(`${APP}/dashboard`) && (q.resourceType() === "document" || q.headers()["rsc"] === "1")) renders.push(q.resourceType());
+    });
+    const t0 = Date.now();
+    await page.locator('input[type="email"]').fill("admin1@test.local");
+    await page.locator('input[type="password"]').fill(PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 30000 });
+    await waitLoaded(page);
+    await page.waitForTimeout(1500); // room for a second render, if one came
+    c.expect(renders.length === 1 && renders[0] !== "document", `sign-in -> one soft render of /dashboard, no second pass (${renders.join(", ")})`, renders);
+    const signLog = await ctl.log(t0);
+    const srv = signLog.filter((l) => l.src === "server");
+    const prof = srv.find((l) => l.url.startsWith("/rest/v1/profiles"));
+    const firstItems = signLog.find((l) => l.src === "browser" && l.method === "GET" && l.url.startsWith("/rest/v1/items?select="));
+    c.expect(!!prof && !!firstItems && firstItems.t < prof.t + prof.ms,
+      "the app's data is requested at sign-in, while the server still renders the dashboard", { items: firstItems && firstItems.t - t0, layoutProfileDone: prof && prof.t + prof.ms - t0 });
+    c.expect(!!prof && srv.some((l) => l.url.startsWith("/auth/v1/user") && l.t < prof.t + prof.ms && l.t + l.ms > prof.t),
+      "layout: JWT verification and profile query overlap (one round-trip, not two)", srv.map((l) => `${l.method} ${l.url.split("?")[0]} +${l.t - t0}ms ${l.ms}ms`));
+    const kpi = () => page.getByText(/\d+\/\d+ inspected/).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+    c.expect(await kpi(), "dashboard shows the data");
+    await ctl.clear();
+
+    // Full load: the server's item count sends every page at once, the
+    // draft sweep alongside.
+    await ctl.fault({ method: "GET", prefix: "/rest/v1/items", mode: "delay", delay: 600 });
+    const t1 = Date.now();
+    await page.reload();
+    await waitLoaded(page);
+    const log = (await ctl.log(t1)).filter((l) => l.src === "browser");
+    const pages = log.filter((l) => l.method === "GET" && l.url.startsWith("/rest/v1/items?select="));
+    const sweep = log.find((l) => l.url.startsWith("/rest/v1/rpc/discard_my_abandoned_drafts"));
+    c.expect(pages.length >= 2 && pages[1].t < pages[0].t + 300, `${pages.length} item pages requested together`, pages.map((l) => l.t - t1));
+    c.expect(!!sweep && sweep.t < pages[0].t + 300, "abandoned-draft sweep requested alongside the data, not after it", sweep && sweep.t - t1);
+    c.expect(await kpi(), "dashboard shows the data after the reload");
+    await ctl.clear();
+    await page.context().close();
+  });
+
   await browser.close();
   await pool.end();
 
