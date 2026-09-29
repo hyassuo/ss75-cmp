@@ -717,9 +717,9 @@ async function main() {
     await img.waitFor({ timeout: 15000 }).catch(() => {});
     c.expect(await img.isVisible(), "evidence thumbnail rendered");
     const nat = await img.evaluate((el) => el.complete && el.naturalWidth).catch(() => 0);
-    c.expect(nat === 32, "thumbnail loaded through the signed URL (naturalWidth=32)", nat);
+    c.expect(nat === 32, "thumbnail loaded from the authenticated download (naturalWidth=32)", nat);
     const src = await img.getAttribute("src").catch(() => "");
-    c.expect(/\/storage\/v1\/object\/sign\/evidence-photos\//.test(src || ""), "img src is a signed URL", src);
+    c.expect(/^blob:/.test(src || ""), "img src is an in-memory blob: URL, no storage link (C7)", src);
     await shot(c, page, "uploaded");
     const ev = await one("SELECT id, file_path FROM evidences WHERE item_id = $1", [ID.evidence]);
     c.expect(!!ev?.file_path, "evidence row stored with file_path", ev);
@@ -2274,7 +2274,11 @@ async function main() {
     const ss = directive(csp1, "script-src");
     c.expect(!!n1 && !!n2 && n1 !== n2, "a fresh nonce per response", { n1, n2 });
     c.expect(!/'unsafe-inline'|'unsafe-eval'/.test(ss), "script-src has no 'unsafe-inline' / 'unsafe-eval'", ss);
-    c.expect(directive(csp1, "connect-src").includes(GW) && directive(csp1, "img-src").includes(GW), "connect-src / img-src list the project's Supabase origin", csp1);
+    c.expect(directive(csp1, "connect-src").includes(GW), "connect-src lists the project's Supabase origin", csp1);
+    // C7: photos are blob: URLs of authenticated downloads — no <img> may
+    // load a storage URL, so img-src doesn't list Supabase at all.
+    const imgSrc = directive(csp1, "img-src");
+    c.expect(!imgSrc.includes(GW) && !/supabase/.test(imgSrc) && /\sblob:/.test(imgSrc), "img-src: blob: yes, the Supabase origin no", imgSrc);
     const html = await r1.text();
     const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
     const bad = scripts.filter((t) => !t.includes(`nonce="${n1}"`));
@@ -2323,7 +2327,7 @@ async function main() {
     await page.context().close();
   });
 
-  await run("csp2", "C3: PDF export with a photo under the real CSP (wasm layout, signed-URL download, blob: tab)", async (c) => {
+  await run("csp2", "C3: PDF export with a photo under the real CSP (wasm layout, authenticated download, blob: tab)", async (c) => {
     const page = await newPage(c, "insp1");
     const info = [];
     page.context().on("console", (m) => { if (/\[pdf\]/.test(m.text())) info.push(m.text()); });
@@ -2348,7 +2352,7 @@ async function main() {
     c.expect(await toastSeen(page, "Evidence saved", 10000), "evidence saved");
     const img = modal(page).locator('img[alt="tiny.png"]');
     await img.waitFor({ timeout: 15000 }).catch(() => {});
-    c.expect(await img.evaluate((el) => el.complete && el.naturalWidth === 32).catch(() => false), "signed Supabase storage URL image loads (img-src)");
+    c.expect(await img.evaluate((el) => el.complete && el.naturalWidth === 32 && el.src.startsWith("blob:")).catch(() => false), "evidence thumbnail loads as a blob: image (img-src)");
     await page.keyboard.press("Escape");
     await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
     await gotoTab(page, "Export");
@@ -4490,6 +4494,227 @@ async function main() {
       await fetch(`${GW}/__ctl/jwt`, { method: "POST", body: JSON.stringify({ alg: "HS256" }) });
       await sql("UPDATE profiles SET active = true WHERE email = $1", [EMAIL]);
       await sql("UPDATE auth.users SET banned_until = NULL WHERE email = $1", [EMAIL]);
+    }
+  });
+
+  // ------------------------------------------------------------------ C7
+  // Photos only inside the signed-in session: no signed links; each file is
+  // downloaded with the user's JWT and shown from an in-memory blob: URL,
+  // revoked when the item closes. Runs with the service worker allowed, so
+  // "nothing in Cache Storage" is checked against the real one.
+  await run("c7photos", "C7: photos only inside the session — no signed URLs, blob: thumbnails from authenticated downloads, per-photo error + retry, new tab from memory (image and PDF), revoked on close, nothing in Cache Storage, fresh after sign-out/in", async (c) => {
+    const ITEM = "00000000-0000-0000-0000-0000000ec701";
+    const NAME = "E2E C7 Photo Target";
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by)
+       VALUES ($1, $2, 'Z13', $3, 'Attention', 2, 2, $4) ON CONFLICT (id) DO NOTHING`,
+      [ITEM, await unitId(), NAME, USERS.insp1]
+    );
+    try {
+      // Three photos and a PDF, attached through the API as the inspector.
+      const api = await apiAs("insp1@test.local");
+      const pdfBytes = Buffer.from("%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n");
+      const files = [
+        { name: "c7-a.png", type: "image/png", data: tinyPng({ tint: 10 }) },
+        { name: "c7-b.png", type: "image/png", data: tinyPng({ tint: 90 }) },
+        { name: "c7-c.png", type: "image/png", data: tinyPng({ tint: 170 }) },
+        { name: "c7-doc.pdf", type: "application/pdf", data: pdfBytes },
+      ];
+      const pathOf = {};
+      for (const f of files) {
+        const p = `${ITEM}/e2e_${Date.now()}_${f.name}`;
+        pathOf[f.name] = p;
+        const up = await api.storage.from("evidence-photos").upload(p, new Blob([f.data], { type: f.type }), { contentType: f.type });
+        const ins = await api.from("evidences").insert({
+          item_id: ITEM, evidence_date: new Date().toISOString().slice(0, 10), description: `C7 ${f.name}`,
+          file_path: p, file_name: f.name, file_type: f.type, file_size: f.data.length,
+        });
+        if (up.error || ins.error) throw new Error(`seed ${f.name}: ${up.error?.message || ins.error?.message}`);
+      }
+      const objUrl = (name) => `/storage/v1/object/evidence-photos/${pathOf[name]}`;
+
+      const page = await newPage(c, "insp1-c7", { serviceWorkers: "allow" });
+      const ctx = page.context();
+      // Every object URL the app creates / revokes, in every page.
+      await ctx.addInitScript(() => {
+        window.__c7 = { created: [], revoked: [] };
+        const oc = URL.createObjectURL, orv = URL.revokeObjectURL;
+        URL.createObjectURL = function (b) {
+          const u = oc.call(URL, b);
+          window.__c7.created.push({ u, type: b && b.type });
+          return u;
+        };
+        URL.revokeObjectURL = function (u) {
+          window.__c7.revoked.push(u);
+          return orv.call(URL, u);
+        };
+      });
+      // Browser-side view of every Supabase request (popups included).
+      const reqs = [];
+      ctx.on("request", (r) => {
+        if (!r.url().startsWith(GW)) return;
+        reqs.push(r.allHeaders().then((h) => ({ url: r.url().slice(GW.length), method: r.method(), auth: h.authorization || "" })).catch(() => ({ url: r.url(), auth: "?" })));
+      });
+      const jwtSub = (auth) => {
+        try { return JSON.parse(Buffer.from(auth.replace(/^Bearer\s+/i, "").split(".")[1], "base64url").toString()).sub; } catch { return null; }
+      };
+      const c7 = () => page.evaluate(() => window.__c7);
+      // Can the page still show this blob: URL? (An <img>: connect-src
+      // doesn't allow blob:, img-src does.)
+      const alive = (u) => page.evaluate((u) => new Promise((res) => {
+        const i = new Image();
+        i.onload = () => res(true);
+        i.onerror = () => res(false);
+        i.src = u;
+      }), u);
+      const thumb = (name) => modal(page).locator(`img[alt="${name}"]`);
+      const loaded = (name, timeout = 15000) =>
+        thumb(name).waitFor({ timeout }).then(() => thumb(name).evaluate((el) => el.complete && el.naturalWidth === 32 ? el.src : null)).catch(() => null);
+      const srcs = async () => Object.fromEntries(await Promise.all(["c7-a.png", "c7-b.png", "c7-c.png"].map(async (n) => [n, await thumb(n).getAttribute("src").catch(() => null)])));
+
+      await login(page, "insp1@test.local");
+      // The service worker must control the page, or the Cache Storage
+      // check at the end proves nothing.
+      await page.evaluate(() => navigator.serviceWorker.ready.then(() => true)).catch(() => false);
+      if (!(await page.evaluate(() => !!navigator.serviceWorker.controller))) {
+        await page.reload();
+        await waitLoaded(page);
+      }
+      c.expect(await page.evaluate(() => !!navigator.serviceWorker.controller), "the app's service worker controls the page");
+
+      // ---- 1. open the item; photo b fails on the storage side
+      await ctl.fault({ method: "GET", prefix: objUrl("c7-b.png"), status: 503 });
+      const t0 = Date.now();
+      await openItem(page, NAME);
+      const aSrc = await loaded("c7-a.png");
+      const cSrc = await loaded("c7-c.png");
+      c.expect(!!aSrc && !!cSrc, "thumbnails a and c render (naturalWidth=32)", { aSrc, cSrc });
+      c.expect(/^blob:/.test(aSrc || "") && /^blob:/.test(cSrc || ""), "their src are in-memory blob: URLs", { aSrc, cSrc });
+      const bErr = modal(page).getByText("Couldn't load the photo c7-b.png.");
+      await bErr.waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await bErr.isVisible(), "the failed photo alone shows 'Couldn't load the photo c7-b.png.'");
+      c.expect((await thumb("c7-b.png").count()) === 0, "…with no broken image");
+      await shot(c, page, "one-failed");
+      const pdfLink = modal(page).getByRole("button", { name: "Attachment: c7-doc.pdf" });
+      c.expect(await pdfLink.isVisible(), "the PDF is listed as 'Attachment: c7-doc.pdf'");
+      let log = await ctl.log(t0);
+      const gets = (name) => log.filter((l) => l.method === "GET" && l.url.split("?")[0] === objUrl(name));
+      c.expect(gets("c7-doc.pdf").length === 0, "the PDF is not downloaded before it is opened");
+      const photoGets = ["c7-a.png", "c7-c.png"].flatMap(gets);
+      c.expect(photoGets.length === 2 && photoGets.every((l) => l.status === 200 && l.sub === USERS.insp1),
+        "photos fetched with insp1's session JWT (gateway: 200, sub = insp1)", photoGets);
+      c.expect(gets("c7-b.png").length >= 1 && gets("c7-b.png").every((l) => l.status === 503), "photo b's download got the injected 503", gets("c7-b.png"));
+
+      // ---- 2. retry just that photo
+      await ctl.clear();
+      await modal(page).getByRole("button", { name: "Try again" }).click();
+      const bSrc = await loaded("c7-b.png");
+      c.expect(/^blob:/.test(bSrc || ""), "'Try again' loads photo b (blob:, naturalWidth=32)", bSrc);
+      c.expect(!(await bErr.isVisible().catch(() => false)), "…and its error is gone");
+      await shot(c, page, "retried");
+
+      // ---- 3. open a photo in a new tab (from memory)
+      const [pop] = await Promise.all([page.waitForEvent("popup", { timeout: 10000 }), thumb("c7-a.png").click()]);
+      await pop.waitForURL(/^blob:/, { timeout: 10000 }).catch(() => {});
+      const popUrl = pop.url();
+      c.expect(/^blob:/.test(popUrl) && popUrl !== aSrc, "the photo opens in a new tab at its own blob: URL (not the thumbnail's)", { popUrl, aSrc });
+      const popImg = () => pop.evaluate(() => { const i = document.images[0]; return i && i.complete ? i.naturalWidth : 0; }).catch(() => 0);
+      await pop.waitForFunction(() => document.images[0]?.complete && document.images[0].naturalWidth > 0, null, { timeout: 10000 }).catch(() => {});
+      c.expect((await popImg()) === 32, "the tab shows the image (naturalWidth=32)");
+      await shot(c, pop, "photo-tab");
+
+      // ---- 4. open the PDF attachment (downloaded now, shown from a blob:).
+      // A slow link keeps the tab on its placeholder long enough to see it
+      // (and to listen for the download before it happens).
+      await ctl.fault({ method: "GET", prefix: objUrl("c7-doc.pdf"), mode: "delay", delay: 1500 });
+      const tPdf = Date.now();
+      const [pop2] = await Promise.all([page.waitForEvent("popup", { timeout: 10000 }), pdfLink.click()]);
+      const dlP = pop2.waitForEvent("download", { timeout: 15000 }).catch(() => null);
+      const holder = await pop2.evaluate(() => ({ title: document.title, body: document.body?.textContent })).catch(() => null);
+      c.expect(holder?.title === "Loading…" && holder?.body === "Loading…", "the new tab says 'Loading…' while the PDF downloads", holder);
+      c.expect(await modal(page).getByRole("button", { name: "Attachment: c7-doc.pdf" }).locator('[style*="spin"]').count() === 1, "…and the attachment link shows a spinner");
+      // Headless: the navigation turns into a download (headed: a viewer, and
+      // this times out with the tab at the blob: URL).
+      const dl = await dlP;
+      const pop2Url = pop2.isClosed() ? "(closed)" : pop2.url();
+      let dlHead = "";
+      if (dl) {
+        const got = fs.readFileSync(await dl.path());
+        dlHead = got.equals(pdfBytes) ? "%PDF-" : `differs (${got.length} bytes)`;
+      }
+      c.step(`PDF tab: ${pop2Url}; download: ${dl ? dl.url().slice(0, 40) : "none"} ${dlHead}`);
+      c.expect((dl && dl.url().startsWith("blob:") && dlHead === "%PDF-") || pop2Url.startsWith("blob:"), "the PDF opens from a blob: URL with the stored bytes (viewer, or a download in headless)", { pop2Url, dl: dl && dl.url(), dlHead });
+      log = await ctl.log(tPdf);
+      const pdfGets = gets("c7-doc.pdf");
+      c.expect(pdfGets.length === 1 && pdfGets[0].status === 200 && pdfGets[0].sub === USERS.insp1, "the PDF was fetched on click, with insp1's session", pdfGets);
+      if (!pop2.isClosed()) await pop2.close();
+      await ctl.clear();
+
+      // ---- 5. no signed URL anywhere, every storage call authenticated
+      const all = await Promise.all(reqs);
+      const fullLog = await ctl.log(t0);
+      const signed = [...all.map((r) => r.url), ...fullLog.map((l) => l.url)].filter((u) => /\/storage\/v1\/object\/sign\/|[?&]token=/.test(u));
+      c.expect(signed.length === 0, "no request to a signed-URL endpoint (/object/sign/…, ?token=)", signed);
+      const storageReqs = all.filter((r) => r.url.startsWith("/storage/v1/"));
+      c.expect(storageReqs.length >= 5 && storageReqs.every((r) => /^Bearer\s/i.test(r.auth) && jwtSub(r.auth) === USERS.insp1),
+        `every storage request from the browser carries 'Authorization: Bearer <insp1's JWT>' (${storageReqs.length})`, storageReqs.map((r) => ({ url: r.url, sub: jwtSub(r.auth) })));
+      const anon = await fetch(`${GW}${objUrl("c7-a.png")}`, { headers: { apikey: process.env.ANON_KEY } });
+      c.expect(anon.status !== 200, `the photo's storage address without the session is refused (${anon.status})`);
+
+      // ---- 6. closing the item revokes every thumbnail URL; the open tab keeps its photo
+      const thumbs = Object.values(await srcs()).filter(Boolean);
+      await page.keyboard.press("Escape");
+      await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      const st = await c7();
+      c.expect(thumbs.length === 3 && thumbs.every((u) => st.revoked.includes(u)), "closing the item revokes all 3 thumbnail URLs", { thumbs, revoked: st.revoked });
+      const stillAlive = [];
+      for (const u of thumbs) if (await alive(u)) stillAlive.push(u);
+      c.expect(stillAlive.length === 0, "the revoked blob: URLs no longer resolve (fetch fails)", stillAlive);
+      c.expect(!st.revoked.includes(popUrl) && (await popImg()) === 32, "the photo tab opened before still shows its image (its URL is revoked later, on a timer)");
+      const leaked = st.created.filter((x) => /^image\//.test(x.type) && x.u !== popUrl && !st.revoked.includes(x.u));
+      c.expect(leaked.length === 0, "no other image object URL left unrevoked", leaked);
+      await pop.close();
+
+      // ---- 7. Cache Storage holds no storage response
+      const cached = await page.evaluate(async () => {
+        const out = [];
+        for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) out.push(r.url);
+        return out;
+      });
+      c.step(`Cache Storage: ${cached.length} entries`);
+      c.expect(cached.length > 0 && !cached.some((u) => u.includes("/storage/v1/") || u.startsWith(GW) || u.startsWith("blob:")), "Cache Storage has app assets only — no Supabase / storage / blob: entry", cached.filter((u) => !u.startsWith(APP)));
+
+      // ---- 8. sign out and back in: nothing stale, photos downloaded afresh
+      await openItem(page, NAME);
+      const before = await Promise.all(["c7-a.png", "c7-b.png", "c7-c.png"].map((n) => loaded(n)));
+      await page.keyboard.press("Escape");
+      await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      await page.getByRole("button", { name: /sign out/i }).first().click();
+      await page.waitForURL(/\/login/, { timeout: 15000 });
+      await page.locator('input[type="email"]').waitFor();
+      const deadAfterLogout = [];
+      for (const u of before.filter(Boolean)) if (!(await alive(u))) deadAfterLogout.push(u);
+      c.expect(before.every(Boolean) && deadAfterLogout.length === 3, "after sign-out none of the last thumbnails' blob: URLs resolves", { before, deadAfterLogout });
+      c.expect((await page.locator('img[src^="blob:"]').count()) === 0, "no blob: image on the login page");
+      const tIn = Date.now();
+      await page.locator('input[type="email"]').fill("insp1@test.local");
+      await page.locator('input[type="password"]').fill(PASSWORD);
+      await page.getByRole("button", { name: /sign in/i }).click();
+      await page.waitForURL(/\/dashboard/, { timeout: 30000 });
+      await waitLoaded(page);
+      c.expect((await page.locator('img[src^="blob:"]').count()) === 0, "signed in again: no photo shown before an item is opened");
+      await openItem(page, NAME);
+      const after = await Promise.all(["c7-a.png", "c7-b.png", "c7-c.png"].map((n) => loaded(n)));
+      c.expect(after.every((u) => /^blob:/.test(u || "")) && after.every((u) => !before.includes(u)), "the item's photos render again from new blob: URLs", { before, after });
+      log = await ctl.log(tIn);
+      const fresh = ["c7-a.png", "c7-b.png", "c7-c.png"].flatMap(gets);
+      c.expect(fresh.length === 3 && fresh.every((l) => l.status === 200 && l.sub === USERS.insp1), "…downloaded again with the new session (3 authenticated GETs)", fresh);
+      await shot(c, page, "after-relogin");
+      await page.keyboard.press("Escape");
+      await ctx.close();
+    } finally {
+      await ctl.clear();
+      await dropItems([ITEM]);
     }
   });
 
