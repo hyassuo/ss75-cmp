@@ -4,6 +4,8 @@ import { DS, tint } from "@/lib/design/tokens";
 import { Button } from "@/components/ui/Button";
 import type { AIAnalysis } from "@/lib/types/domain";
 import { useLang } from "@/lib/context/LangContext";
+import { tOr } from "@/lib/i18n/dict";
+import { fmtNum } from "@/lib/utils/format";
 
 interface Props {
   result: AIAnalysis;
@@ -11,7 +13,7 @@ interface Props {
 }
 
 export function AIResultCard({ result: r, onApply }: Props) {
-  const { t } = useLang();
+  const { lang, t } = useLang();
   const actClr =
     r.immediateAction === "Urgent Treatment Required"
       ? DS.red
@@ -55,7 +57,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
           marginBottom: 10,
         }}
       >
-        AI Corrosion Analysis Result
+        {t("ai.resultTitle")}
       </div>
       {r.componentName && (
         <div
@@ -66,7 +68,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
           }}
         >
           <span style={{ color: DS.text3, fontSize: DS.fs.xs, marginRight: 6 }}>
-            COMPONENT
+            {t("ai.component")}
           </span>
           <span style={{ fontWeight: 700 }}>{r.componentName}</span>
         </div>
@@ -78,7 +80,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
         <div style={tile(DS.bord)}>
           <div style={cap}>{t("ai.type")}</div>
           <div style={{ fontSize: DS.fs.md, fontWeight: 700, color: DS.text }}>
-            {r.corrosionType}
+            {tOr(lang, `aiType.${r.corrosionType}`, r.corrosionType)}
           </div>
         </div>
         <div style={tile(DS.bord)}>
@@ -110,7 +112,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
         <div style={tile(tint(actClr, 31))}>
           <div style={cap}>{t("ai.action")}</div>
           <div style={{ fontSize: DS.fs.sm, fontWeight: 700, color: actClr }}>
-            {r.immediateAction}
+            {tOr(lang, `aiAction.${r.immediateAction}`, r.immediateAction)}
           </div>
         </div>
       </div>
@@ -128,7 +130,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
               fontFamily: "monospace",
             }}
           >
-            {r.affectedAreaPct}
+            {fmtNum(r.affectedAreaPct, lang)}
             <span style={{ fontSize: DS.fs.sm, marginLeft: 2 }}>%</span>
           </div>
         </div>
@@ -143,7 +145,7 @@ export function AIResultCard({ result: r, onApply }: Props) {
                 fontFamily: "monospace",
               }}
             >
-              {r.pitDepthEstMM}
+              {fmtNum(r.pitDepthEstMM, lang)}
               <span style={{ fontSize: DS.fs.sm, marginLeft: 2 }}>mm</span>
             </div>
           </div>
@@ -164,12 +166,12 @@ export function AIResultCard({ result: r, onApply }: Props) {
       </div>
       {r.inspectionFrequency && (
         <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginTop: 6 }}>
-          <span style={{ fontWeight: 700 }}>Suggested frequency:</span>{" "}
-          {r.inspectionFrequency}
+          <span style={{ fontWeight: 700 }}>{t("ai.suggestedFreq")}</span>{" "}
+          {tOr(lang, `freq.${r.inspectionFrequency.trim()}`, r.inspectionFrequency)}
         </div>
       )}
       <Button size="sm" onClick={onApply} style={{ marginTop: 10 }}>
-        Apply to Item Fields
+        {t("ai.apply")}
       </Button>
     </div>
   );

@@ -155,7 +155,7 @@ export function ReadingsPanel({
               type="text"
               inputMode="decimal"
               value={depth}
-              placeholder="e.g. 1.5"
+              placeholder={t("readings.depthPh")}
               onChange={(e) => setDepth(e.target.value)}
               style={{ ...S.inp, ...S.mono, marginBottom: 0 }}
             />
@@ -166,7 +166,7 @@ export function ReadingsPanel({
               id={fid + "loc"}
               type="text"
               value={loc}
-              placeholder="ex: FR-12 P/S"
+              placeholder={t("readings.locationPh")}
               onChange={(e) => setLoc(e.target.value)}
               style={{ ...S.inp, marginBottom: 0 }}
             />
@@ -242,7 +242,7 @@ export function ReadingsPanel({
             >
               {fmtNum(rate, lang, 3)}
               <span style={{ fontSize: DS.fs.md, marginLeft: 3, fontWeight: 400 }}>
-                mm/yr
+                {t("unit.mmYr")}
               </span>
             </div>
           </div>
@@ -360,10 +360,10 @@ export function ReadingsPanel({
                       {dTxt}
                     </td>
                     <td style={{ padding: "7px 8px", color: DS.text3 }}>
-                      {r.location || "-"}
+                      {isAiEstimate(r) ? t("readings.aiLocation") : r.location || "-"}
                     </td>
                     <td style={{ padding: "7px 8px", color: DS.text3 }}>
-                      {r.checked_by || "-"}
+                      {isAiEstimate(r) ? t("readings.aiBy") : r.checked_by || "-"}
                     </td>
                     <td style={{ padding: "7px 8px" }}>
                       {canDelete && (

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Offline · SS-75 CMP</title>
+  <title>Sem conexão · SS-75 CMP</title>
   <style>
     /* Colors mirror lib/design/tokens.ts (bg, sur, bord, text, sbBg, blu). */
     html, body {
@@ -66,10 +66,13 @@
     <div class="logo">CMP</div>
     <h1>Sem conexão</h1>
     <p>O SS-75 CMP precisa de conexão com a internet. Verifique a rede e tente novamente.</p>
-    <p class="en">SS-75 CMP needs an internet connection. Check your network and try again.</p>
+    <!-- Static and script-free (its CSP allows no JavaScript), so it can't
+         know the language picked in the app: Portuguese first, then the
+         English line, marked lang="en" for screen readers. -->
+    <p class="en" lang="en">SS-75 CMP needs an internet connection. Check your network and try again.</p>
     <!-- A link, not a script: the page's CSP allows no JavaScript. An empty
          href reloads the current address, query string included. -->
-    <a class="retry" href="">Tentar novamente / Retry</a>
+    <a class="retry" href="">Tentar novamente / <span lang="en">Retry</span></a>
   </div>
 </body>
 </html>

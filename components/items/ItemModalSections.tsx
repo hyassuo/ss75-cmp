@@ -102,7 +102,7 @@ export function IfsSection({ f, set, setF, recalcPriority }: {
         label={t("f.wo")}
         value={f.ifs_wo}
         onChange={(v) => set("ifs_wo", v)}
-        placeholder="ex: 320045678"
+        placeholder={t("f.woPh")}
         mono
       />
       {/* Line accessory: the IFS object is the parent LINE; this item is

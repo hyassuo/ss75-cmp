@@ -2625,7 +2625,8 @@ async function main() {
     // The trigger stores "<date> \u2014 <description>"; the panel shows " - " (E7).
     const stored = await one("SELECT note FROM history WHERE item_id = $1 AND action = 'evidence_added'", [AUDIT]);
     c.expect(/^Evidence added: \d{4}-\d{2}-\d{2} \u2014 audit evidence \(no file\)$/.test(stored?.note || ""), "DB: the trigger's note still has its long dash (database unchanged)", stored);
-    c.expect(/Evidence added: \d{4}-\d{2}-\d{2} - audit evidence \(no file\)/.test(txt) && !txt.includes("\u2014"), "History panel: 'Evidence added: <date> - <description>', no long dash anywhere", txt.slice(0, 400));
+    // E8: the panel shows the date in the UI language ("9 Oct 2026" in EN).
+    c.expect(/Evidence added: \d{1,2} [A-Z][a-z]{2} \d{4} - audit evidence \(no file\)/.test(txt) && !txt.includes("\u2014"), "History panel: 'Evidence added: <date> - <description>', no long dash anywhere", txt.slice(0, 400));
     c.expect(/by insp1@test\.local/.test(txt), "…attributed to insp1", txt.slice(0, 400));
     await shot(c, page, "history");
     await page.keyboard.press("Escape");
@@ -4388,8 +4389,12 @@ async function main() {
           if (name === "risk matrix") await page.locator("main details > summary").first().click().catch(() => {});
           if (name === "item modal") {
             await modal(page).waitFor({ timeout: 30000 });
-            await modal(page).getByText(/Evidence added: \d{4}-\d{2}-\d{2} - E7 evidence note/).first().waitFor({ timeout: 15000 }).catch(() => {});
-            c.expect(await modal(page).getByText(/Evidence added: \d{4}-\d{2}-\d{2} - E7 evidence note/).first().isVisible().catch(() => false),
+            // E8: the note is rebuilt in the UI language, date included.
+            const evNote = pt
+              ? /Evidência adicionada: \d{1,2} de [a-zç]{3}\. de \d{4} - E7 evidence note/
+              : /Evidence added: \d{1,2} [A-Z][a-z]{2} \d{4} - E7 evidence note/;
+            await modal(page).getByText(evNote).first().waitFor({ timeout: 15000 }).catch(() => {});
+            c.expect(await modal(page).getByText(evNote).first().isVisible().catch(() => false),
               `${lang} item modal: the trigger's evidence note reads '<date> - <description>'`);
           }
           await check(page, lang, name);
@@ -4449,6 +4454,358 @@ async function main() {
     } finally {
       await ctl.clear();
       await sql("DELETE FROM items WHERE id = $1", [E7]);
+      await sql("DELETE FROM auth.users WHERE id = $1", [EMPTY.id]).catch(() => {});
+      await sql("DELETE FROM public.profiles WHERE id = $1", [EMPTY.id]).catch(() => {});
+      await sql("DELETE FROM public.units WHERE code = $1", [EMPTY.unit]).catch(() => {});
+    }
+  });
+
+  // ------------------------------------------ E8: Portuguese UI, dates
+  // English UI words (from the EN dictionary) that never appear in the PT
+  // UI. Matched as whole words, case-sensitive, after the user's own data
+  // (item/zone/sub-area names, notes, descriptions, IFS codes, emails,
+  // file names, the AI stand-in's findings) is removed from each string.
+  const EN_DENY = [
+    "Loading", "Saving", "Save", "Cancel", "Delete", "Search", "Export", "Reading", "Readings",
+    "Evidence", "Evidences", "History", "Clear", "Close", "Dismiss", "Sign out", "Sign in", "Users",
+    "Audit Log", "Action", "Actions", "Date", "Zone", "Zones", "Priority", "Next", "Last", "Rate",
+    "Field", "Previous", "New", "Note", "Notes", "User", "Name", "Role", "Active", "ACTIVE",
+    "INACTIVE", "Created", "Deactivate", "Activate", "Reset PW", "Password", "Overdue", "overdue",
+    "archived", "by", "Language", "Department", "Apply", "Suggested", "frequency", "Analysis",
+    "COMPONENT", "Change", "Photos", "photos", "Temporary", "you", "Reload", "Try again",
+    "Something went wrong", "Page not found", "Back to", "e.g.", "mm/yr", "Sub-area", "Mark as",
+    "Resolved", "Critical", "High", "Medium", "Low", "Pending", "Attention", "Monthly", "Weekly",
+    "Quarterly", "Annual", "Inspection", "inspection", "Location", "Depth", "Inspector", "Untitled",
+    "Generating", "items", "Items", "reading", "evidence", "created", "changed", "added", "removed",
+    "deleted", "Monitor", "Treat", "Urgent", "Unknown", "Atmospheric", "Pitting", "Galvanic", "Retry",
+    "Offline", "Jan", "Feb", "Apr", "May", "Aug", "Sep", "Oct", "Dec", "Filter", "Dashboard",
+    "Schedule", "Risk Matrix", "Legend", "Horizon", "Until", "days", "due", "Optimised", "Take photo",
+    "Gallery", "Choose", "Add", "Create", "Home", "Email", "HEALTHY", "Departments", "Drilling",
+    "Maintenance", "Marine", "Safety", "Third Party", "All", "Generated", "Photo", "photo", "failed",
+    "Failed", "Could not", "not found", "Other", "Support", "Valve", "Replacement", "Planned", "Done",
+    "In progress", "Not planned", "Awaiting", "YES", "Yes", "the", "and", "of", "with", "for", "from",
+  ];
+  const DENY_SRC = `(?<![\\p{L}\\p{N}])(?:${EN_DENY.map((w) => w.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join("|")})(?![\\p{L}\\p{N}])`;
+  const GEMINI_TEXT = ["E2E stand-in: surface rust on the flange bolts.", "E2E stand-in: clean and recoat within the quarter.", "E2E flange bolts"];
+  // Every string the users typed or the data holds (never checked).
+  const userData = async () => {
+    const rows = await sql(`
+      SELECT unnest(ARRAY[name, notes, ifs_obj_id, ifs_obj_desc, ifs_wo, ifs_fl, action_note]) AS s FROM items
+      UNION SELECT unnest(ARRAY[zid, name, description]) FROM zones
+      UNION SELECT name FROM subareas
+      UNION SELECT unnest(ARRAY[location, checked_by]) FROM readings WHERE location IS DISTINCT FROM 'AI estimate'
+      UNION SELECT unnest(ARRAY[description, file_name, file_path, ai_analysis->>'findings', ai_analysis->>'recommendation', ai_analysis->>'componentName']) FROM evidences
+      UNION SELECT unnest(ARRAY[email, full_name, dept]) FROM profiles
+      UNION SELECT unnest(ARRAY[name, code]) FROM units
+      UNION SELECT unnest(ARRAY[item_name, CASE WHEN field_changed = ANY($1) THEN prev_value END, CASE WHEN field_changed = ANY($1) THEN new_value END]) FROM history`,
+      [["file_path", "subarea_id", "name", "zone_id", "notes", "action_note", "ifs_obj_id", "ifs_obj_desc", "ifs_wo", "ifs_fl"]]);
+    return [...new Set([...rows.map((r) => r.s), ...GEMINI_TEXT])]
+      .filter((s) => s && s.trim().length >= 2)
+      .sort((a, b) => b.length - a.length);
+  };
+  // English left on the page: text nodes (sr-only too), the document title,
+  // the attributes people see or hear, field values and the meta
+  // description. Parts marked lang="en" (the bilingual offline page) are
+  // English on purpose.
+  const englishOn = (page, data) => page.evaluate(({ src, data }) => {
+    const re = new RegExp(src, "u");
+    const scrub = (s) => { for (const d of data) if (s.includes(d)) s = s.split(d).join(" \u0000 "); return s; };
+    const bad = [];
+    const add = (where, s) => {
+      if (!s || !re.test(s)) return;
+      const m = scrub(s).match(re);
+      if (!m) return;
+      // A name cut short on screen ("E2E Reading T..."): still user data.
+      const cut = s.trim().replace(/\.\.\.$/, "");
+      if (cut.length >= 6 && data.some((d) => d.startsWith(cut))) return;
+      bad.push(`${where}: "${m[0]}" in "${s.trim().replace(/\s+/g, " ").slice(0, 90)}"`);
+    };
+    const skip = (el) => !!el?.closest('[lang="en"]');
+    add("title", document.title);
+    let n = 0;
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+      const p = t.parentElement;
+      if (!p || ["SCRIPT", "STYLE", "NOSCRIPT"].includes(p.tagName) || skip(p)) continue;
+      if (t.textContent.trim()) n++;
+      add(`<${p.tagName.toLowerCase()}>`, t.textContent);
+    }
+    const ATTRS = ["aria-label", "title", "placeholder", "alt", "aria-description", "aria-valuetext"];
+    for (const el of document.querySelectorAll(ATTRS.map((a) => `[${a}]`).join(","))) {
+      if (!skip(el)) for (const a of ATTRS) add(`@${a}`, el.getAttribute(a));
+    }
+    for (const el of document.querySelectorAll("input:not([type=hidden]), textarea")) add("value", el.value);
+    for (const m of document.querySelectorAll('meta[name="description"]')) add("meta description", m.content);
+    return { n, bad: [...new Set(bad)].slice(0, 10) };
+  }, { src: DENY_SRC, data });
+
+  await run("i18nsweep", "E8: the PT UI shows no English (deny-list of EN UI words, user data excluded) on every screen, dialog, toast, banner, dropdown, empty state, error, the PT PDF and the phone layout; dates follow the language ('Oct' on an EN item card, 'out.' in PT, history notes too); no hydration error", async (c) => {
+    const E8 = "00000000-0000-0000-0000-0000000e8a01";
+    const NAME = "E2E I18N Target";
+    const EMPTY = { unit: "E2E-98", id: "00000000-0000-0000-0000-00000000f098", email: "empty98@test.local" };
+    const unit = await unitId();
+    // Due 9 Oct 2026 (the item card), an overdue tratativa (alert bar and
+    // schedule), a line accessory, readings with a critical rate plus the AI
+    // estimate, an evidence, and trigger history with dates, booleans, a
+    // list value and a removed reading.
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, freq_insp, last_insp, next_insp, drops_risk, is_accessory, accessory_type, action_type, action_status, action_due, notes, created_by, updated_by, created_at)
+       VALUES ($1, $2, 'Z13', $3, 'Attention', 4, 4, 'Monthly', '2026-09-02', '2026-10-02', false, true, 'Válvula', 'Monitorar', 'Planejado', current_date - 3, 'base note', $4, $4, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [E8, unit, NAME, USERS.insp2]
+    );
+    await sql("INSERT INTO readings (item_id, reading_date, depth_mm, location, checked_by) VALUES ($1, current_date - 120, 1.0, 'P1', 'E2E Tech'), ($1, current_date - 1, 1.25, 'P1', 'E2E Tech'), ($1, current_date - 1, 0.4, 'AI estimate', 'AI Vision'), ($1, current_date - 2, 0.9, 'P9', 'E2E Tech')", [E8]);
+    await sql("DELETE FROM readings WHERE item_id = $1 AND location = 'P9'", [E8]);
+    await sql("INSERT INTO evidences (item_id, evidence_date, description, created_by) VALUES ($1, current_date - 1, 'E8 evidence note', $2)", [E8, USERS.insp2]);
+    await sql("UPDATE items SET status = 'Critical', freq_insp = 'Weekly', next_insp = '2026-10-09', drops_risk = true, updated_by = $2 WHERE id = $1", [E8, USERS.insp2]);
+    // A unit with no items: the empty states.
+    await sql("INSERT INTO public.units (code, name) VALUES ($1, 'E2E empty unit 98') ON CONFLICT (code) DO NOTHING", [EMPTY.unit]);
+    await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [EMPTY.id, EMPTY.email]);
+    await sql("UPDATE public.profiles SET active = true, role = 'inspector', unit_id = (SELECT id FROM public.units WHERE code = $2) WHERE id = $1", [EMPTY.id, EMPTY.unit]);
+    const PT = [{ name: "ss75-cmp.lang", value: "pt", url: APP }];
+    const hydration = () => c.console.filter((m) => /hydrat|Minified React error #(418|419|421|422|423|425)|did not match/i.test(m));
+    const data = await userData();
+    c.step(`${data.length} user-data strings excluded from the check`);
+    const check = async (page, name, minText = 3) => {
+      await page.waitForTimeout(400);
+      const s = await englishOn(page, data);
+      c.expect(s.n >= minText && s.bad.length === 0, `PT ${name}: no English UI word (${s.n} text nodes)`, s.bad);
+    };
+    const card = (page) => page.locator('[role="button"]').filter({ hasText: NAME }).first();
+    const histSection = (page, title) => modal(page).locator(`div:has(> div:text-is("${title}"))`);
+
+    try {
+      // ---- EN: dates in English on the item card and in the history.
+      const en = await newPage(c, "admin1-EN");
+      await login(en, "admin1@test.local");
+      await en.goto(`${APP}/dashboard?tab=zones`);
+      await waitLoaded(en);
+      await card(en).waitFor({ timeout: 30000 });
+      const enCard = await card(en).innerText();
+      c.expect(/\b9 Oct 2026\b/.test(enCard) && !/out\./.test(enCard), "EN item card: next inspection '9 Oct 2026'", enCard);
+      await en.goto(`${APP}/dashboard?tab=zones&item=${E8}`);
+      await modal(en).waitFor({ timeout: 30000 });
+      await histSection(en, "HISTORY").getByText(/Reading removed/).first().waitFor({ timeout: 15000 }).catch(() => {});
+      const enHist = await histSection(en, "HISTORY").innerText().catch(() => "");
+      c.expect(/next inspection changed · next_insp/.test(enHist) && /2 Oct 2026 → 9 Oct 2026/.test(enHist), "EN history: next inspection '2 Oct 2026 → 9 Oct 2026'", enHist.slice(0, 600));
+      c.expect(/Reading removed: 0\.900 mm on \d{1,2} [A-Z][a-z]{2} \d{4} at P9/.test(enHist) && /by insp2@test\.local|Reading added/.test(enHist), "EN history: note date in English", enHist.slice(0, 600));
+      await en.context().close();
+
+      // ---- PT, signed out: login (and its error), reset without a link, the
+      //      offline page (English line marked lang=en), 404.
+      const anon = await newPage(c, "anon-PT");
+      await anon.context().addCookies(PT);
+      await anon.goto(`${APP}/login`);
+      await check(anon, "login");
+      await anon.locator('input[type="email"]').fill("insp1@test.local");
+      await anon.locator('input[type="password"]').fill("wrong-password-e8");
+      await anon.locator('input[type="password"]').press("Enter");
+      await anon.locator('form [role="alert"]').waitFor({ timeout: 10000 }).catch(() => {});
+      await check(anon, "login error");
+      await anon.goto(`${APP}/auth/reset`);
+      await anon.waitForTimeout(1500);
+      await check(anon, "reset page without a link", 1);
+      await anon.goto(`${APP}/offline.html`);
+      await check(anon, "offline page");
+      c.expect((await anon.locator('[lang="en"]').count()) === 2, "offline page: its English line and 'Retry' are marked lang=en");
+      await anon.context().close();
+
+      // ---- PT, admin: every screen and what opens on it.
+      const page = await newPage(c, "admin1-PT");
+      await hookPdf(page);
+      await page.context().addCookies(PT);
+      await login(page, "admin1@test.local");
+      c.console.length = 0;
+      await page.goto(`${APP}/dashboard`);
+      await waitLoaded(page);
+      const bar = page.locator('main button[aria-expanded="false"]').first();
+      if (await bar.count()) await bar.click().catch(() => {});
+      await page.getByText(/tratativa VENCIDA desde \d{1,2} de [a-zç]{3}\. de \d{4} \(Monitorar\)/).first().waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(await page.getByText(/tratativa VENCIDA desde \d{1,2} de [a-zç]{3}\. de \d{4} \(Monitorar\)/).first().isVisible().catch(() => false), "PT alert bar: overdue tratativa with a PT date");
+      c.expect(await page.getByText(/taxa crítica de corrosão \d+,\d{3} mm\/ano/).first().isVisible().catch(() => false), "PT alert bar: rate with a decimal comma, 'mm/ano'");
+      await check(page, "dashboard + alert bar");
+
+      await page.goto(`${APP}/dashboard?tab=zones`);
+      await waitLoaded(page);
+      await card(page).waitFor({ timeout: 30000 });
+      const ptCard = await card(page).innerText();
+      c.expect(/\b9 de out\. de 2026\b/.test(ptCard) && !/\bOct\b/.test(ptCard), "PT item card: next inspection '9 de out. de 2026'", ptCard);
+      c.expect(/Válvula/.test(ptCard) && /mm\/ano/.test(ptCard) && /1 evid\./.test(ptCard), "PT item card: accessory, rate unit and evidence count in PT", ptCard);
+      await check(page, "zones");
+
+      // Item modal: history, readings (AI estimate), evidence.
+      await page.goto(`${APP}/dashboard?tab=zones&item=${E8}`);
+      await modal(page).waitFor({ timeout: 30000 });
+      const hist = histSection(page, "HISTÓRICO");
+      await hist.getByText(/Leitura removida/).first().waitFor({ timeout: 15000 }).catch(() => {});
+      const ptHist = await hist.innerText().catch(() => "");
+      c.expect(/próxima inspeção alterada · próxima inspeção/.test(ptHist) && /2 de out\. de 2026 → 9 de out\. de 2026/.test(ptHist), "PT history: 'próxima inspeção alterada', dates in PT", ptHist.slice(0, 600));
+      c.expect(/status alterado · status/.test(ptHist) && /Atenção → Crítico/.test(ptHist) && /NÃO → SIM/.test(ptHist) && /Mensal → Semanal/.test(ptHist), "PT history: status, yes/no and frequency values in PT", ptHist.slice(0, 600));
+      c.expect(/Leitura removida: 0,900 mm em \d{1,2} de [a-zç]{3}\. de \d{4}, local P9/.test(ptHist) && /Evidência adicionada: \d{1,2} de [a-zç]{3}\. de \d{4} - E8 evidence note/.test(ptHist) && /Item criado/.test(ptHist), "PT history: trigger notes rebuilt in PT", ptHist.slice(0, 600));
+      c.expect(/por insp2@test\.local/.test(ptHist) && !/\bby\b/.test(ptHist), "PT history: 'por <email>'", ptHist.slice(0, 600));
+      const depth = modal(page).getByLabel("Profundidade de Pite (mm)", { exact: true });
+      c.expect((await depth.getAttribute("placeholder")) === "ex.: 1,5", "PT depth placeholder 'ex.: 1,5'", await depth.getAttribute("placeholder"));
+      c.expect(await modal(page).getByRole("cell", { name: "Estimativa da IA", exact: true }).isVisible().catch(() => false), "PT readings: the AI estimate row reads 'Estimativa da IA'");
+      c.expect(await modal(page).getByRole("cell", { name: "1,25", exact: true }).isVisible().catch(() => false), "PT readings: depth with a decimal comma (1,25)");
+      await check(page, "item modal");
+
+      // A photo analysed by the AI stand-in: the result card.
+      await modal(page).locator('input[type="file"]:not([capture])').setInputFiles({ name: "e8-ai.png", mimeType: "image/png", buffer: tinyPng({ tint: 90 }) });
+      await modal(page).getByRole("button", { name: /Analisar com IA/ }).click();
+      await modal(page).getByText(GEMINI_TEXT[0]).first().waitFor({ timeout: 20000 }).catch(() => {});
+      c.expect(await modal(page).getByText("Resultado da análise de corrosão por IA").isVisible().catch(() => false), "PT AI result card");
+      await check(page, "item modal + AI result");
+      // A reading typed with a decimal comma: toast.
+      await depth.fill("0,95");
+      await modal(page).getByRole("button", { name: "+ Leitura" }).click();
+      await page.getByRole("status").filter({ hasText: /Leitura salva/ }).first().waitFor({ timeout: 8000 }).catch(() => {});
+      await check(page, "item modal + toast");
+      // Confirmation dialog over the modal.
+      page.__manualDialogs = true;
+      await modal(page).getByRole("button", { name: "Excluir leitura", exact: true }).first().click();
+      await confirmDlg(page).waitFor({ timeout: 5000 });
+      await check(page, "confirm dialog");
+      await confirmDlg(page).getByRole("button", { name: "Cancelar" }).click();
+      await confirmDlg(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      // Unsaved notes, reload: the draft banner (date and time in PT).
+      await modal(page).locator('div:has(> div:text-is("OBSERVAÇÕES")) textarea').fill("E8 draft text");
+      await page.waitForTimeout(900);
+      await page.reload();
+      await waitLoaded(page);
+      await modal(page).waitFor({ timeout: 30000 });
+      const banner = modal(page).getByText(/Foram encontradas alterações não salvas/);
+      await banner.waitFor({ timeout: 5000 }).catch(() => {});
+      c.expect(/\(\d{1,2} de [a-zç]{3}\. de \d{4}, \d{2}:\d{2}\)/.test(await banner.innerText().catch(() => "")), "PT draft banner: saved at '<d> de <mês>. de <aaaa>, hh:mm'", await banner.innerText().catch(() => ""));
+      await check(page, "item modal + draft banner");
+      page.__manualDialogs = false;
+      await modal(page).getByRole("button", { name: "Descartar", exact: true }).click();
+      await modal(page).getByRole("button", { name: "Cancelar", exact: true }).click();
+      await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+
+      // Top bar: item search (results and no results), new-item zone picker.
+      const search = page.getByRole("combobox", { name: "Buscar itens" });
+      await search.fill("E2E I18N");
+      await page.getByRole("option").first().waitFor({ timeout: 5000 }).catch(() => {});
+      await check(page, "item search results");
+      await search.fill("zzqqxx-nothing");
+      await page.waitForTimeout(300);
+      await check(page, "item search, no results");
+      await search.fill("");
+      await page.keyboard.press("Escape");
+      await page.locator('button[aria-label="+ Novo Item"]').first().click();
+      await page.locator(".zone-picker").waitFor({ timeout: 5000 }).catch(() => {});
+      await check(page, "new item zone picker");
+      await page.keyboard.press("Escape");
+
+      for (const [name, url] of [["risk matrix", "/dashboard?tab=risk"], ["schedule", "/dashboard?tab=schedule"]]) {
+        await page.goto(APP + url);
+        await waitLoaded(page);
+        if (name === "risk matrix") await page.locator("main details > summary").first().click().catch(() => {});
+        await check(page, name);
+      }
+
+      // Export: summary table, then the PDF in PT.
+      await page.goto(`${APP}/dashboard?tab=export`);
+      await waitLoaded(page);
+      c.expect(await page.getByText(/^\d{2}-out-2026$/).first().isVisible().catch(() => false), "PT export summary: dates as 'DD-mmm-AAAA' in PT (09-out-2026)");
+      await check(page, "export");
+      await page.evaluate(() => { window.__e2ePdf = null; });
+      const [popup] = await Promise.all([page.waitForEvent("popup", { timeout: 15000 }), page.getByRole("button", { name: /Exportar PDF/ }).first().click()]);
+      const b64 = await page.waitForFunction(() => window.__e2ePdf, null, { timeout: 240000, polling: 500 })
+        .then(() => page.evaluate(async () => {
+          const u8 = new Uint8Array(await window.__e2ePdf.arrayBuffer());
+          let bin = ""; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+          return btoa(bin);
+        }));
+      if (!popup.isClosed()) await popup.close().catch(() => {});
+      const pdf = Buffer.from(b64, "base64");
+      fs.writeFileSync(path.join(ART, "i18nsweep-pt.pdf"), pdf);
+      const lines = pdfLines(pdfTextRuns(pdf));
+      c.expect(lines[0] === "Plano de Gerenciamento de Corrosão" && lines.some((l) => /· Gerado em \d{2}-[a-zç]{3}-\d{4}$/.test(l)) && lines.some((l) => /^Total \d+ · SECE \d+ · Críticos \d+/.test(l)), "PT PDF: title, 'Gerado em' and totals in PT", lines.slice(0, 4));
+      c.expect(lines.some((l) => /^Fotos: \d+ fotos incluídas/.test(l)), "PT PDF: photo note in PT", lines.slice(0, 5));
+      c.expect(lines.some((l) => l.startsWith(NAME) && /Crítico/.test(l) && /09-out-2026/.test(l)), "PT PDF: the item row with its status and date in PT", lines.filter((l) => l.startsWith(NAME)));
+      c.expect(lines.some((l) => /^Tratativa: Monitorar · Planejado · prazo \d{2}-[a-zç]{3}-\d{4}$/.test(l)), "PT PDF: tratativa line in PT", lines.filter((l) => /Tratativa/.test(l)).slice(0, 2));
+      const re = new RegExp(DENY_SRC, "u");
+      const pdfBad = lines.filter((l) => { let s = l; for (const d of data) if (s.includes(d)) s = s.split(d).join(" \u0000 "); return re.test(s); });
+      c.expect(pdfBad.length === 0, `PT PDF: no English UI word in ${lines.length} lines`, pdfBad.slice(0, 5));
+
+      // Admin pages: users (API error, delete confirmation), audit log.
+      await page.goto(`${APP}/users`);
+      await page.getByText("admin1@test.local").first().waitFor({ timeout: 30000 });
+      await check(page, "users");
+      await page.locator('input[type="email"]').fill("insp1@test.local");
+      await page.locator('input[type="password"]').fill("E8-password-123");
+      await page.getByRole("button", { name: "Criar", exact: true }).click();
+      await page.getByText("Não foi possível criar o usuário.").waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(await page.getByText("Não foi possível criar o usuário.").isVisible().catch(() => false), "PT users: the API's error shown in PT");
+      await check(page, "users + API error");
+      page.__manualDialogs = true;
+      await page.locator("tr", { hasText: "insp2@test.local" }).getByRole("button", { name: "Excluir" }).click();
+      await confirmDlg(page).waitFor({ timeout: 5000 });
+      await check(page, "users + delete confirmation");
+      await confirmDlg(page).getByRole("button", { name: "Cancelar" }).click();
+      page.__manualDialogs = false;
+
+      await page.goto(`${APP}/audit-log`);
+      await page.getByText(/^Auditoria \(\d+\)$/).first().waitFor({ timeout: 30000 });
+      await check(page, "audit log");
+      await page.getByLabel("Ação", { exact: true }).selectOption({ label: "próxima inspeção alterada" });
+      await page.waitForTimeout(300);
+      await check(page, "audit log filtered by action");
+      c.expect(await page.getByRole("cell", { name: /de out\. de 2026 → 9 de out\. de 2026/ }).first().isVisible().catch(() => false), "PT audit log: date values in PT");
+      await page.getByRole("button", { name: "Limpar" }).click();
+
+      // Offline banner, an error notice, the sign-out confirmation.
+      await page.goto(`${APP}/dashboard`);
+      await waitLoaded(page);
+      await page.context().setOffline(true);
+      await page.getByRole("status").filter({ hasText: /Sem conexão/ }).first().waitFor({ timeout: 5000 }).catch(() => {});
+      await check(page, "offline banner");
+      await page.context().setOffline(false);
+      await page.waitForTimeout(500);
+      await ctl.fault({ method: "GET", prefix: "/rest/v1/history", status: 400, times: -1, body: { code: "E2E", message: "E2E-400", details: null, hint: null } });
+      await page.goto(`${APP}/audit-log`);
+      await page.getByText(/E2E-400/).first().waitFor({ timeout: 15000 }).catch(() => {});
+      await check(page, "audit log load error");
+      await ctl.clear();
+      page.__manualDialogs = true;
+      await page.goto(`${APP}/dashboard`);
+      await waitLoaded(page);
+      await page.getByRole("button", { name: /Sair/ }).first().click();
+      await confirmDlg(page).waitFor({ timeout: 5000 }).catch(() => {});
+      await check(page, "sign-out confirmation");
+      await confirmDlg(page).getByRole("button", { name: "Cancelar" }).click().catch(() => {});
+      page.__manualDialogs = false;
+      // 404 (signed in: a signed-out visitor is sent to the login page).
+      await page.goto(`${APP}/no-such-page`);
+      await check(page, "404", 2);
+      c.expect(await page.getByText("Página não encontrada").isVisible() && await page.getByRole("link", { name: "Voltar ao painel" }).isVisible(), "404 in PT ('Página não encontrada', 'Voltar ao painel')");
+      c.expect(hydration().length === 0, "PT: no hydration error (server-rendered PT dates)", hydration());
+      await page.context().close();
+
+      // ---- PT on a phone: bottom nav, drawer (expanded sidebar).
+      const mob = await newPage(c, "insp1-PT-390", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+      await mob.context().addCookies(PT);
+      await login(mob, "insp1@test.local");
+      await check(mob, "phone: dashboard + bottom nav");
+      await mob.getByRole("button", { name: "Menu" }).click();
+      await mob.locator('.app-sidebar[data-collapsed="false"]').waitFor({ timeout: 5000 });
+      await check(mob, "phone: drawer");
+      c.expect(await mob.locator(".app-sidebar").getByText("INSPETOR").isVisible().catch(() => false), "PT drawer: role 'INSPETOR'");
+      await mob.context().close();
+
+      // ---- PT, a unit with no items: the empty states.
+      const empty = await newPage(c, "empty-PT");
+      await empty.context().addCookies(PT);
+      await login(empty, EMPTY.email);
+      for (const tab of ["dashboard", "zones", "risk", "schedule", "export"]) {
+        await empty.goto(`${APP}/dashboard?tab=${tab}`);
+        await waitLoaded(empty).catch(() => {});
+        await check(empty, `empty unit: ${tab}`);
+      }
+      await empty.context().close();
+    } finally {
+      await ctl.clear();
+      await dropItems([E8]);
       await sql("DELETE FROM auth.users WHERE id = $1", [EMPTY.id]).catch(() => {});
       await sql("DELETE FROM public.profiles WHERE id = $1", [EMPTY.id]).catch(() => {});
       await sql("DELETE FROM public.units WHERE code = $1", [EMPTY.unit]).catch(() => {});

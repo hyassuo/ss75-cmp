@@ -46,6 +46,7 @@ export function Sidebar() {
   const router = useRouter();
 
   const isAdmin = profile.role === "admin";
+  const roleLabel = t(`role.${profile.role}`);
   const isReadOnly = profile.role === "viewer";
   const collapsed = sidebarCollapsed;
   const onMain = pathname === "/dashboard";
@@ -231,7 +232,7 @@ export function Sidebar() {
         <div
           title={
             collapsed
-              ? `${profile.role.toUpperCase()}: ${profile.full_name ?? ""}`
+              ? `${roleLabel.toUpperCase()}: ${profile.full_name ?? ""}`
               : ""
           }
           style={{
@@ -253,8 +254,8 @@ export function Sidebar() {
           }}
         >
           {collapsed
-            ? profile.role.charAt(0).toUpperCase()
-            : profile.role.toUpperCase()}
+            ? roleLabel.charAt(0).toUpperCase()
+            : roleLabel.toUpperCase()}
         </div>
         {!collapsed && (
           <div

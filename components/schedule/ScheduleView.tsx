@@ -6,6 +6,7 @@ import { DS } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
 import { addDays, fmt, fmtNum, today, isOverdue, daysUntil } from "@/lib/utils/format";
+import { tOr } from "@/lib/i18n/dict";
 import { calcRate, rateColor } from "@/lib/domain/calcRate";
 import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
@@ -18,7 +19,7 @@ import { effectivePriority } from "@/lib/domain/calcPriority";
 type Row = ItemWithRelations & { zid: string; zname: string };
 
 function RowItem({ it, isOd }: { it: Row; isOd: boolean }) {
-const { lang, tPriority } = useLang();
+const { lang, t, tPriority } = useLang();
 const { openItem } = useShell();
   const dd = daysUntil(it.next_insp) ?? 0;
   const rt = calcRate(it.readings);
@@ -79,7 +80,8 @@ const { openItem } = useShell();
           {it.name || it.id}
         </div>
         <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
-          {it.zname} | {it.freq_insp || "-"}
+          {it.zname} |{" "}
+          {it.freq_insp ? tOr(lang, `freq.${it.freq_insp}`, it.freq_insp) : "-"}
         </div>
       </div>
       <div
@@ -101,7 +103,7 @@ const { openItem } = useShell();
         {it.ifs_wo && <Badge text={it.ifs_wo} color={DS.grn} sm />}
         {rt !== null && (
           <Badge
-            text={fmtNum(rt, lang, 2) + " mm/yr"}
+            text={fmtNum(rt, lang, 2) + " " + t("unit.mmYr")}
             color={rateColor(rt)}
             sm
           />
@@ -271,10 +273,18 @@ export function ScheduleView() {
                   {it.name}
                 </span>
                 {it.action_type && (
-                  <Badge text={it.action_type} color={DS.vio} sm />
+                  <Badge
+                    text={tOr(lang, `actionType.${it.action_type}`, it.action_type)}
+                    color={DS.vio}
+                    sm
+                  />
                 )}
                 {it.action_status && (
-                  <Badge text={it.action_status} color={DS.ora} sm />
+                  <Badge
+                    text={tOr(lang, `actionStatus.${it.action_status}`, it.action_status)}
+                    color={DS.ora}
+                    sm
+                  />
                 )}
                 <span
                   style={{

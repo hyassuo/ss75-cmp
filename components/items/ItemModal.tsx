@@ -664,7 +664,7 @@ function ItemModalInner({
                 set("name", v);
                 if (nameError && v.trim()) setNameError(false);
               }}
-              placeholder="ex: Anode Row 3 Port, FR-22"
+              placeholder={t("f.itemNamePh")}
               error={nameError ? t("modal.nameRequired") : null}
             />
           </div>

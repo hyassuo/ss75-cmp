@@ -14,6 +14,7 @@ import { useLang } from "@/lib/context/LangContext";
 import { download } from "@/lib/utils/download";
 import { latestNameByRef } from "@/lib/utils/historyNames";
 import { historyNote } from "@/lib/utils/historyNote";
+import { historyAction, historyField, historyValue } from "@/lib/i18n/history";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
@@ -104,6 +105,9 @@ export function AuditLogTable() {
     return true;
   });
 
+  // The CSV is the raw audit trail for downstream use: fixed English
+  // headers, stored values and ISO timestamps in both languages (only the
+  // separator follows the language, for Excel).
   function exportCSV() {
     const headers = [
       "Date",
@@ -159,10 +163,10 @@ export function AuditLogTable() {
             fontWeight: 700,
           }}
         >
-          Audit Log ({filtered.length})
+          {t("audit.title", filtered.length)}
         </div>
         <Button onClick={exportCSV} disabled={!filtered.length}>
-          Export CSV
+          {t("exp.csv")}
         </Button>
       </div>
 
@@ -178,30 +182,34 @@ export function AuditLogTable() {
         <input
           type="date"
           value={from}
+          aria-label={t("audit.from")}
           onChange={(e) => setFrom(e.target.value)}
           style={filterStyle}
         />
-        <span style={{ color: DS.text3, fontSize: DS.fs.md }}>→</span>
+        <span aria-hidden="true" style={{ color: DS.text3, fontSize: DS.fs.md }}>→</span>
         <input
           type="date"
           value={to}
+          aria-label={t("audit.to")}
           onChange={(e) => setTo(e.target.value)}
           style={filterStyle}
         />
         <select
           value={action}
+          aria-label={t("audit.action")}
           onChange={(e) => setAction(e.target.value)}
           style={filterStyle}
         >
           <option value="">{t("audit.allActions")}</option>
           {actions.map((a) => (
             <option key={a} value={a}>
-              {a.replace(/_/g, " ")}
+              {historyAction(a, lang)}
             </option>
           ))}
         </select>
         <select
           value={user}
+          aria-label={t("audit.user")}
           onChange={(e) => setUser(e.target.value)}
           style={filterStyle}
         >
@@ -223,7 +231,7 @@ export function AuditLogTable() {
               setUser("");
             }}
           >
-            Clear
+            {t("common.clear")}
           </Button>
         )}
       </div>
@@ -239,7 +247,7 @@ export function AuditLogTable() {
         </Notice>
       )}
       {loading ? (
-        <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>Loading…</div>
+        <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>{t("common.loading")}</div>
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table
@@ -251,7 +259,14 @@ export function AuditLogTable() {
           >
             <thead>
               <tr style={{ borderBottom: "2px solid " + DS.bord2 }}>
-                {["Date", "Item", "Action", "Field", "Prev → New", "User"].map(
+                {[
+                  t("audit.col.date"),
+                  t("audit.col.item"),
+                  t("audit.col.action"),
+                  t("audit.col.field"),
+                  t("audit.col.change"),
+                  t("audit.col.user"),
+                ].map(
                   (h) => (
                     <th
                       key={h}
@@ -297,10 +312,10 @@ export function AuditLogTable() {
                     {r.itemName}
                   </td>
                   <td style={{ padding: "8px 10px", color: DS.text2 }}>
-                    {r.action.replace(/_/g, " ")}
+                    {historyAction(r.action, lang)}
                   </td>
                   <td style={{ padding: "8px 10px", color: DS.text3 }}>
-                    {r.field_changed ?? "-"}
+                    {r.field_changed ? historyField(r.field_changed, lang) : "-"}
                   </td>
                   <td
                     style={{
@@ -310,7 +325,9 @@ export function AuditLogTable() {
                       color: DS.text3,
                     }}
                   >
-                    {(r.prev_value ?? "-") + " → " + (r.new_value ?? "-")}
+                    {historyValue(r.field_changed, r.prev_value, lang) +
+                      " → " +
+                      historyValue(r.field_changed, r.new_value, lang)}
                   </td>
                   <td
                     style={{

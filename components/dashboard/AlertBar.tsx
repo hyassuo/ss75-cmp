@@ -5,6 +5,7 @@ import { ChevronDown, CircleAlert, Clock } from "lucide-react";
 import { DS } from "@/lib/design/tokens";
 import { Icon } from "@/components/ui/Icon";
 import { fmt, fmtNum, isOverdue, daysUntil, today } from "@/lib/utils/format";
+import { tOr } from "@/lib/i18n/dict";
 import {
   calcRate,
   RATE_CRITICAL_MM_YR,
@@ -84,7 +85,7 @@ export function AlertBar() {
       if (isActionOverdue(it, today())) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: ${t("alert.actionOverdue")} ${fmt(it.action_due, lang)} (${it.action_type})`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.actionOverdue")} ${fmt(it.action_due, lang)} (${tOr(lang, `actionType.${it.action_type}`, it.action_type ?? "")})`,
           itemId: it.id,
         });
       }
@@ -92,13 +93,13 @@ export function AlertBar() {
       if (rt !== null && rt > RATE_CRITICAL_MM_YR) {
         alerts.push({
           t: "danger",
-          msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${fmtNum(rt, lang, 3)} mm/yr`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.critRate")} ${fmtNum(rt, lang, 3)} ${t("unit.mmYr")}`,
           itemId: it.id,
         });
       } else if (rt !== null && rt > RATE_ELEVATED_MM_YR) {
         alerts.push({
           t: "warn",
-          msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${fmtNum(rt, lang, 3)} mm/yr`,
+          msg: `${z.zid} | ${it.name}: ${t("alert.elevRate")} ${fmtNum(rt, lang, 3)} ${t("unit.mmYr")}`,
           itemId: it.id,
         });
       }

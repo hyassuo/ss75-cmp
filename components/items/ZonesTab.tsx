@@ -13,9 +13,10 @@ import { isOverdue } from "@/lib/utils/format";
 import { zoneScore } from "@/lib/domain/zoneScore";
 import { integrityColor, integrityLabel } from "@/lib/domain/itemScore";
 import { useLang } from "@/lib/context/LangContext";
+import { tOr } from "@/lib/i18n/dict";
 
 export function ZonesTab() {
-  const { t, tDept, tIntegrity } = useLang();
+  const { lang, t, tDept, tIntegrity } = useLang();
   const { zones, itemsByZone, subareasByZone, createItem } = useData();
   const { sysFilter, openItem } = useShell();
   const [creating, setCreating] = useState(false);
@@ -100,7 +101,7 @@ export function ZonesTab() {
                     <Badge text={tDept(z.system)} color={DS.blu} sm />
                     {z.default_freq && (
                       <Badge
-                        text={"DROPS: " + z.default_freq}
+                        text={"DROPS: " + tOr(lang, `freq.${z.default_freq}`, z.default_freq)}
                         color={z.drops_zone ? DS.red : DS.text3}
                         sm
                       />
@@ -131,11 +132,11 @@ export function ZonesTab() {
                       <Badge text={sec + " SECE"} color={DS.red} sm />
                     )}
                     {od > 0 && (
-                      <Badge text={od + " overdue"} color={DS.red} sm />
+                      <Badge text={t("zones.overdue", od)} color={DS.red} sm />
                     )}
                     {archivedCount > 0 && (
                       <Badge
-                        text={archivedCount + " archived"}
+                        text={t("zones.archived", archivedCount)}
                         color={DS.text3}
                         sm
                       />

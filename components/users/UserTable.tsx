@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Profile, UserRole } from "@/lib/types/domain";
 import { useFeedback } from "@/lib/context/FeedbackContext";
 import { useLang } from "@/lib/context/LangContext";
+import { tApiError } from "@/lib/i18n/dict";
 
 const ROLES: UserRole[] = ["admin", "inspector", "viewer"];
 const ROLE_COLOR: Record<UserRole, string> = {
@@ -21,7 +22,7 @@ const ROLE_COLOR: Record<UserRole, string> = {
 
 export function UserTable({ currentUserId }: { currentUserId: string }) {
   const { confirm } = useFeedback();
-  const { lang, t } = useLang();
+  const { lang, t, tDept } = useLang();
   const [rows, setRows] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ t: "ok" | "err"; m: string } | null>(null);
@@ -60,16 +61,20 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
       // (a live region) comes after the reload so it never announces a
       // change the table does not show yet.
       await load();
-      setMsg(ok ? { t: "ok", m: okMsg } : { t: "err", m: data.error || "Request failed" });
+      setMsg(
+        ok
+          ? { t: "ok", m: okMsg }
+          : { t: "err", m: data.error ? tApiError(lang, data.error) : t("users.requestFailed") }
+      );
     } catch {
-      setMsg({ t: "err", m: "Request failed" });
+      setMsg({ t: "err", m: t("users.requestFailed") });
     }
     setBusy(false);
     return ok;
   }
 
   if (loading) {
-    return <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>Loading users…</div>;
+    return <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>{t("users.loading")}</div>;
   }
 
   return (
@@ -85,7 +90,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             marginBottom: 12,
           }}
         >
-          Create User
+          {t("users.create")}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <input
@@ -98,7 +103,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
           <input
             type="password"
             value={newPassword}
-            placeholder="Temporary password (min 8)"
+            placeholder={t("users.passwordPh")}
             onChange={(e) => setNewPassword(e.target.value)}
             style={{ ...S.inp, maxWidth: 240, marginBottom: 0 }}
           />
@@ -107,7 +112,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
               void call(
                 "/api/users/create",
                 { email: invite, password: newPassword },
-                "User created."
+                t("users.created")
               ).then((ok) => {
                 // Keep the typed values after a refusal so they can be fixed.
                 if (!ok) return;
@@ -117,7 +122,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             }
             disabled={busy || !invite || newPassword.length < 8}
           >
-            Create
+            {t("common.create")}
           </Button>
         </div>
         {msg && (
@@ -138,7 +143,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             marginBottom: 14,
           }}
         >
-          Users ({rows.length})
+          {t("users.title", rows.length)}
         </div>
         <div style={{ overflowX: "auto" }}>
           <table
@@ -150,7 +155,15 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
           >
             <thead>
               <tr style={{ borderBottom: "2px solid " + DS.bord2 }}>
-                {["Email", "Name", "Role", "Dept", "Active", "Created", ""].map(
+                {[
+                  t("users.col.email"),
+                  t("users.col.name"),
+                  t("users.col.role"),
+                  t("users.col.dept"),
+                  t("users.col.active"),
+                  t("users.col.created"),
+                  "",
+                ].map(
                   (h) => (
                     <th
                       key={h}
@@ -187,7 +200,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             color: DS.text3,
                           }}
                         >
-                          (you)
+                          {t("users.you")}
                         </span>
                       )}
                     </td>
@@ -197,12 +210,13 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                     <td style={{ padding: "8px 10px" }}>
                       <select
                         value={u.role}
+                        aria-label={t("users.roleOf", u.email)}
                         disabled={busy || isSelf}
                         onChange={(e) =>
                           void call(
                             "/api/users/update",
                             { id: u.id, role: e.target.value },
-                            "Role updated."
+                            t("users.roleUpdated")
                           )
                         }
                         style={{
@@ -217,17 +231,17 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                       >
                         {ROLES.map((r) => (
                           <option key={r} value={r}>
-                            {r}
+                            {t(`role.${r}`)}
                           </option>
                         ))}
                       </select>
                     </td>
                     <td style={{ padding: "8px 10px", color: DS.text3 }}>
-                      {u.dept ?? "-"}
+                      {u.dept ? tDept(u.dept) : "-"}
                     </td>
                     <td style={{ padding: "8px 10px" }}>
                       <Badge
-                        text={u.active ? "ACTIVE" : "INACTIVE"}
+                        text={u.active ? t("users.active") : t("users.inactive")}
                         color={u.active ? DS.grn : DS.text3}
                         sm
                       />
@@ -251,13 +265,13 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             void call(
                               "/api/users/reset",
                               { email: u.email },
-                              "Password reset email sent."
+                              t("users.resetSent")
                             )
                           }
                           disabled={busy}
                           style={{ color: DS.blu }}
                         >
-                          Reset PW
+                          {t("users.resetPw")}
                         </Button>
                         {!isSelf && (
                           <Button
@@ -268,8 +282,8 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                                 "/api/users/update",
                                 { id: u.id, active: !u.active },
                                 u.active
-                                  ? "User deactivated."
-                                  : "User activated."
+                                  ? t("users.deactivated")
+                                  : t("users.activated")
                               )
                             }
                             disabled={busy}
@@ -279,7 +293,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                                 : { background: DS.grnBg, color: DS.grn, borderColor: DS.grnBord }
                             }
                           >
-                            {u.active ? "Deactivate" : "Activate"}
+                            {u.active ? t("users.deactivate") : t("users.activate")}
                           </Button>
                         )}
                         {!isSelf && (
@@ -289,7 +303,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             onClick={async () => {
                               if (
                                 await confirm({
-                                  message: `Delete user ${u.email}? This permanently removes the account and cannot be undone.`,
+                                  message: t("users.confirmDelete", u.email),
                                   confirmLabel: t("common.delete"),
                                   danger: true,
                                 })
@@ -297,13 +311,13 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                                 void call(
                                   "/api/users/delete",
                                   { id: u.id },
-                                  "User deleted."
+                                  t("users.deleted")
                                 );
                               }
                             }}
                             disabled={busy}
                           >
-                            Delete
+                            {t("common.delete")}
                           </Button>
                         )}
                       </div>
