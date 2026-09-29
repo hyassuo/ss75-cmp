@@ -98,6 +98,12 @@ suite() {
   as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$DP', current_date, 0.4) RETURNING 1" >/dev/null
   check "creator can cancel a draft that has a reading" "$(rows $I1 "DELETE FROM items WHERE id = '$DP' RETURNING 1")" "1"
   check "...and that deletion is logged" "$(su_sql "SELECT note FROM history WHERE item_ref = '$DP' AND action = 'deleted'")" "Item deleted \(1 readings, 0 evidences removed\)"
+  local DR; DR=$(new_item $I1 'Untitled')
+  local RID; RID=$(as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$DR', current_date, 0.2) RETURNING id")
+  su_sql "DELETE FROM readings WHERE id = '$RID'" >/dev/null
+  check "a draft whose reading was added then removed is still a draft" "$(as $I1 "SELECT public.is_pristine_draft('$DR')")" "t"
+  check "...and its creator can cancel it" "$(rows $I1 "DELETE FROM items WHERE id = '$DR' RETURNING 1")" "1"
+  check "...keeping the reading's add/remove events and logging the deletion" "$(su_sql "SELECT string_agg(action, ',' ORDER BY action) FROM history WHERE item_ref = '$DR'")" "created,deleted,reading_added,reading_deleted"
 
   local OLD; OLD=$(new_item $I1 'Untitled')
   su_sql "UPDATE items SET created_at = now() - interval '30 days' WHERE id = '$OLD'" >/dev/null
@@ -116,11 +122,12 @@ suite() {
   local R; R=$(new_item $I1 'Riser clamp')
   as $I1 "UPDATE items SET status = 'Attention' WHERE id = '$R' RETURNING 1" >/dev/null
   as $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$R', current_date, 0.4) RETURNING 1" >/dev/null
+  check "adding a reading is audited, attributed" "$(su_sql "SELECT count(*) FROM history WHERE item_id = '$R' AND action = 'reading_added' AND new_value = '0.400' AND by_user = '$I1' AND by_user_email = 'insp1@test'")" "1"
   check "admin can delete a real item" "$(rows $A1 "DELETE FROM items WHERE id = '$R' RETURNING 1")" "1"
-  check "history survives deletion" "$(su_sql "SELECT string_agg(action, ',' ORDER BY event_date, action) FROM history WHERE item_ref = '$R'")" "created,(deleted,status_changed|status_changed,deleted)"
+  check "history survives deletion" "$(su_sql "SELECT string_agg(action, ',' ORDER BY action) FROM history WHERE item_ref = '$R'")" "created,deleted,reading_added,status_changed"
   check "deletion event records what went with it" "$(su_sql "SELECT note FROM history WHERE item_ref = '$R' AND action = 'deleted'")" "Item deleted \(1 readings, 0 evidences removed\)"
   check "deletion event keeps item name" "$(su_sql "SELECT item_name FROM history WHERE item_ref = '$R' AND action = 'deleted'")" "Riser clamp"
-  check "deleted item's history visible to its unit" "$(as $I2 "SELECT count(*) FROM history WHERE item_ref = '$R'")" "3"
+  check "deleted item's history visible to its unit" "$(as $I2 "SELECT count(*) FROM history WHERE item_ref = '$R'")" "4"
   check "deleted item's history hidden from other units" "$(as $AB "SELECT count(*) FROM history WHERE item_ref = '$R'")" "0"
   check "history is append-only (delete)" "$(as $A1 "DELETE FROM history WHERE item_ref = '$R'")" "$DENIED"
   check "history is append-only (update)" "$(as $A1 "UPDATE history SET note = 'x' WHERE item_ref = '$R'")" "$DENIED"
@@ -145,6 +152,12 @@ suite() {
   check "...without bumping updated_at (no false edit conflicts)" "$(su_sql "SELECT updated_at = created_at FROM items WHERE id = '$KEEP'")" "t"
   check "...and the trail keeps the email" "$(su_sql "SELECT by_user IS NULL AND by_user_email = 'admin2@test' FROM history WHERE item_ref = '$DU' AND action = 'deleted'")" "t"
   check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
+  local NU=00000000-0000-0000-0000-00000000d001
+  check "an inactive account reads no units" "$(as $NU "SELECT count(*) FROM units")" "0"
+  check "an inactive account reads no zones" "$(as $NU "SELECT count(*) FROM zones")" "0"
+  check "an inactive account reads no IFS objects" "$(as $NU "SELECT count(*) FROM ifs_objects")" "0"
+  check "an active user reads units, zones and IFS objects" "$(as $I1 "SELECT (SELECT count(*) FROM units) > 0 AND (SELECT count(*) FROM zones) > 0 AND (SELECT count(*) FROM ifs_objects) > 0")" "t"
+  check "no reference table grants reads beyond active users" "$(su_sql "SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename IN ('units','zones','ifs_objects') AND cmd IN ('SELECT','ALL') AND qual NOT LIKE '%current_user_role()%'")" "0"
   su_sql "DELETE FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'" >/dev/null
   check "admin cannot insert profiles" "$(as $A1 "INSERT INTO profiles (id, email, role, unit_id, active) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test', 'admin', '$U1', true)")" "$DENIED"
   check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "4"
@@ -191,6 +204,8 @@ suite() {
   local UP; UP=$(new_item $I1 'Upload cleanup')
   as $I1 "INSERT INTO storage.objects (bucket_id, name, owner_id) VALUES ('evidence-photos', '$UP/orphan.jpg', '$I1'), ('evidence-photos', '$UP/used.jpg', '$I1') RETURNING 1" >/dev/null
   as $I1 "INSERT INTO evidences (item_id, evidence_date, file_path) VALUES ('$UP', current_date, '$UP/used.jpg') RETURNING 1" >/dev/null
+  check "adding an evidence record is audited" "$(su_sql "SELECT count(*) FROM history WHERE item_id = '$UP' AND action = 'evidence_added' AND new_value = '$UP/used.jpg' AND by_user = '$I1' AND item_name IS NOT NULL")" "1"
+  check "a viewer can't read or fake audit events through the trigger function" "$(as $V1 "SELECT public.audit_child_insert()")" "permission denied.*|.*trigger functions can only be called as triggers.*"
   check "a colleague cannot remove someone else's upload" "$(rows $I2 "DELETE FROM storage.objects WHERE name = '$UP/orphan.jpg' RETURNING 1")" "0"
   check "uploader removes their unreferenced upload (failed insert)" "$(rows $I1 "DELETE FROM storage.objects WHERE name = '$UP/orphan.jpg' RETURNING 1")" "1"
   check "...but not one an evidence uses" "$(rows $I1 "DELETE FROM storage.objects WHERE name = '$UP/used.jpg' RETURNING 1")" "0"
@@ -278,7 +293,9 @@ scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrat
   supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
   supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql supabase/upgrades/hardening-5.sql \
   supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql \
-  supabase/migrations/20260929000000_rate_limits.sql
+  supabase/migrations/20260929000000_rate_limits.sql \
+  supabase/migrations/20260929000100_active_reads_insert_audit.sql \
+  supabase/upgrades/hardening-5.sql
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs

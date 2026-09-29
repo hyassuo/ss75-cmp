@@ -2473,6 +2473,61 @@ async function main() {
     await page.context().close();
   });
 
+  // ------------------------------------------ C6 / D2 (migration 20260929000100)
+  await run("c6d2", "C6: a deactivated session reads no units/zones/IFS objects; D2: added readings/evidence show in the item history", async (c) => {
+    const EMAIL = "insp2@test.local";
+    const count = async (api, table) => {
+      const { data, error } = await api.from(table).select("*");
+      return error ? `error: ${error.message}` : data.length;
+    };
+    const AUDIT = "00000000-0000-0000-0000-0000000e2ec6"; // fixed ids e2e10..e2e13 belong to d1rate
+    try {
+      // C6 — REST, as PostgREST sees the caller.
+      const api = await apiAs(EMAIL);
+      const before = [await count(api, "units"), await count(api, "zones"), await count(api, "ifs_objects")];
+      c.expect(before[0] >= 1 && before[1] === 14 && before[2] >= 4, "active inspector reads units, 14 zones and IFS objects", before);
+      await sql("UPDATE profiles SET active = false WHERE email = $1", [EMAIL]);
+      const after = [await count(api, "units"), await count(api, "zones"), await count(api, "ifs_objects")];
+      c.expect(after.every((n) => n === 0), "same token after deactivation: 0 units, 0 zones, 0 IFS objects (no error)", after);
+      const anon = await fetch(`${GW}/rest/v1/zones?select=zid`, { headers: { apikey: process.env.ANON_KEY } });
+      const anonRows = await anon.json().catch(() => null);
+      c.expect(Array.isArray(anonRows) && anonRows.length === 0, "anon key reads no zones", { status: anon.status, anonRows });
+    } finally {
+      await sql("UPDATE profiles SET active = true WHERE email = $1", [EMAIL]);
+    }
+
+    // D2 — UI: add a reading and an evidence record, reopen, read History.
+    await sql(`INSERT INTO items (id, unit_id, zone_id, name, status, notes, created_by)
+               SELECT $1, id, 'Z13', 'E2E Audit Target', 'Attention', 'base note', $2 FROM units WHERE code = 'SS-75'
+               `, [AUDIT, USERS.insp2]);
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await openItem(page, "E2E Audit Target");
+    await modal(page).locator('div:has(> label:text-is("Pit Depth (mm)")) > input').fill("0.7");
+    await modal(page).getByRole("button", { name: "+ Reading" }).click();
+    c.expect(await toastSeen(page, "Reading saved"), "'Reading saved'");
+    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("audit evidence (no file)");
+    await modal(page).getByRole("button", { name: "Save evidence record" }).click();
+    c.expect(await toastSeen(page, "Evidence saved"), "'Evidence saved'");
+    const ev = await sql("SELECT action, by_user::text, by_user_email, new_value, item_name FROM history WHERE item_id = $1 ORDER BY event_date, action", [AUDIT]);
+    const added = ev.filter((h) => h.action === "reading_added" || h.action === "evidence_added");
+    c.expect(added.length === 2 && added.every((h) => h.by_user === USERS.insp1 && h.by_user_email === "insp1@test.local" && h.item_name === "E2E Audit Target"),
+      "DB: reading_added + evidence_added, attributed to insp1, item name snapshotted", ev);
+    c.expect(added.some((h) => h.action === "reading_added" && h.new_value === "0.700"), "reading_added keeps the depth (0.700)", added);
+    await page.keyboard.press("Escape");
+    await modal(page).waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+    await openItem(page, "E2E Audit Target");
+    const hist = modal(page).locator('div:has(> div:text-is("HISTORY"))');
+    await hist.getByText(/reading added/).first().waitFor({ timeout: 10000 }).catch(() => {});
+    const txt = await hist.innerText().catch(() => "");
+    c.expect(/reading added · depth_mm/.test(txt) && /Reading added: 0\.700 mm/.test(txt), "History panel shows 'reading added · depth_mm' with its note", txt.slice(0, 400));
+    c.expect(/evidence added/.test(txt) && /Evidence added: .*audit evidence \(no file\)/.test(txt), "History panel shows 'evidence added' with its note", txt.slice(0, 400));
+    c.expect(/by insp1@test\.local/.test(txt), "…attributed to insp1", txt.slice(0, 400));
+    await shot(c, page, "history");
+    await page.keyboard.press("Escape");
+    await page.context().close();
+  });
+
   await browser.close();
   await pool.end();
 

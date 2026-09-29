@@ -158,9 +158,15 @@ RETURNS boolean AS $$
       AND i.accessory_type IS NULL
       AND i.notes IS NULL
   )
+  -- Readings/evidences don't count (above), so neither do their audit
+  -- events: adding (or adding then removing) a photo keeps it a draft.
+  -- (Same body as supabase/migrations/20260929000100_*.sql, so re-running
+  -- this file after it changes nothing.)
   AND NOT EXISTS (
     SELECT 1 FROM public.history h
-    WHERE h.item_id = p_item AND h.action <> 'created'
+    WHERE h.item_id = p_item
+      AND h.action NOT IN ('created', 'reading_added', 'reading_deleted',
+                           'evidence_added', 'evidence_deleted')
   )
 $$ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public;
 -- INVOKER: called from the RLS policy it runs as the querying user, so the
@@ -313,9 +319,15 @@ BEGIN
   SELECT count(*) INTO n_readings  FROM public.readings  WHERE item_id = OLD.id;
   SELECT count(*) INTO n_evidences FROM public.evidences WHERE item_id = OLD.id;
 
-  -- A cancelled "New Item" that never held anything: drop its 'created'
-  -- event instead of logging noise.
-  IF n_readings = 0 AND n_evidences = 0 AND pristine THEN
+  -- A cancelled "New Item" that never held anything — no children and no
+  -- event besides 'created' (a photo added then removed leaves events that
+  -- must stay) — drops its 'created' event instead of logging noise.
+  IF n_readings = 0 AND n_evidences = 0 AND pristine
+     AND NOT EXISTS (
+       SELECT 1 FROM public.history
+       WHERE item_id = OLD.id AND action <> 'created'
+     )
+  THEN
     DELETE FROM public.history WHERE item_id = OLD.id;
     RETURN OLD;
   END IF;

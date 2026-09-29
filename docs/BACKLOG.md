@@ -17,7 +17,7 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A5 | P3 | PITR (point-in-time recovery) | Se o plano do Supabase permitir. |
 | A6 | P1 | SMTP próprio para os e-mails de autenticação | Sem SMTP próprio o Supabase **só entrega e-mail para membros da equipe do projeto** (2 por hora, sem garantia) — reset de senha e confirmação de cadastro não chegam aos usuários. Supabase → Authentication → Emails → SMTP Settings (ex.: Resend, SendGrid, Amazon SES). |
 | A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
-| A8 | P1 | Aplicar as migrations novas no Supabase | SQL Editor, na ordem: `supabase/migrations/20260929000000_rate_limits.sql` (C4). Sem ela o app funciona, mas o limite de requisições volta a ser só por instância. |
+| A8 | P1 | Aplicar as migrations novas no Supabase | SQL Editor, na ordem: `supabase/migrations/20260929000000_rate_limits.sql` (C4) e `supabase/migrations/20260929000100_active_reads_insert_audit.sql` (C6 + D2). Sem elas o app funciona, mas o limite de requisições fica só por instância, usuários inativos ainda leem as tabelas de referência e inclusões de leituras/evidências não são auditadas. |
 
 ## B. Decisões tomadas (29/09/2026)
 
@@ -33,14 +33,12 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
 | C5 | P2 | Senhas fracas | Sem MFA e sem troca obrigatória no primeiro acesso. |
-| C6 | P3 | Usuário inativo lê tabelas de referência | Policies `units`, `zones`, `ifs_objects` usam `USING (true)`. Trocar por "usuário ativo". |
 | C7 | P3 | Links assinados de fotos valem 1 h | `components/items/EvidencePanel.tsx:101` (`3600`). Reduzir (ex.: 10 min) e renovar sob demanda. |
 
 ## D. Dados e lógica
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| D2 | P3 | Auditoria não registra inclusão de leituras e evidências | Exclusões e mudanças no item são auditadas; inserções de leituras/evidências não. |
 | D3 | P3 | Módulo de espessura (UT) para tubulações | Futuro: espessura remanescente por ponto, espessura mínima por linha, taxa curto/longo prazo (a maior vale) e vida remanescente — padrão API 570. |
 
 ## E. UI/UX
@@ -73,3 +71,5 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | C8 | ~~Logout de usuário inativo é global~~ | Descartado: para uma conta desativada, encerrar as sessões em todos os aparelhos é o comportamento certo. |
 | C3 | CSP com nonce | Páginas com CSP por requisição (nonce + `'strict-dynamic'`, sem `unsafe-inline`/`unsafe-eval` para scripts, Supabase exato, sem Gemini); demais respostas com CSP bloqueado; página offline e service worker com políticas próprias. E2E roda com o CSP real. |
 | C4 | Limite de requisições compartilhado | Contadores no Postgres (`rate_limit_hit`), com reserva em memória se a função não existir; cotas diárias de IA (60 por usuário, 500 no total, por dia UTC). |
+| C6 | Tabelas de referência só para ativos | `units`, `zones` e `ifs_objects` só são lidas por usuário ativo (qualquer policy antiga aberta é removida). |
+| D2 | Auditoria de inclusões | Adicionar leitura ou evidência gera evento (`reading_added` / `evidence_added`) com autor; rascunho de "Novo item" continua cancelável com fotos/leituras. |
