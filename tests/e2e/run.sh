@@ -12,6 +12,9 @@
 #        ONLY=c,d1 ...                 run a subset of scenarios
 #        KEEP=1 ...                    leave the stack running afterwards
 #        HEADED=1 ...                  show the browser
+#        PERF=1 GW_LATENCY_MS=150 ...  load-performance measurements
+#                                      (tests/e2e/perf.mjs) instead of the
+#                                      scenarios; the latency is test-only
 #        PG_PORT / PGRST_PORT / GW_PORT / APP_PORT, E2E_TMP, PG_BIN: see env.sh
 #
 # Needs: Node, PostgreSQL server binaries (initdb/pg_ctl/psql), curl, and a
@@ -98,9 +101,11 @@ fi
 wait_http "$APP_URL/login"
 
 # --- 5. scenarios
-echo "[5/5] playwright scenarios"
+SCRIPT=scenarios.mjs
+[ "${PERF:-0}" = 1 ] && SCRIPT=perf.mjs
+echo "[5/5] playwright $SCRIPT"
 set +e
-node scenarios.mjs 2>&1 | tee "$ARTIFACTS/run.log"
+node "$SCRIPT" 2>&1 | tee "$ARTIFACTS/run.log"
 RC=${PIPESTATUS[0]}
 set -e
 cp "$STATE_DIR"/*.log "$ARTIFACTS/" 2>/dev/null || true

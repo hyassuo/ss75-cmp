@@ -32,6 +32,11 @@ const PASSWORD = process.env.E2E_PASSWORD;
 const STORAGE_DIR = process.env.STORAGE_DIR;
 const LOG_FILE = process.env.GW_LOG || path.join(process.env.STATE_DIR || ".", "gateway.log");
 const ACCESS_TTL = Number(process.env.ACCESS_TTL || 3600);
+// Test-only: extra delay before answering every Supabase request (REST,
+// auth, storage — preflights included), to emulate the round-trip time of a
+// real deployment (browser <-> Supabase, Vercel function <-> Supabase) in
+// the perf harness (perf.mjs). 0 = off, the default for the E2E suite.
+const LATENCY_MS = Number(process.env.GW_LATENCY_MS || 0);
 if (!SECRET || !PASSWORD || !STORAGE_DIR) throw new Error("JWT_SECRET, E2E_PASSWORD, STORAGE_DIR required");
 
 const pool = new pg.Pool({
@@ -682,9 +687,12 @@ const server = http.createServer(async (req, res) => {
   const url = u.pathname;
   res.on("finish", () => {
     if (url.startsWith("/__ctl")) return;
-    record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0 });
+    // src: browsers send Origin on these cross-origin calls; the app's
+    // server (proxy, layouts, API routes) does not.
+    record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0, src: req.headers.origin ? "browser" : "server" });
   });
   try {
+    if (LATENCY_MS && !url.startsWith("/__ctl")) await new Promise((r) => setTimeout(r, LATENCY_MS));
     if (req.method === "OPTIONS") return send(res, 204, null);
 
     if (url.startsWith("/__ctl")) {
