@@ -18,6 +18,7 @@ import {
 import { NewItemProvider } from "@/lib/context/NewItemContext";
 import { FeedbackProvider } from "@/lib/context/FeedbackContext";
 import { ItemModalHost } from "@/components/items/ItemModalHost";
+import { TAB_CHUNKS } from "@/components/layout/tabChunks";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -35,6 +36,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [tab, pathname]);
+
+  // The shown tab's code downloads while the data loads, not after it.
+  const onMain = pathname.startsWith("/dashboard");
+  useEffect(() => {
+    if (loading && onMain) void TAB_CHUNKS[tab]().catch(() => {});
+  }, [loading, onMain, tab]);
 
   // The alert bar is only relevant in the operational tabs. Suppress it on
   // admin/reporting surfaces so it doesn't follow the user into Users,

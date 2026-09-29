@@ -8,8 +8,17 @@ import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
-import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/lib/context/LangContext";
+
+// supabase-js (~50 KB of compressed JS) is needed only to submit, so it is
+// not part of the login page's initial download: it loads on submit, warmed
+// up as soon as the form gets focus (typing the email is ample time).
+const loadAuth = () =>
+  Promise.all([
+    import("@/lib/supabase/client"),
+    import("@/lib/supabase/loadAppData"),
+  ]);
+const warmUpAuth = () => void loadAuth().catch(() => {});
 
 export function LoginForm() {
   const router = useRouter();
@@ -63,8 +72,17 @@ export function LoginForm() {
     }
     setLoading(true);
     setErr("");
+    let auth: Awaited<ReturnType<typeof loadAuth>>;
+    try {
+      auth = await loadAuth();
+    } catch {
+      setLoading(false);
+      setErr(t("login.network"));
+      return;
+    }
+    const [{ createClient }, { preloadAppData }] = auth;
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
@@ -82,8 +100,14 @@ export function LoginForm() {
       );
       return;
     }
+    // The app's data starts loading now, while the destination is still
+    // being rendered on the server; DataProvider takes it over.
+    preloadAppData(supabase, data.user.id);
+    // The session cookies are written before signInWithPassword resolves,
+    // so this navigation already renders as the signed-in user. (A
+    // router.refresh() on top rendered the destination a second time: two
+    // RSC requests, each with the whole auth + profile chain.)
     router.replace(safeNext(params.get("next")));
-    router.refresh();
   }
 
   return (
@@ -107,6 +131,7 @@ export function LoginForm() {
     >
       <form
         onSubmit={(e) => void doLogin(e)}
+        onFocus={warmUpAuth}
         noValidate
         aria-describedby={err ? errId : undefined}
         style={{
