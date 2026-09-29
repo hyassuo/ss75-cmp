@@ -8,7 +8,7 @@
 // Anything not recognised is shown as stored.
 
 import { translate, tOr, type DictKey, type Lang } from "@/lib/i18n/dict";
-import { fmt } from "@/lib/utils/format";
+import { fmt, fmtDateTime } from "@/lib/utils/format";
 import { historyNote } from "@/lib/utils/historyNote";
 
 function tf(lang: Lang, key: DictKey, ...args: unknown[]): string {
@@ -19,8 +19,19 @@ function tf(lang: Lang, key: DictKey, ...args: unknown[]): string {
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
+// A timestamptz as Postgres writes it as text: "2026-10-09 23:30:00.123+00".
+const PG_INSTANT = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2})(?:\.\d+)?)?([+-]\d{2})(?::?(\d{2}))?$/;
 
 function day(v: string, lang: Lang): string {
+  // An instant (resolved_at) is shown on the device's calendar day, with
+  // its time: its first 10 characters are the UTC date, a day ahead of
+  // Brazil every evening.
+  const m = PG_INSTANT.exec(v);
+  if (m) {
+    // Rebuilt in the strict ISO form every browser parses (no microseconds).
+    const ms = Date.parse(`${m[1]}T${m[2]}:${m[3] ?? "00"}${m[4]}:${m[5] ?? "00"}`);
+    if (!isNaN(ms)) return fmtDateTime(ms, lang);
+  }
   return ISO_DAY.test(v) ? fmt(v.slice(0, 10), lang) : v;
 }
 

@@ -3911,7 +3911,8 @@ async function main() {
       c.expect(pages > 1 && spanning.length > 0, `zones continue across page breaks (${spanning.join(", ")})`, { pages, spanning });
       c.expect(lines.some((l) => l.startsWith(`Total ${n} · SECE`)), `header 'Total ${n}'`, lines.slice(0, 4));
       const note = lines.find((l) => l.startsWith("Photos: "));
-      c.expect(note === `Photos: ${expPhotos} photos embedded` && expPhotos >= 1, `'Photos: ${expPhotos} photos embedded' note (nothing failed)`, note);
+      const expNote = `Photos: ${expPhotos} ${expPhotos === 1 ? "photo" : "photos"} embedded`;
+      c.expect(note === expNote && expPhotos >= 1, `'${expNote}' note (nothing failed)`, note);
       c.expect(/\/Subtype\s*\/Image/.test(pdf.toString("latin1")), "the PDF embeds image(s)");
       c.expect(lines.some((l) => l.startsWith("E2E PDF Photo Target")), "the photo's item is listed");
       // E7: the standard PDF font encodes a long dash as byte 0x97 (WinAnsi).
@@ -4777,7 +4778,7 @@ async function main() {
       fs.writeFileSync(path.join(ART, "i18nsweep-pt.pdf"), pdf);
       const lines = pdfLines(pdfTextRuns(pdf));
       c.expect(lines[0] === "Plano de Gerenciamento de Corrosão" && lines.some((l) => /· Gerado em \d{2}-[a-zç]{3}-\d{4}$/.test(l)) && lines.some((l) => /^Total \d+ · SECE \d+ · Críticos \d+/.test(l)), "PT PDF: title, 'Gerado em' and totals in PT", lines.slice(0, 4));
-      c.expect(lines.some((l) => /^Fotos: \d+ fotos incluídas/.test(l)), "PT PDF: photo note in PT", lines.slice(0, 5));
+      c.expect(lines.some((l) => /^Fotos: (?:1 foto incluída|\d+ fotos incluídas)/.test(l)), "PT PDF: photo note in PT", lines.slice(0, 5));
       c.expect(lines.some((l) => l.startsWith(NAME) && /Crítico/.test(l) && /09-out-2026/.test(l)), "PT PDF: the item row with its status and date in PT", lines.filter((l) => l.startsWith(NAME)));
       c.expect(lines.some((l) => /^Tratativa: Monitorar · Planejado · prazo \d{2}-[a-zç]{3}-\d{4}$/.test(l)), "PT PDF: tratativa line in PT", lines.filter((l) => /Tratativa/.test(l)).slice(0, 2));
       const re = new RegExp(DENY_SRC, "u");

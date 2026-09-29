@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { tApiError } from "@/lib/i18n/dict";
+import { tApiError, translate, type DictKey } from "@/lib/i18n/dict";
 import {
   historyAction,
   historyField,
@@ -86,6 +86,26 @@ describe("dictionary", () => {
   });
 });
 
+describe("counts agree with their noun (0, 1, n)", () => {
+  const tf = (lang: "en" | "pt", key: DictKey, ...a: unknown[]) =>
+    (translate(lang, key) as (...x: unknown[]) => string)(...a);
+  it("PDF photo notes and the export window", () => {
+    expect(tf("en", "pdf.photosEmbedded", 1)).toBe("1 photo embedded");
+    expect(tf("en", "pdf.photosEmbedded", 0)).toBe("0 photos embedded");
+    expect(tf("pt", "pdf.photosEmbedded", 1)).toBe("1 foto incluída");
+    expect(tf("pt", "pdf.photosEmbedded", 3)).toBe("3 fotos incluídas");
+    expect(tf("pt", "pdf.photosFailed", 1)).toBe("1 não carregou");
+    expect(tf("pt", "pdf.photosFailed", 2)).toBe("2 não carregaram");
+    expect(tf("en", "pdf.photosCapped", 50, 1)).toBe("capped at 50 items with photos (1 more item has photos not shown)");
+    expect(tf("pt", "pdf.photosCapped", 50, 1)).toBe("limitado a 50 itens com fotos (mais 1 item tem fotos que não entraram)");
+    expect(tf("pt", "pdf.photosCapped", 50, 4)).toBe("limitado a 50 itens com fotos (mais 4 itens têm fotos que não entraram)");
+    expect(tf("en", "exp.win.ready", "12", 1, 0)).toBe("PDF ready (12 KB, 1 photo). Opening…");
+    expect(tf("pt", "exp.win.ready", "12", 2, 1)).toBe("PDF pronto (12 KB, 2 fotos, 1 com falha). Abrindo…");
+    expect(tf("pt", "zones.overdue", 1)).toBe("1 vencido");
+    expect(tf("pt", "zones.archived", 2)).toBe("2 arquivados");
+  });
+});
+
 describe("history in the UI language", () => {
   it("every event and field the triggers write has a PT label", () => {
     const sql = execFileSync("git", ["ls-files", "supabase/migrations"], { cwd: root, encoding: "utf8" })
@@ -129,11 +149,29 @@ describe("history in the UI language", () => {
     expect(historyValue("status", null, "pt")).toBe("-");
   });
 
+  it("resolved_at (an instant) shows the local day and time, not the UTC date", () => {
+    // 23:30 UTC on 9 Oct is 9 Oct or 10 Oct depending on the device's zone.
+    const ms = Date.UTC(2026, 9, 9, 23, 30);
+    const local = new Date(ms);
+    const hm = `${String(local.getHours()).padStart(2, "0")}:${String(local.getMinutes()).padStart(2, "0")}`;
+    const d = local.getDate();
+    expect(historyValue("resolved_at", "2026-10-09 23:30:00.123456+00", "en")).toBe(`${d} Oct 2026, ${hm}`);
+    expect(historyValue("resolved_at", "2026-10-09T23:30:00+00:00", "pt")).toBe(`${d} de out. de 2026, ${hm}`);
+    // A plain date stays a date.
+    expect(historyValue("next_insp", "2026-10-09", "en")).toBe("9 Oct 2026");
+  });
+
   it("trigger notes are rebuilt; typed text is kept as typed", () => {
     expect(historyNoteText("Item created", "pt")).toBe("Item criado");
     expect(historyNoteText("Item created", "en")).toBe("Item created");
     expect(historyNoteText("Item deleted (2 readings, 1 evidences removed)", "pt")).toBe(
-      "Item excluído (2 leituras e 1 evidências removidas)"
+      "Item excluído (2 leituras e 1 evidência removidas)"
+    );
+    expect(historyNoteText("Item deleted (1 readings, 0 evidences removed)", "pt")).toBe(
+      "Item excluído (1 leitura e 0 evidências removidas)"
+    );
+    expect(historyNoteText("Item deleted (0 readings, 1 evidences removed)", "en")).toBe(
+      "Item deleted (0 readings, 1 evidence removed)"
     );
     expect(historyNoteText("Reading added: 0.700 mm on 2026-10-09 at Frame 7", "en")).toBe(
       "Reading added: 0.700 mm on 9 Oct 2026 at Frame 7"

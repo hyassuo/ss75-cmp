@@ -126,9 +126,9 @@ function showPdfInTab(win: Window | null, blob: Blob, name: string) {
 export function ExportTab() {
   const { lang, t, tPriority, tStatus, tDept } = useLang();
   // CSV and XLSX are data for other tools: fixed English headers, stored
-  // values and ISO dates in both languages. Only the CSV separator (and so
-  // the decimal mark) follows the language, for Excel.
-  // Excel in pt-BR expects ";" (the comma is the decimal separator).
+  // values, ISO dates and decimal points in both languages. Only the CSV
+  // separator follows the language: Excel in pt-BR expects ";" (the comma
+  // is its decimal separator).
   const csvSep = lang === "pt" ? ";" : ",";
   const { toast } = useFeedback();
   const { zones: allZones, itemsByZone, subareas } = useData();

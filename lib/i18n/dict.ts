@@ -605,8 +605,9 @@ const en = {
   "hnote.reopened": "Item reopened",
   "hnote.archived": "Item archived",
   "hnote.unarchived": "Item unarchived",
+  // Counts come from the stored note as text: "1" takes the singular.
   "hnote.deleted": (r: string, e: string) =>
-    `Item deleted (${r} readings, ${e} evidences removed)`,
+    `Item deleted (${r} ${r === "1" ? "reading" : "readings"}, ${e} ${e === "1" ? "evidence" : "evidences"} removed)`,
   "hnote.readingAdded": (mm: string, date: string, at: string) =>
     `Reading added: ${mm} mm on ${date}${at ? ` at ${at}` : ""}`,
   "hnote.readingRemoved": (mm: string, date: string, at: string) =>
@@ -694,7 +695,7 @@ const en = {
   "exp.win.noPhotos": "No photos to load",
   "exp.win.rendering": "Rendering PDF…",
   "exp.win.ready": (kb: string, photos: number, failed: number) =>
-    `PDF ready (${kb} KB, ${photos} photos${failed ? `, ${failed} failed` : ""}). Opening…`,
+    `PDF ready (${kb} KB, ${photos} ${photos === 1 ? "photo" : "photos"}${failed ? `, ${failed} failed` : ""}). Opening…`,
   "pdf.generated": (d: string) => `Generated ${d}`,
   "pdf.totals": (total: number, sece: number, critical: number) =>
     `Total ${total} · SECE ${sece} · Critical ${critical}`,
@@ -707,10 +708,10 @@ const en = {
   "pdf.action": (type: string, status: string) => `Action: ${type} · ${status}`,
   "pdf.actionDue": (d: string) => `due ${d}`,
   "pdf.photosNote": (parts: string) => `Photos: ${parts}`,
-  "pdf.photosEmbedded": (n: number) => `${n} photos embedded`,
+  "pdf.photosEmbedded": (n: number) => `${n} ${n === 1 ? "photo" : "photos"} embedded`,
   "pdf.photosFailed": (n: number) => `${n} failed to load`,
   "pdf.photosCapped": (cap: number, more: number) =>
-    `capped at ${cap} items with photos (${more} more items have photos not shown)`,
+    `capped at ${cap} items with photos (${more} more ${more === 1 ? "item has" : "items have"} photos not shown)`,
 
   // Error pages
   "err.chunkTitle": "This screen couldn't be downloaded",
@@ -1299,7 +1300,7 @@ const pt: Translations = {
   "hnote.archived": "Item arquivado",
   "hnote.unarchived": "Item desarquivado",
   "hnote.deleted": (r: string, e: string) =>
-    `Item excluído (${r} leituras e ${e} evidências removidas)`,
+    `Item excluído (${r} ${r === "1" ? "leitura" : "leituras"} e ${e} ${e === "1" ? "evidência" : "evidências"} removidas)`,
   "hnote.readingAdded": (mm: string, date: string, at: string) =>
     `Leitura adicionada: ${mm} mm em ${date}${at ? `, local ${at}` : ""}`,
   "hnote.readingRemoved": (mm: string, date: string, at: string) =>
@@ -1332,7 +1333,7 @@ const pt: Translations = {
   "users.active": "ATIVO",
   "users.inactive": "INATIVO",
   "users.confirmDelete": (email: string) =>
-    `Excluir o usuário ${email}? A conta será removida definitivamente, sem como desfazer.`,
+    `Excluir o usuário ${email}? A conta será removida definitivamente. Esta ação não pode ser desfeita.`,
   "users.deleted": "Usuário excluído.",
   "users.requestFailed": "A solicitação falhou",
 
@@ -1341,7 +1342,7 @@ const pt: Translations = {
   "ai.suggestedFreq": "Frequência sugerida:",
   "ai.apply": "Aplicar aos campos do item",
   "ai.failed": "A análise por IA falhou.",
-  "ai.requestFailed": "Falha ao pedir a análise por IA.",
+  "ai.requestFailed": "Não foi possível solicitar a análise por IA.",
   "aiType.Galvanic": "Galvânica",
   "aiType.Atmospheric": "Atmosférica",
   "aiType.Pitting": "Pites",
@@ -1377,13 +1378,13 @@ const pt: Translations = {
   "exp.win.title": "Gerando PDF…",
   "exp.win.heading": "SS-75 CMP · Exportação em PDF",
   "exp.win.preparing": "Preparando a exportação…",
-  "exp.win.lookingUp": "Procurando as fotos…",
+  "exp.win.lookingUp": "Buscando as fotos…",
   "exp.win.loadingPhotos": (done: number, total: number) =>
     `Carregando fotos… ${done} de ${total}`,
   "exp.win.noPhotos": "Nenhuma foto para carregar",
-  "exp.win.rendering": "Montando o PDF…",
+  "exp.win.rendering": "Gerando o PDF…",
   "exp.win.ready": (kb: string, photos: number, failed: number) =>
-    `PDF pronto (${kb} KB, ${photos} fotos${failed ? `, ${failed} com falha` : ""}). Abrindo…`,
+    `PDF pronto (${kb} KB, ${photos} ${photos === 1 ? "foto" : "fotos"}${failed ? `, ${failed} com falha` : ""}). Abrindo…`,
   "pdf.generated": (d: string) => `Gerado em ${d}`,
   "pdf.totals": (total: number, sece: number, critical: number) =>
     `Total ${total} · SECE ${sece} · Críticos ${critical}`,
@@ -1396,12 +1397,14 @@ const pt: Translations = {
   "pdf.action": (type: string, status: string) => `Tratativa: ${type} · ${status}`,
   "pdf.actionDue": (d: string) => `prazo ${d}`,
   "pdf.photosNote": (parts: string) => `Fotos: ${parts}`,
-  "pdf.photosEmbedded": (n: number) => `${n} fotos incluídas`,
-  "pdf.photosFailed": (n: number) => `${n} não carregaram`,
+  "pdf.photosEmbedded": (n: number) => (n === 1 ? "1 foto incluída" : `${n} fotos incluídas`),
+  "pdf.photosFailed": (n: number) => (n === 1 ? "1 não carregou" : `${n} não carregaram`),
   "pdf.photosCapped": (cap: number, more: number) =>
-    `limitado a ${cap} itens com fotos (mais ${more} itens têm fotos que não entraram)`,
+    more === 1
+      ? `limitado a ${cap} itens com fotos (mais 1 item tem fotos que não entraram)`
+      : `limitado a ${cap} itens com fotos (mais ${more} itens têm fotos que não entraram)`,
 
-  "err.chunkTitle": "Não foi possível baixar esta tela",
+  "err.chunkTitle": "Não foi possível carregar esta tela",
   "err.chunkHint": "Verifique a conexão e recarregue a página.",
   "err.unexpected": "Ocorreu um erro inesperado ao carregar esta tela.",
   "err.ref": (ref: string) => ` (ref. ${ref})`,
@@ -1494,7 +1497,7 @@ const API_ERRORS_PT: Record<string, string> = {
   "Image too large (max 10 MB)": "Imagem grande demais (máx. 10 MB).",
   "Daily photo-analysis limit reached. Try again tomorrow.":
     "Limite diário de análises de fotos atingido. Tente novamente amanhã.",
-  "AI returned invalid data. Please try again.": "A IA devolveu dados inválidos. Tente novamente.",
+  "AI returned invalid data. Please try again.": "A IA retornou dados inválidos. Tente novamente.",
   "Could not parse AI response. Please try again.":
     "Não foi possível ler a resposta da IA. Tente novamente.",
   "AI analysis is temporarily unavailable. Please try again.":
