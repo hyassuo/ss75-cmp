@@ -2,7 +2,8 @@
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
 Next.js 15 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
-Storage) · Tailwind 3 · Gemini for AI photo analysis. Node 22 (`.nvmrc`).
+Storage) · inline styles on CSS-variable design tokens (`lib/design/`) ·
+Gemini for AI photo analysis. Node 22 (`.nvmrc`).
 
 ## Setup
 
