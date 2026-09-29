@@ -11,7 +11,11 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { fetchAll } from "@/lib/supabase/fetchAll";
+import {
+  ITEM_SELECT,
+  loadAppData,
+  takePreloadedAppData,
+} from "@/lib/supabase/loadAppData";
 import { pruneItemDrafts } from "@/lib/utils/itemDraft";
 import type {
   AIAnalysis,
@@ -84,7 +88,6 @@ export interface EvidenceInput {
 }
 
 const BUCKET = "evidence-photos";
-const ITEM_SELECT = "*, readings(*), evidences(*)";
 // Re-fetch when the tab regains focus, at most this often, so a screen left
 // open all shift doesn't keep showing (and saving over) stale data.
 const FOCUS_REFRESH_MS = 60 * 1000;
@@ -93,9 +96,12 @@ const DataContext = createContext<DataState | null>(null);
 
 export function DataProvider({
   profile,
+  itemCountHint,
   children,
 }: {
   profile: Profile;
+  /** Items visible to the user, counted by the server for this render. */
+  itemCountHint: number | null;
   children: ReactNode;
 }) {
   const [loading, setLoading] = useState(true);
@@ -124,9 +130,14 @@ export function DataProvider({
     []
   );
 
-  // silent: background refresh — no skeleton, no error banner, no draft
-  // cleanup, and never drops a row this session already holds (it may be
-  // the draft open in the item modal right now).
+  // silent: background refresh — no skeleton, no error banner, no sweep of
+  // abandoned drafts (loadAppData), so a draft open in the item modal right
+  // now can never be swept from under it.
+  // The first load takes over the one LoginForm started at sign-in, if any.
+  const firstLoad = useRef(true);
+  // A ref: a later layout render with a new count must not re-create
+  // load() (which would reload everything).
+  const countHint = useRef(itemCountHint);
   const load = useCallback(
     async (silent = false) => {
       if (!silent) {
@@ -134,59 +145,32 @@ export function DataProvider({
         setError(null);
       }
       const seqAtStart = writeSeq.current;
-      const supabase = createClient();
-      const [zoneRes, subareaRes, itemRes] = await Promise.all([
-        supabase.from("zones").select("*").order("display_order"),
-        supabase
-          .from("subareas")
-          .select("*")
-          .order("display_order")
-          .order("name"),
-        // Paged: PostgREST silently caps a response at 1000 rows.
-        fetchAll<ItemWithRelations>((from, to) =>
-          supabase
-            .from("items")
-            .select(ITEM_SELECT)
-            .order("created_at")
-            .order("id")
-            .range(from, to)
-        ),
-      ]);
-      const err =
-        zoneRes.error?.message || subareaRes.error?.message || itemRes.error;
+      const preloaded = firstLoad.current
+        ? takePreloadedAppData(profile.id)
+        : null;
+      firstLoad.current = false;
+      const res = await (preloaded ??
+        loadAppData(createClient(), {
+          sweep: !silent,
+          // Every page of the items at once: the rows already held, or
+          // on the first load the server's count.
+          expectedItems: itemsRef.current.length || countHint.current,
+        }));
       // Stale by the time it arrived: a local write happened meanwhile.
       // (The next focus refresh will pick up remote changes.)
       if (silent && writeSeq.current !== seqAtStart) return;
-      if (err) {
+      if (!res.ok) {
         if (!silent) {
-          setError(err);
+          setError(res.error);
           setLoading(false);
         }
         return;
       }
-      setZones((zoneRes.data as Zone[]) ?? []);
-      setSubareas((subareaRes.data as Subarea[]) ?? []);
-      let items = itemRes.data;
-
-      // Abandoned drafts. createItem inserts a stub row immediately so the
-      // modal has an id for photo uploads; that row stays in the DB if the
-      // user gets kicked by IdleLogout or closes the tab without Cancel.
-      // The server decides what is an abandoned draft (untouched stub of
-      // this user, 30+ min old, no readings/photos) and deletes it; we only
-      // drop the ids it reports. Skipped on silent refreshes so a draft
-      // open in the modal right now can never be swept from under it.
+      setZones(res.zones);
+      setSubareas(res.subareas);
+      setAllItems(res.items);
       if (!silent) {
-        const { data: swept } = await supabase.rpc(
-          "discard_my_abandoned_drafts"
-        );
-        if (Array.isArray(swept) && swept.length) {
-          const gone = new Set(swept as string[]);
-          items = items.filter((i) => !gone.has(i.id));
-        }
-      }
-      setAllItems(items);
-      if (!silent) {
-        pruneItemDrafts(profile.id, new Set(items.map((i) => i.id)));
+        pruneItemDrafts(profile.id, new Set(res.items.map((i) => i.id)));
         setLoading(false);
       }
     },

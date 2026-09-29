@@ -4245,6 +4245,254 @@ async function main() {
     }
   });
 
+  // --------------------------------------------------- F6: load performance
+  // Structural checks only (what is requested, and in which order), never
+  // wall-clock thresholds. Delays injected at the gateway make the ordering
+  // observable without a real network.
+  await run("f6perf", "F6: login page without the Supabase client (fetched on focus), fonts it draws only; one render after sign-in, data preloaded during it; server verifies the JWT and reads the profile in parallel; item pages + draft sweep go out together", async (c) => {
+    const page = await newPage(c, "admin1");
+    const scripts = [];
+    page.on("response", async (r) => {
+      if (r.request().resourceType() !== "script" || !r.url().startsWith(APP)) return;
+      const body = await r.body().catch(() => null);
+      // auth-js's password grant: only in the supabase-js chunk.
+      scripts.push({ url: r.url().slice(APP.length), auth: !!body && body.includes("grant_type=password") });
+    });
+    const fonts = [];
+    page.on("request", (q) => { if (q.resourceType() === "font") fonts.push(q.url().slice(APP.length)); });
+    await page.goto(`${APP}/login`, { waitUntil: "networkidle" });
+    const initial = scripts.length;
+    c.expect(initial > 3 && !scripts.some((x) => x.auth), `login page: none of its ${initial} scripts carries the Supabase client`, scripts.filter((x) => x.auth));
+    c.expect(fonts.length <= 2, `login page fetches only the font files it draws (${fonts.length})`, fonts);
+    await page.locator('input[type="email"]').focus();
+    for (let i = 0; i < 50 && !scripts.some((x) => x.auth); i++) await page.waitForTimeout(100);
+    c.expect(scripts.slice(initial).some((x) => x.auth), "focusing the form fetches the Supabase client ahead of the submit");
+
+    // Sign-in, with GoTrue's /user and the profile read slowed down.
+    await ctl.fault({ method: "GET", prefix: "/auth/v1/user", mode: "delay", delay: 400 });
+    await ctl.fault({ method: "GET", prefix: "/rest/v1/profiles", mode: "delay", delay: 400 });
+    const renders = [];
+    page.on("request", (q) => {
+      if (q.url().startsWith(`${APP}/dashboard`) && (q.resourceType() === "document" || q.headers()["rsc"] === "1")) renders.push(q.resourceType());
+    });
+    const t0 = Date.now();
+    await page.locator('input[type="email"]').fill("admin1@test.local");
+    await page.locator('input[type="password"]').fill(PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 30000 });
+    await waitLoaded(page);
+    await page.waitForTimeout(1500); // room for a second render, if one came
+    c.expect(renders.length === 1 && renders[0] !== "document", `sign-in -> one soft render of /dashboard, no second pass (${renders.join(", ")})`, renders);
+    const signLog = await ctl.log(t0);
+    const srv = signLog.filter((l) => l.src === "server");
+    const prof = srv.find((l) => l.url.startsWith("/rest/v1/profiles"));
+    const firstItems = signLog.find((l) => l.src === "browser" && l.method === "GET" && l.url.startsWith("/rest/v1/items?select="));
+    c.expect(!!prof && !!firstItems && firstItems.t < prof.t + prof.ms,
+      "the app's data is requested at sign-in, while the server still renders the dashboard", { items: firstItems && firstItems.t - t0, layoutProfileDone: prof && prof.t + prof.ms - t0 });
+    c.expect(!!prof && srv.some((l) => l.url.startsWith("/auth/v1/user") && l.t < prof.t + prof.ms && l.t + l.ms > prof.t),
+      "layout: JWT verification and profile query overlap (one round-trip, not two)", srv.map((l) => `${l.method} ${l.url.split("?")[0]} +${l.t - t0}ms ${l.ms}ms`));
+    const kpi = () => page.getByText(/\d+\/\d+ inspected/).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+    c.expect(await kpi(), "dashboard shows the data");
+    await ctl.clear();
+
+    // Full load: the server's item count sends every page at once, the
+    // draft sweep alongside.
+    await ctl.fault({ method: "GET", prefix: "/rest/v1/items", mode: "delay", delay: 600 });
+    const t1 = Date.now();
+    await page.reload();
+    await waitLoaded(page);
+    const log = (await ctl.log(t1)).filter((l) => l.src === "browser");
+    const pages = log.filter((l) => l.method === "GET" && l.url.startsWith("/rest/v1/items?select="));
+    const sweep = log.find((l) => l.url.startsWith("/rest/v1/rpc/discard_my_abandoned_drafts"));
+    c.expect(pages.length >= 2 && pages[1].t < pages[0].t + 300, `${pages.length} item pages requested together`, pages.map((l) => l.t - t1));
+    c.expect(!!sweep && sweep.t < pages[0].t + 300, "abandoned-draft sweep requested alongside the data, not after it", sweep && sweep.t - t1);
+    c.expect(await kpi(), "dashboard shows the data after the reload");
+    await ctl.clear();
+    await page.context().close();
+  });
+
+  // Same browser, two users of different units, one after the other within
+  // the sign-in preload's 30 s window (a shared tablet offshore): the
+  // second user must never see the first one's data, not even for a frame.
+  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser — only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
+    const OTHER = { id: "00000000-0000-0000-0000-00000000f001", email: "other1@test.local", item: "00000000-0000-0000-0000-0000000e2ef1" };
+    await sql("INSERT INTO public.units (code, name) VALUES ('E2E-99', 'E2E other unit') ON CONFLICT (code) DO NOTHING");
+    await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [OTHER.id, OTHER.email]);
+    await sql("UPDATE public.profiles SET active = true, role = 'inspector', unit_id = (SELECT id FROM public.units WHERE code = 'E2E-99') WHERE id = $1", [OTHER.id]);
+    await sql(`INSERT INTO public.items (id, unit_id, zone_id, name, status, prob, cons, created_by)
+               SELECT $1::uuid, id, 'Z01', 'E2E Other Unit Item', 'OK', 2, 2, $2::uuid FROM public.units WHERE code = 'E2E-99'
+               ON CONFLICT DO NOTHING`, [OTHER.item, OTHER.id]);
+
+    const page = await newPage(c, "tablet");
+    // Every "N/M inspected" total the page ever renders, from any mutation.
+    await page.addInitScript(() => {
+      window.__kpiTotals = [];
+      const scan = (t) => {
+        for (const m of (t || "").matchAll(/\d+\/(\d+) inspected/g)) window.__kpiTotals.push(Number(m[1]));
+      };
+      new MutationObserver((recs) => {
+        for (const r of recs) {
+          if (r.type === "characterData") scan(r.target.textContent);
+          for (const n of r.addedNodes) scan(n.textContent);
+        }
+      }).observe(document, { subtree: true, childList: true, characterData: true });
+    });
+    const kpiTotal = async () => {
+      const t = await page.getByText(/\d+\/\d+ inspected/).first().textContent({ timeout: 15000 }).catch(() => "");
+      return Number((/\/(\d+) inspected/.exec(t) || [])[1] || NaN);
+    };
+    const signOut = async () => {
+      await page.getByRole("button", { name: /sign out/i }).first().click();
+      await page.waitForURL(/\/login/, { timeout: 15000 });
+      await page.locator('input[type="email"]').waitFor();
+    };
+    const signIn = async (email) => {
+      await page.evaluate(() => { window.__kpiTotals = []; });
+      await page.locator('input[type="email"]').fill(email);
+      await page.locator('input[type="password"]').fill(PASSWORD);
+      await page.getByRole("button", { name: /sign in/i }).click();
+      await page.waitForURL(/\/dashboard/, { timeout: 30000 });
+      await waitLoaded(page);
+    };
+
+    await login(page, "insp1@test.local");
+    const totalA = await kpiTotal();
+    c.expect(totalA > 1000, `insp1 (SS-75) sees its unit's items (${totalA})`);
+
+    const t0 = Date.now();
+    await signOut();
+    await signIn(OTHER.email);
+    const totalB = await kpiTotal();
+    c.step(`other1 signed in and loaded ${Date.now() - t0} ms after insp1 signed out`);
+    c.expect(totalB === 1, "other1 (another unit) sees its 1 item", totalB);
+    let seen = await page.evaluate(() => window.__kpiTotals);
+    c.expect(seen.length > 0 && seen.every((n) => n === 1), "no KPI with insp1's totals was ever rendered for other1", seen);
+    await gotoTab(page, "Zones & Items");
+    await page.getByText("E2E Other Unit Item").first().waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect(await page.getByText("E2E Other Unit Item").first().isVisible(), "Zones: other1's item listed");
+    c.expect((await page.getByText(/^Bulk item \d{4}$/).count()) === 0 && (await page.getByText(/^E2E .* Target$/).count()) === 0, "Zones: none of SS-75's items");
+    await shot(c, page, "other-unit");
+
+    // And back: the first user again sees only their own unit.
+    await signOut();
+    await signIn("insp1@test.local");
+    c.expect((await kpiTotal()) === totalA, "insp1 again sees its own total", await kpiTotal());
+    seen = await page.evaluate(() => window.__kpiTotals);
+    c.expect(seen.length > 0 && seen.every((n) => n === totalA), "no KPI with other1's total was ever rendered for insp1", seen);
+    await gotoTab(page, "Zones & Items");
+    await page.getByText(/^Bulk item \d{4}$/).first().waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect((await page.getByText("E2E Other Unit Item").count()) === 0, "Zones: other1's item not listed for insp1");
+    await page.context().close();
+  });
+
+  // Asymmetric JWT signing keys (backlog A11): the gateway signs new
+  // sessions with ES256 and publishes the key in its JWKS, so getClaims()
+  // verifies locally — the path production takes once A11 is done.
+  await run("f6jwt", "F6/A11: ES256 sessions — pages check the JWT locally (no Auth call), an expired-but-refreshable session is refreshed; forged, expired, unknown-alg and 'none' tokens -> /login?next= from the proxy; a deactivated user (token still valid) ends on /login, no redirect loop", async (c) => {
+    const EMAIL = "insp2@test.local";
+    const now = () => Math.floor(Date.now() / 1000);
+    const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+    const realKey = crypto.createPrivateKey(fs.readFileSync(path.join(process.env.STATE_DIR, "jwt-es256.pem")));
+    const otherKey = crypto.generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey;
+    const esToken = (payload, key = realKey, header = { alg: "ES256", typ: "JWT", kid: "e2e-es256" }) => {
+      const data = `${b64(header)}.${b64(payload)}`;
+      return `${data}.${crypto.sign("sha256", Buffer.from(data), { key, dsaEncoding: "ieee-p1363" }).toString("base64url")}`;
+    };
+    // The @supabase/ssr session cookie (chunked like the library does).
+    const cookieBase = async (page) =>
+      (await page.context().cookies()).map((k) => k.name).find((n) => /^sb-.*-auth-token(\.\d+)?$/.test(n))?.replace(/\.\d+$/, "");
+    const sessionCookies = (base, session) => {
+      const v = "base64-" + b64(session);
+      if (v.length <= 3180) return [{ name: base, value: v }];
+      const out = [];
+      for (let i = 0; i * 3180 < v.length; i++) out.push({ name: `${base}.${i}`, value: v.slice(i * 3180, (i + 1) * 3180) });
+      return out;
+    };
+    const setSession = async (page, base, session) => {
+      const ctx = page.context();
+      const keep = (await ctx.cookies()).filter((k) => !k.name.startsWith(base));
+      await ctx.clearCookies();
+      await ctx.addCookies([...keep, ...sessionCookies(base, session).map((k) => ({ ...k, url: APP }))]);
+    };
+
+    const sw = await fetch(`${GW}/__ctl/jwt`, { method: "POST", body: JSON.stringify({ alg: "ES256" }) });
+    c.expect(sw.ok, "gateway: new sessions signed with ES256");
+    try {
+      const page = await newPage(c, "insp2");
+      await login(page, EMAIL);
+      const sess = await sessionFromCookies(page);
+      const hdr = JSON.parse(Buffer.from(sess.access_token.split(".")[0], "base64url").toString("utf8"));
+      c.expect(hdr.alg === "ES256" && hdr.kid === "e2e-es256", "the session's access token is ES256 with a kid", hdr);
+      const kpi = () => page.getByText(/\d+\/\d+ inspected/).first().waitFor({ timeout: 15000 }).then(() => true, () => false);
+      c.expect(await kpi(), "dashboard shows the data (PostgREST verifies ES256 against the JWKS)");
+
+      // A full page load: the proxy and the layout verify locally.
+      const t0 = Date.now();
+      await page.reload();
+      await waitLoaded(page);
+      const auth = (await ctl.log(t0)).filter((l) => l.src === "server" && l.url.startsWith("/auth/v1/"));
+      c.expect(!auth.some((l) => l.url.startsWith("/auth/v1/user")), "page load: no /auth/v1/user call from the server", auth.map((l) => l.url));
+      c.expect(await kpi(), "dashboard shows the data after the reload");
+
+      // Expired access token, valid refresh token: the proxy refreshes it
+      // and the page renders with (and stores) the new session.
+      const base = await cookieBase(page);
+      const claims = JSON.parse(Buffer.from(sess.access_token.split(".")[1], "base64url").toString("utf8"));
+      const cur = await sessionFromCookies(page);
+      const stale = { ...cur, access_token: esToken({ ...claims, iat: now() - 3700, exp: now() - 100 }), expires_at: now() - 100 };
+      await setSession(page, base, stale);
+      await page.goto(`${APP}/dashboard`);
+      await waitLoaded(page).catch(() => {});
+      const fresh = await sessionFromCookies(page);
+      c.expect(q(page).pathname === "/dashboard" && (await kpi()), "expired access token + valid refresh token -> dashboard with data", page.url());
+      c.expect(!!fresh && fresh.access_token !== stale.access_token && fresh.expires_at > now(), "the refreshed session is written back to the cookies");
+
+      // Tokens that must not get past the proxy: a page request answers a
+      // redirect to /login?next=… from the proxy (the layout's fallback
+      // redirect carries no next), with no app HTML.
+      const good = (await sessionFromCookies(page)) || fresh;
+      const forged = {
+        "signed by another key": esToken({ ...claims, sub: USERS.admin1, exp: now() + 3600 }, otherKey),
+        "unknown alg (PS256)": esToken({ ...claims, exp: now() + 3600 }, realKey, { alg: "PS256", typ: "JWT", kid: "e2e-es256" }),
+        "alg none": `${b64({ alg: "none", typ: "JWT" })}.${b64({ ...claims, exp: now() + 3600 })}.`,
+        "HS256 with a wrong secret": (() => {
+          const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ ...claims, exp: now() + 3600 })}`;
+          return `${data}.${crypto.createHmac("sha256", "not-the-secret").update(data).digest("base64url")}`;
+        })(),
+        "expired, refresh token revoked": esToken({ ...claims, iat: now() - 3700, exp: now() - 100 }),
+      };
+      for (const [what, tok] of Object.entries(forged)) {
+        const expired = what.startsWith("expired");
+        const s = { ...good, access_token: tok, refresh_token: expired ? "not-a-refresh-token" : good.refresh_token, expires_at: expired ? now() - 100 : now() + 3600 };
+        const cookie = sessionCookies(base, s).map((k) => `${k.name}=${k.value}`).join("; ");
+        const r = await fetch(`${APP}/dashboard?tab=zones`, { redirect: "manual", headers: { cookie } });
+        const loc = r.headers.get("location") || "";
+        const body = await r.text();
+        const to = loc ? new URL(loc, APP) : null;
+        c.expect(r.status === 307 && to?.pathname === "/login" && to.searchParams.get("next") === "/dashboard?tab=zones" && !/Bulk item|inspected/.test(body),
+          `${what} -> proxy redirect to /login?next=`, { status: r.status, loc, body: body.slice(0, 120) });
+      }
+
+      // Deactivated while signed in: the access token stays valid for the
+      // server (local check) until it expires. The layout turns the user
+      // away; /login must not bounce them back (a redirect loop).
+      await sql("UPDATE profiles SET active = false WHERE email = $1", [EMAIL]);
+      await sql("UPDATE auth.users SET banned_until = now() + interval '100 years' WHERE email = $1", [EMAIL]);
+      let navErr = "";
+      await page.goto(`${APP}/dashboard`).catch((e) => { navErr = e.message.split("\n")[0]; });
+      await page.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+      c.expect(!navErr && q(page).pathname === "/login", "deactivated, token still valid -> /login, no redirect loop", navErr || page.url());
+      c.expect(await page.locator('input[type="email"]').isVisible().catch(() => false), "the sign-in form is shown");
+      c.expect((await page.getByText(/\d+\/\d+ inspected/).count()) === 0, "no data shown");
+      await shot(c, page, "deactivated");
+      await page.context().close();
+    } finally {
+      await fetch(`${GW}/__ctl/jwt`, { method: "POST", body: JSON.stringify({ alg: "HS256" }) });
+      await sql("UPDATE profiles SET active = true WHERE email = $1", [EMAIL]);
+      await sql("UPDATE auth.users SET banned_until = NULL WHERE email = $1", [EMAIL]);
+    }
+  });
+
   await browser.close();
   await pool.end();
 

@@ -13,7 +13,8 @@
 //                     deleted in Postgres AS THE CALLER (SET ROLE + JWT claims),
 //                     so the schema's real storage.objects RLS policies decide.
 //                     File bytes live on disk under $STORAGE_DIR.
-//   /__ctl/*       -> test control: fault injection, request log, mail outbox
+//   /__ctl/*       -> test control: fault injection, request log, mail outbox,
+//                     signing algorithm of new sessions (HS256 / ES256)
 //   /gemini/*      -> stand-in for the Gemini API (GEMINI_API_BASE): a fixed,
 //                     schema-valid photo analysis; counts calls
 //
@@ -23,7 +24,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import pg from "pg";
-import { sign, verify } from "./lib/jwt.mjs";
+import { sign, verify as verifyJwt, loadEsKey } from "./lib/jwt.mjs";
 
 const PORT = Number(process.env.GW_PORT || 55435);
 const PGRST = `http://127.0.0.1:${process.env.PGRST_PORT || 55434}`;
@@ -32,7 +33,20 @@ const PASSWORD = process.env.E2E_PASSWORD;
 const STORAGE_DIR = process.env.STORAGE_DIR;
 const LOG_FILE = process.env.GW_LOG || path.join(process.env.STATE_DIR || ".", "gateway.log");
 const ACCESS_TTL = Number(process.env.ACCESS_TTL || 3600);
+// Test-only: extra delay before answering every Supabase request (REST,
+// auth, storage — preflights included), to emulate the round-trip time of a
+// real deployment (browser <-> Supabase, Vercel function <-> Supabase) in
+// the perf harness (perf.mjs). 0 = off, the default for the E2E suite.
+const LATENCY_MS = Number(process.env.GW_LATENCY_MS || 0);
 if (!SECRET || !PASSWORD || !STORAGE_DIR) throw new Error("JWT_SECRET, E2E_PASSWORD, STORAGE_DIR required");
+// Asymmetric signing keys (Supabase "JWT Signing Keys", backlog A11): the
+// run's ES256 key (run.sh writes it; PostgREST trusts both keys). Access
+// tokens are HS256 by default; POST /__ctl/jwt {"alg":"ES256"} switches
+// the sessions issued from then on. The public key is always published at
+// /auth/v1/.well-known/jwks.json, like a project with a standby key.
+const ES = loadEsKey(path.join(process.env.STATE_DIR || ".", "jwt-es256.pem"));
+let jwtAlg = "HS256";
+const verify = (token, secret) => verifyJwt(token, secret, ES?.pub);
 
 const pool = new pg.Pool({
   host: path.join(process.env.PG_DIR, "sock"),
@@ -173,7 +187,8 @@ function issueSession(u) {
       app_metadata: { provider: "email", providers: ["email"] },
       user_metadata: u.raw_user_meta_data || {},
     },
-    SECRET
+    SECRET,
+    jwtAlg === "ES256" ? ES : null
   );
   const refresh_token = crypto.randomBytes(16).toString("hex");
   refreshTokens.set(refresh_token, { uid: u.id, sid });
@@ -241,6 +256,9 @@ async function handleAuth(req, res, sub, query) {
       return send(res, 200, issueSession(u));
     }
     return authErr(res, 400, "unsupported_grant_type", "Unsupported grant type");
+  }
+  if (req.method === "GET" && sub === "/.well-known/jwks.json") {
+    return send(res, 200, { keys: ES ? [ES.jwk] : [] });
   }
   if (req.method === "GET" && sub === "/user") {
     const a = await authedUser(req, res);
@@ -682,9 +700,12 @@ const server = http.createServer(async (req, res) => {
   const url = u.pathname;
   res.on("finish", () => {
     if (url.startsWith("/__ctl")) return;
-    record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0 });
+    // src: browsers send Origin on these cross-origin calls; the app's
+    // server (proxy, layouts, API routes) does not.
+    record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0, src: req.headers.origin ? "browser" : "server" });
   });
   try {
+    if (LATENCY_MS && !url.startsWith("/__ctl")) await new Promise((r) => setTimeout(r, LATENCY_MS));
     if (req.method === "OPTIONS") return send(res, 204, null);
 
     if (url.startsWith("/__ctl")) {
@@ -705,6 +726,12 @@ const server = http.createServer(async (req, res) => {
         // Emails GoTrue "sent" (password recovery), newest last.
         const since = Number(u.searchParams.get("since") || 0);
         return send(res, 200, outbox.filter((m) => m.t >= since));
+      }
+      if (url === "/__ctl/jwt" && req.method === "POST") {
+        const { alg } = json(await readBody(req));
+        if (alg !== "HS256" && !(alg === "ES256" && ES)) return send(res, 400, { error: "alg: HS256, or ES256 with a key" });
+        jwtAlg = alg;
+        return send(res, 200, { alg });
       }
       if (url === "/__ctl/gemini") return send(res, 200, { calls: geminiCalls });
       if (url === "/__ctl/health") return send(res, 200, { ok: true });

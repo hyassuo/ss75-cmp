@@ -1,19 +1,12 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAppSession } from "@/lib/supabase/appSession";
 import { UserTable } from "@/components/users/UserTable";
 
 export default async function UsersPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
+  // Shared with the (app) layout: no extra round-trip.
+  const { userId, profile } = await getAppSession();
+  if (!userId) redirect("/login");
   if (!profile || profile.role !== "admin") redirect("/dashboard");
 
-  return <UserTable currentUserId={user.id} />;
+  return <UserTable currentUserId={userId} />;
 }

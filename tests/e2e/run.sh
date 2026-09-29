@@ -12,6 +12,9 @@
 #        ONLY=c,d1 ...                 run a subset of scenarios
 #        KEEP=1 ...                    leave the stack running afterwards
 #        HEADED=1 ...                  show the browser
+#        PERF=1 GW_LATENCY_MS=150 ...  load-performance measurements
+#                                      (tests/e2e/perf.mjs) instead of the
+#                                      scenarios; the latency is test-only
 #        PG_PORT / PGRST_PORT / GW_PORT / APP_PORT, E2E_TMP, PG_BIN: see env.sh
 #
 # Needs: Node, PostgreSQL server binaries (initdb/pg_ctl/psql), curl, and a
@@ -60,11 +63,14 @@ echo "[1/5] postgres: fresh cluster at $PG_DIR (port $PG_PORT)"
 
 # --- 2. PostgREST
 echo "[2/5] postgrest on :$PGRST_PORT"
+# JWTs: the shared secret (HS256) and a per-run ES256 key, as a JWKS — the
+# gateway signs with either (asymmetric signing keys, see gateway.mjs).
+node lib/jwt.mjs jwks "$STATE_DIR/jwt-es256.pem" > "$STATE_DIR/jwks.json"
 cat > "$STATE_DIR/pgrst.conf" <<CONF
 db-uri = "postgres://authenticator:authenticator@127.0.0.1:$PG_PORT/$PG_DB"
 db-schemas = "public"
 db-anon-role = "anon"
-jwt-secret = "$JWT_SECRET"
+jwt-secret = "@$STATE_DIR/jwks.json"
 db-max-rows = 1000
 server-host = "127.0.0.1"
 server-port = $PGRST_PORT
@@ -98,9 +104,11 @@ fi
 wait_http "$APP_URL/login"
 
 # --- 5. scenarios
-echo "[5/5] playwright scenarios"
+SCRIPT=scenarios.mjs
+[ "${PERF:-0}" = 1 ] && SCRIPT=perf.mjs
+echo "[5/5] playwright $SCRIPT"
 set +e
-node scenarios.mjs 2>&1 | tee "$ARTIFACTS/run.log"
+node "$SCRIPT" 2>&1 | tee "$ARTIFACTS/run.log"
 RC=${PIPESTATUS[0]}
 set -e
 cp "$STATE_DIR"/*.log "$ARTIFACTS/" 2>/dev/null || true

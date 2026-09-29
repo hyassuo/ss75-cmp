@@ -170,7 +170,10 @@ a throwaway local stack — no Supabase project, Docker or secrets needed:
   the app uses — Storage writes/reads/deletes `storage.objects` *as the
   caller*, so the real storage policies decide; GoTrue keeps per-user
   passwords and bans in `auth.users`, "sends" recovery emails to an outbox
-  (`/__ctl/mail`) whose links redirect like the real `/verify` — and offers fault injection
+  (`/__ctl/mail`) whose links redirect like the real `/verify`, signs
+  sessions with the shared secret (HS256) or, switched per scenario
+  (`/__ctl/jwt`), with an ES256 key published as a JWKS (asymmetric signing
+  keys; PostgREST trusts both) — and offers fault injection
   (HTTP errors, dropped connections, "commit then lose the response",
   delays) for the offline/concurrency scenarios;
 - `next build` + `next start` with the local keys, then
@@ -202,6 +205,14 @@ normal user or as root. Useful variables: `ONLY=c,d1` (subset),
 `NEXT_PUBLIC_*` values — rebuild before deploying from the same checkout.
 CI runs it on every pull request (`.github/workflows/e2e.yml`) and uploads
 `tests/e2e/artifacts/` when it fails.
+
+Load performance: `PERF=1 GW_LATENCY_MS=150 bash tests/e2e/run.sh` runs
+`tests/e2e/perf.mjs` instead of the scenarios — login page bytes and TTFB,
+sign-in → data on screen, opening the app, warm navigation — with every
+Supabase request delayed by `GW_LATENCY_MS` in the gateway (test-only, to
+make serial round-trips visible). Medians in the log, raw numbers in
+`artifacts/perf.json`.
+
 ## Storage (evidence photos)
 
 Inspection photos uploaded from the item modal go to the **private**

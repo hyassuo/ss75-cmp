@@ -225,10 +225,10 @@ export function ExportTab() {
       // stalled request errors visibly instead of hanging the button on
       // "Generating…" forever.
       const res = await withTimeout(
-        fetchAll<HistoryEntry>((from, to) =>
+        fetchAll<HistoryEntry>((from, to, withCount) =>
           supabase
             .from("history")
-            .select("*")
+            .select("*", { count: withCount ? "exact" : undefined })
             .order("event_date", { ascending: false })
             .order("id")
             .range(from, to),
