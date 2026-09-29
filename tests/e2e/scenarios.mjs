@@ -176,6 +176,10 @@ function pdfTextRuns(buf) {
   }
   return runs;
 }
+// What the owner asked to be gone (E7): emoji / pictographic symbols (also
+// the text-style ones iOS paints in colour), the emoji variation selector,
+// the keycap mark, and the long dash.
+const SOBER_BAD = /[\p{Extended_Pictographic}\u{FE0F}\u{20E3}\u2014]/u;
 // The runs joined into visual lines (same page and baseline, left to right).
 function pdfLines(runs) {
   const by = new Map();
@@ -835,6 +839,14 @@ async function main() {
     const cells = lines.flatMap((l) => l.split(","));
     const dangerous = cells.filter((x) => /^"?[=+@]/.test(x));
     c.expect(dangerous.length === 0, "no cell starts with = + @", dangerous.slice(0, 5));
+    // E7: evidence notes are stored by the DB triggers with a long dash;
+    // the CSV shows " - " (and nothing else in the E2E data has one).
+    const dashed = Number((await one("SELECT count(*) FROM history WHERE note LIKE '%' || chr(8212) || '%'")).count);
+    c.expect(dashed >= 2, `DB: ${dashed} trigger notes keep the long dash`, dashed);
+    c.expect(!csv.includes("\u2014"), "CSV: no long dash (trigger notes normalised)", lines.filter((l) => l.includes("\u2014")).slice(0, 3));
+    c.expect(lines.some((l) => /,"?Evidence added: \d{4}-\d{2}-\d{2} - E2E rust bloom photo"?,/.test(l)) &&
+      lines.some((l) => /,"?Evidence removed: \d{4}-\d{2}-\d{2} - E2E rust bloom photo"?,/.test(l)),
+      "CSV: 'Evidence added/removed: <date> - <description>'", lines.filter((l) => /Evidence (added|removed)/.test(l)).slice(0, 4));
     await adm.context().close();
   });
 
@@ -861,6 +873,18 @@ async function main() {
     c.expect(rows.length === dbCount, `Change Log has all ${dbCount} events (paged past 1000)`, rows.length);
     const items = XLSX.utils.sheet_to_json(wb.Sheets["Items"]);
     c.expect(items.length === Number((await one("SELECT count(*) FROM items")).count), "Items sheet has every item", items.length);
+    // E7: trigger-written evidence notes read "<date> - <description>"; no
+    // long dash or emoji in any header or cell of any sheet.
+    const evNotes = rows.filter((r) => /^evidence_(added|deleted)$/.test(r.Action)).map((r) => r.Note);
+    c.expect(evNotes.length >= 2 && evNotes.every((n) => /^Evidence (added|removed): \d{4}-\d{2}-\d{2}( - .+)?$/.test(n)),
+      `Change Log: ${evNotes.length} evidence notes as '<date> - <description>'`, evNotes.slice(0, 4));
+    const bad = [];
+    for (const name of wb.SheetNames) {
+      for (const row of XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" })) {
+        for (const v of row) if (typeof v === "string" && SOBER_BAD.test(v)) bad.push(`${name}: ${v.slice(0, 60)}`);
+      }
+    }
+    c.expect(bad.length === 0, "XLSX: no long dash or emoji in any sheet (headers and cells)", bad.slice(0, 5));
     await adm.context().close();
   });
 
@@ -2598,6 +2622,10 @@ async function main() {
     const txt = await hist.innerText().catch(() => "");
     c.expect(/reading added · depth_mm/.test(txt) && /Reading added: 0\.700 mm/.test(txt), "History panel shows 'reading added · depth_mm' with its note", txt.slice(0, 400));
     c.expect(/evidence added/.test(txt) && /Evidence added: .*audit evidence \(no file\)/.test(txt), "History panel shows 'evidence added' with its note", txt.slice(0, 400));
+    // The trigger stores "<date> \u2014 <description>"; the panel shows " - " (E7).
+    const stored = await one("SELECT note FROM history WHERE item_id = $1 AND action = 'evidence_added'", [AUDIT]);
+    c.expect(/^Evidence added: \d{4}-\d{2}-\d{2} \u2014 audit evidence \(no file\)$/.test(stored?.note || ""), "DB: the trigger's note still has its long dash (database unchanged)", stored);
+    c.expect(/Evidence added: \d{4}-\d{2}-\d{2} - audit evidence \(no file\)/.test(txt) && !txt.includes("\u2014"), "History panel: 'Evidence added: <date> - <description>', no long dash anywhere", txt.slice(0, 400));
     c.expect(/by insp1@test\.local/.test(txt), "…attributed to insp1", txt.slice(0, 400));
     await shot(c, page, "history");
     await page.keyboard.press("Escape");
@@ -3860,6 +3888,9 @@ async function main() {
       c.expect(note === `Photos: ${expPhotos} photos embedded` && expPhotos >= 1, `'Photos: ${expPhotos} photos embedded' note (nothing failed)`, note);
       c.expect(/\/Subtype\s*\/Image/.test(pdf.toString("latin1")), "the PDF embeds image(s)");
       c.expect(lines.some((l) => l.startsWith("E2E PDF Photo Target")), "the photo's item is listed");
+      // E7: the standard PDF font encodes a long dash as byte 0x97 (WinAnsi).
+      const dashRuns = runs.filter((r) => r.text.includes("\x97")).map((r) => r.text);
+      c.expect(dashRuns.length === 0 && lines.some((l) => l.includes("\xb7")), "PDF: no long dash (separators are '\u00b7')", dashRuns.slice(0, 3));
       await page.context().close();
     } finally {
       await dropItems([F3.pdf]);
@@ -4246,6 +4277,181 @@ async function main() {
     } finally {
       await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot%'");
       await sql("DELETE FROM items WHERE id = $1", [E5]);
+    }
+  });
+
+  // ---------------------------------------------------- E7: sober visuals
+  await run("e7sober", "E7: no emoji / pictographic glyph and no long dash on any screen in EN and PT (text incl. sr-only, titles, labels, placeholders, toasts, dialogs, empty states, offline banner, error notice, login, reset, 404, offline page); every icon SVG is hidden from screen readers and every icon-only control has a name", async (c) => {
+    const E7 = "00000000-0000-0000-0000-0000000e7a01";
+    const EMPTY = { unit: "E2E-97", id: "00000000-0000-0000-0000-00000000f097", email: "empty97@test.local" };
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, notes, created_by, created_at)
+       VALUES ($1, $2, 'Z13', 'E2E E7 Sober Target', 'Attention', 4, 4, 'base note', $3, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [E7, await unitId(), USERS.insp2]
+    );
+    await sql("INSERT INTO readings (item_id, reading_date, depth_mm, location) VALUES ($1, current_date - 120, 1.0, 'P1'), ($1, current_date - 1, 1.2, 'P1')", [E7]);
+    await sql("INSERT INTO evidences (item_id, evidence_date, description, created_by) VALUES ($1, current_date - 1, 'E7 evidence note', $2)", [E7, USERS.insp2]);
+    // A unit with no items: the empty states.
+    await sql("INSERT INTO public.units (code, name) VALUES ($1, 'E2E empty unit') ON CONFLICT (code) DO NOTHING", [EMPTY.unit]);
+    await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [EMPTY.id, EMPTY.email]);
+    await sql("UPDATE public.profiles SET active = true, role = 'inspector', unit_id = (SELECT id FROM public.units WHERE code = $2) WHERE id = $1", [EMPTY.id, EMPTY.unit]);
+
+    // Every string the page exposes: text nodes (sr-only included), the
+    // document title, and the attributes people see or hear.
+    const scan = (page) => page.evaluate((src) => {
+      const re = new RegExp(src, "u");
+      const bad = [];
+      const add = (where, s) => { if (s && re.test(s)) bad.push(`${where}: "${s.trim().replace(/\s+/g, " ").slice(0, 70)}"`); };
+      add("title", document.title);
+      const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let n = 0;
+      for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+        if (["SCRIPT", "STYLE", "NOSCRIPT"].includes(t.parentElement?.tagName)) continue;
+        if (t.textContent.trim()) n++;
+        add(`<${t.parentElement?.tagName.toLowerCase()}>`, t.textContent);
+      }
+      for (const el of document.querySelectorAll("[aria-label], [title], [placeholder], [alt], [aria-description], [aria-valuetext]")) {
+        for (const a of ["aria-label", "title", "placeholder", "alt", "aria-description", "aria-valuetext"]) add(`@${a}`, el.getAttribute(a));
+      }
+      for (const el of document.querySelectorAll("input, textarea")) add("value", el.value);
+      for (const m of document.querySelectorAll("meta[content]")) add(`meta ${m.getAttribute("name") || m.getAttribute("property") || ""}`, m.content);
+      return { n, bad: bad.slice(0, 8) };
+    }, SOBER_BAD.source);
+    // Icons: every SVG inside a control is hidden from assistive tech (the
+    // name is on the control), and a control whose only content is an icon
+    // carries a name (aria-label / title / aria-labelledby).
+    const icons = (page) => page.evaluate(() => {
+      const svgs = [...document.querySelectorAll("svg.lucide")];
+      const exposed = svgs.filter((s) => s.getAttribute("aria-hidden") !== "true").map((s) => s.getAttribute("class"));
+      const unnamed = [...document.querySelectorAll('button, a[href], [role="button"], summary')]
+        .filter((b) => b.querySelector("svg"))
+        .filter((b) => !((b.getAttribute("aria-label") || "").trim() || (b.getAttribute("title") || "").trim() || b.getAttribute("aria-labelledby") || b.textContent.trim()))
+        .map((b) => b.outerHTML.slice(0, 90));
+      return { svgs: svgs.length, exposed: exposed.slice(0, 5), unnamed: unnamed.slice(0, 5) };
+    });
+    const check = async (page, lang, name, { minText = 3, iconsExpected = true } = {}) => {
+      await page.waitForTimeout(500);
+      const s = await scan(page);
+      c.expect(s.n >= minText && s.bad.length === 0, `${lang} ${name}: no emoji / pictograph / long dash (${s.n} text nodes)`, s.bad);
+      const i = await icons(page);
+      c.expect((!iconsExpected || i.svgs > 0) && i.exposed.length === 0 && i.unnamed.length === 0,
+        `${lang} ${name}: ${i.svgs} icon SVGs, all aria-hidden; no unnamed icon-only control`, i);
+    };
+    const SCREENS = [
+      ["dashboard", "/dashboard"],
+      ["zones", "/dashboard?tab=zones"],
+      ["item modal", `/dashboard?tab=zones&item=${E7}`],
+      ["risk matrix", "/dashboard?tab=risk"],
+      ["schedule", "/dashboard?tab=schedule"],
+      ["export", "/dashboard?tab=export"],
+      ["users", "/users"],
+      ["audit log", "/audit-log"],
+    ];
+
+    try {
+      for (const lang of ["EN", "PT"]) {
+        const pt = lang === "PT";
+        const cookie = [{ name: "ss75-cmp.lang", value: pt ? "pt" : "en", url: APP }];
+
+        // ---- signed out: login (and its error), reset without a link, offline page, 404
+        const anon = await newPage(c, `anon-${lang}`);
+        await anon.context().addCookies(cookie);
+        await anon.goto(`${APP}/login`);
+        await anon.locator('input[type="email"]').fill("insp1@test.local");
+        await anon.locator('input[type="password"]').fill("wrong-password-e7");
+        await anon.locator('input[type="password"]').press("Enter");
+        await anon.locator('form [role="alert"]').waitFor({ timeout: 10000 }).catch(() => {});
+        await check(anon, lang, "login + error", { iconsExpected: false });
+        await anon.goto(`${APP}/auth/reset`);
+        await anon.waitForTimeout(1500);
+        await check(anon, lang, "reset page without a link", { minText: 1, iconsExpected: false });
+        await anon.goto(`${APP}/offline.html`);
+        await check(anon, lang, "offline page", { iconsExpected: false });
+        await anon.goto(`${APP}/no-such-page`);
+        await check(anon, lang, "404", { minText: 2, iconsExpected: false });
+        await anon.context().close();
+
+        // ---- signed in (admin): every screen
+        const page = await newPage(c, `admin1-${lang}`);
+        await page.context().addCookies(cookie);
+        await login(page, "admin1@test.local");
+        for (const [name, url] of SCREENS) {
+          await page.goto(APP + url);
+          await waitLoaded(page).catch(() => {});
+          if (url === "/users") await page.getByText("admin1@test.local").first().waitFor({ timeout: 30000 }).catch(() => {});
+          if (url === "/audit-log") await page.getByText(/\(\d+\)/).first().waitFor({ timeout: 30000 }).catch(() => {});
+          if (name === "dashboard") {
+            // Open the alert bar so its rows (icon + text) are rendered.
+            const bar = page.locator('main button[aria-expanded="false"]').first();
+            if (await bar.count()) await bar.click().catch(() => {});
+          }
+          if (name === "risk matrix") await page.locator("main details > summary").first().click().catch(() => {});
+          if (name === "item modal") {
+            await modal(page).waitFor({ timeout: 30000 });
+            await modal(page).getByText(/Evidence added: \d{4}-\d{2}-\d{2} - E7 evidence note/).first().waitFor({ timeout: 15000 }).catch(() => {});
+            c.expect(await modal(page).getByText(/Evidence added: \d{4}-\d{2}-\d{2} - E7 evidence note/).first().isVisible().catch(() => false),
+              `${lang} item modal: the trigger's evidence note reads '<date> - <description>'`);
+          }
+          await check(page, lang, name);
+          if (name === "item modal") {
+            // A toast and a confirmation dialog over the modal.
+            await modal(page).getByLabel(pt ? "Profundidade de Pite (mm)" : "Pit Depth (mm)", { exact: true }).fill("0.9").catch(() => {});
+            await modal(page).getByRole("button", { name: pt ? "+ Leitura" : "+ Reading" }).click().catch(() => {});
+            await page.getByRole("status").filter({ hasText: pt ? /Leitura salva/ : /Reading saved/ }).first().waitFor({ timeout: 8000 }).catch(() => {});
+            await check(page, lang, "item modal + toast");
+            page.__manualDialogs = true;
+            await modal(page).getByRole("button", { name: pt ? "Excluir evidência" : "Delete evidence", exact: true }).first().click();
+            await confirmDlg(page).waitFor({ timeout: 5000 });
+            await check(page, lang, "confirm dialog");
+            await confirmDlg(page).getByRole("button").first().click();
+            page.__manualDialogs = false;
+            await page.keyboard.press("Escape");
+            await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+          }
+          await shot(c, page, `${lang.toLowerCase()}-${name.replace(/ /g, "-")}`);
+        }
+        // Offline banner, then an error notice (the audit log fails to load).
+        await page.goto(`${APP}/dashboard`);
+        await waitLoaded(page);
+        await page.context().setOffline(true);
+        await page.getByRole("status").filter({ hasText: pt ? /Sem conexão/ : /Offline/ }).first().waitFor({ timeout: 5000 }).catch(() => {});
+        await check(page, lang, "offline banner");
+        await page.context().setOffline(false);
+        await page.waitForTimeout(500);
+        await ctl.fault({ method: "GET", prefix: "/rest/v1/history", status: 400, times: -1, body: { code: "E2E", message: "history unavailable", details: null, hint: null } });
+        await page.goto(`${APP}/audit-log`);
+        await page.getByText(/history unavailable/).first().waitFor({ timeout: 15000 }).catch(() => {});
+        await check(page, lang, "audit log load error");
+        await ctl.clear();
+        // Sign-out confirmation.
+        page.__manualDialogs = true;
+        await page.goto(`${APP}/dashboard`);
+        await waitLoaded(page);
+        await page.getByRole("button", { name: pt ? /Sair/ : /Sign out/ }).first().click();
+        await confirmDlg(page).waitFor({ timeout: 5000 }).catch(() => {});
+        await check(page, lang, "sign-out confirmation");
+        await confirmDlg(page).getByRole("button").first().click().catch(() => {});
+        page.__manualDialogs = false;
+        await page.context().close();
+
+        // ---- a unit with no items: empty states on every tab
+        const empty = await newPage(c, `empty-${lang}`);
+        await empty.context().addCookies(cookie);
+        await login(empty, EMPTY.email);
+        for (const tab of ["dashboard", "zones", "risk", "schedule", "export"]) {
+          await empty.goto(`${APP}/dashboard?tab=${tab}`);
+          await waitLoaded(empty).catch(() => {});
+          await check(empty, lang, `empty unit: ${tab}`);
+        }
+        await shot(c, empty, `${lang.toLowerCase()}-empty`);
+        await empty.context().close();
+      }
+    } finally {
+      await ctl.clear();
+      await sql("DELETE FROM items WHERE id = $1", [E7]);
+      await sql("DELETE FROM auth.users WHERE id = $1", [EMPTY.id]).catch(() => {});
+      await sql("DELETE FROM public.profiles WHERE id = $1", [EMPTY.id]).catch(() => {});
+      await sql("DELETE FROM public.units WHERE code = $1", [EMPTY.unit]).catch(() => {});
     }
   });
 

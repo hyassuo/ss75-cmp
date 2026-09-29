@@ -81,7 +81,7 @@ then re-run `supabase/migrations/20260928000100_ifs_register.sql` (makes the
 IFS register read-only at runtime).
 
 - `hardening-5.sql` is security round 5 (authorship, an audit trail that
-  survives deletion, the storage-policy fix, the server-side draft sweep:
+  survives deletion, the storage-policy fix, the server-side draft sweep;
   details in its header). It depends on the v1.4 columns. If you ever
   re-run an older file (`security-fixes`, `hardening*`, `schema-v130/140`),
   re-run `hardening-5.sql` afterwards: older rounds redefine some objects
@@ -176,7 +176,7 @@ a throwaway local stack: no Supabase project, Docker or secrets needed:
   (`/__ctl/mail`) whose links redirect like the real `/verify`, signs
   sessions with the shared secret (HS256) or, switched per scenario
   (`/__ctl/jwt`), with an ES256 key published as a JWKS (asymmetric signing
-  keys; PostgREST trusts both): and offers fault injection
+  keys; PostgREST trusts both), and offers fault injection
   (HTTP errors, dropped connections, "commit then lose the response",
   delays) for the offline/concurrency scenarios;
 - `next build` + `next start` with the local keys, then
@@ -210,8 +210,8 @@ CI runs it on every pull request (`.github/workflows/e2e.yml`) and uploads
 `tests/e2e/artifacts/` when it fails.
 
 Load performance: `PERF=1 GW_LATENCY_MS=150 bash tests/e2e/run.sh` runs
-`tests/e2e/perf.mjs` instead of the scenarios: login page bytes and TTFB,
-sign-in → data on screen, opening the app, warm navigation: with every
+`tests/e2e/perf.mjs` instead of the scenarios (login page bytes and TTFB,
+sign-in → data on screen, opening the app, warm navigation), with every
 Supabase request delayed by `GW_LATENCY_MS` in the gateway (test-only, to
 make serial round-trips visible). Medians in the log, raw numbers in
 `artifacts/perf.json`.
@@ -255,7 +255,7 @@ The app is installable (Add to Home Screen / Install app):
 
 - `app/manifest.ts` → served at `/manifest.webmanifest` (icons in
   `public/icons/`, generated from `app/icon.svg`).
-- `public/sw.js`: minimal service worker: network-first navigations with
+- `public/sw.js`, a minimal service worker: network-first navigations with
   a branded offline page (`public/offline.html`); cache-first only for
   content-hashed build assets. **No page or API data is ever cached**:
   auth'd content stays fresh and private. Bump `VERSION` inside `sw.js`

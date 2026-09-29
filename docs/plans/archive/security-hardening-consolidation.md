@@ -261,7 +261,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 1. **Do NOT delete the prefetch skip entirely.** It exists for section-switch
    latency (its comment says why). The fix is conditioning it on a Supabase
    cookie, not removing it. A forged `sb-` cookie + prefetch header still
-   skips the middleware: that is fine: the middleware was never the real
+   skips the middleware, and that is fine: the middleware was never the real
    gate; `app/(app)/layout.tsx` `getUser()` + RLS are, and a junk cookie
    fails there.
 2. **Policy port must be verbatim.** The hardening-4 policies reference

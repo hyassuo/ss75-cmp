@@ -79,7 +79,7 @@ interface DataState {
 export interface EvidenceInput {
   evidence_date: string;
   description: string | null;
-  // No file_url: the legacy column stays empty: a stored link would be a
+  // No file_url: the legacy column stays empty, since a stored link would be a
   // way to reach a photo outside the session (C7). Files go by file_path.
   file_path: string | null;
   file_name: string | null;

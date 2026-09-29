@@ -495,8 +495,8 @@ function ItemModalInner({
       }
       if (!gone) {
         const r = await deleteItem(item.id, { discardDraft: true });
-        // Offline with an empty stub: close anyway: the server sweep
-        // removes untouched stubs later. With photos/readings attached the
+        // Offline with an empty stub: close anyway (the server sweep
+        // removes untouched stubs later). With photos/readings attached the
         // user must know they're still there.
         if (!r.ok && attached) {
           setSaveError(t("modal.deleteFailed") + " " + r.error);

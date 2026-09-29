@@ -296,7 +296,7 @@ const en = {
   // Assessment bands (informative only)
   "f.corrExtent": "Corrosion extent (%)",
   "f.materialLoss": "Material loss (%)",
-  "f.bandsInfo": "Informative only, does not affect priority.",
+  "f.bandsInfo": "Informative only; it does not affect priority.",
 
   // Line accessory
   "f.isAccessory": "Line accessory",
@@ -612,7 +612,7 @@ const pt: Translations = {
   "modal.createItem": "Criar Item",
   "modal.untitled": "Sem nome",
   "modal.pendingAiReading":
-    "Estimativa de profundidade (IA), que será salva como leitura ao salvar o item:",
+    "Estimativa de profundidade da IA (salva como leitura ao salvar o item):",
   "modal.unsavedEvidence":
     "Há uma evidência não salva (foto/descrição). OK = continuar e descartar. Cancelar = voltar e salvá-la primeiro.",
   "modal.nameRequired": "O nome do item é obrigatório.",
@@ -762,7 +762,7 @@ const pt: Translations = {
   // Faixas informativas
   "f.corrExtent": "% de corrosão (extensão)",
   "f.materialLoss": "% de perda de material",
-  "f.bandsInfo": "Apenas informativo, não afeta a prioridade.",
+  "f.bandsInfo": "Apenas informativo: não afeta a prioridade.",
 
   // Acessório da linha
   "f.isAccessory": "Acessório da linha",

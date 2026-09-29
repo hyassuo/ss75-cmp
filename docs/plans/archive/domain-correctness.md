@@ -228,13 +228,13 @@ them.**
 
 ### 10. Tests (only if PLAN-test-harness-and-ci is applied)
 
-- `tests/format.test.ts`: add: `today()` equals the components of
+- `tests/format.test.ts`: add a test that `today()` equals the components of
   `new Date()` via `getFullYear/getMonth/getDate` (build the expected string
   the same way the implementation does).
 - `tests/itemScore.test.ts`: now pin exact overdue scores from the table in
   step 3 (e.g. `makeItem({ status: "OK", next_insp: "2000-01-01" })` → 60,
   `status: "Critical"` + overdue → 10). Keep the `<` invariant test.
-- `tests/zoneScore.test.ts`: add: `priorityWeight` returns 1.4/1.2/1.0/0.8
+- `tests/zoneScore.test.ts`: add a test that `priorityWeight` returns 1.4/1.2/1.0/0.8
   and ×1.5 with `sece: true` (Critical+SECE → `toBeCloseTo(2.1)`).
 
 ### 11. Verify and ship
@@ -243,7 +243,7 @@ them.**
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-Bump `package.json` version (minor: scores change: e.g. 1.8.9 → 1.9.0) and
+Bump `package.json` version (minor, since scores change: e.g. 1.8.9 → 1.9.0) and
 mention the itemScore rebalance table in the commit message.
 
 ## Edge cases a weaker model would miss

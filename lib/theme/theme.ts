@@ -6,8 +6,13 @@
 //
 // To re-enable: set this to true. The dark palette is kept in
 // app/globals.css and serverTheme() honours the cookie again (no cookie =
-// follow the device). The top-bar switch that wrote the cookie was removed;
-// restore components/layout/ThemeToggle.tsx from git history (v1.21.1).
+// follow the device), which on its own already gives a working dark mode
+// that follows the device. The top-bar switch that wrote the cookie was
+// removed; to bring it back, restore from git history (v1.21.1)
+// components/layout/ThemeToggle.tsx, lib/theme/ThemeContext.tsx (with its
+// ServerThemeProvider in app/layout.tsx), the theme.* EN/PT strings in
+// lib/i18n/dict.ts and <ThemeToggle /> in the Topbar. tests/theme.test.ts
+// and the E2E scenario e4theme pin the "off" state and change with it.
 export const DARK_MODE_ENABLED = false;
 
 // Colour theme picked in the app. No cookie = follow the device

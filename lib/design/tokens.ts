@@ -66,10 +66,10 @@ export const DS = {
     md: 12, // dense UI text: tables, inputs, notices, small buttons
     base: 13, // body text, buttons
     lg: 14, // emphasised body, large buttons, sign-in fields
-    xl: 16, // empty-state titles, tile values, icon glyphs
+    xl: 16, // empty-state titles, tile values
     h3: 18, // modal and form headings, small KPI values
     h2: 22, // KPI numbers
-    h1: 28, // headline numbers, empty-state pictograms
+    h1: 28, // headline numbers (icons are sized by ICON_SIZE, components/ui/Icon.tsx)
     display: 48, // the 404 code
   },
 
