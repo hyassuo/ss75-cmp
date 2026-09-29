@@ -100,5 +100,27 @@ export async function POST(request: Request) {
     console.error("[users/update]", error);
     return NextResponse.json({ error: "Could not update user" }, { status: 400 });
   }
+
+  // Deactivation must also end the user's sessions. RLS already denies an
+  // inactive profile every row, but the refresh token would keep the
+  // session alive; a ban stops refreshes and new sign-ins (the current
+  // access token lapses within the hour). Reactivation lifts it. Applied
+  // on every call (idempotent) so retrying after a failure completes it.
+  if (typeof active === "boolean") {
+    const { error: banError } = await admin.auth.admin.updateUserById(id, {
+      ban_duration: active ? "none" : "876000h",
+    });
+    if (banError) {
+      console.error("[users/update] ban", banError);
+      return NextResponse.json(
+        {
+          error: active
+            ? "User reactivated, but sign-in could not be re-enabled. Try again."
+            : "User deactivated, but their open sessions could not be ended. Try again.",
+        },
+        { status: 502 }
+      );
+    }
+  }
   return NextResponse.json({ ok: true });
 }

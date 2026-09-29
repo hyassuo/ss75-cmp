@@ -6,7 +6,7 @@ import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
 import { useLang } from "@/lib/context/LangContext";
 import { fmt, today } from "@/lib/utils/format";
-import { calcRate, rateColor } from "@/lib/domain/calcRate";
+import { calcRate, isAiEstimate, rateColor } from "@/lib/domain/calcRate";
 import type { Reading } from "@/lib/types/domain";
 import { useFeedback } from "@/lib/context/FeedbackContext";
 
@@ -46,6 +46,7 @@ export function ReadingsPanel({
     a.reading_date.localeCompare(b.reading_date)
   );
   const rate = calcRate(readings);
+  const measured = readings.filter((r) => !isAiEstimate(r)).length;
 
   async function add() {
     if (busy || !depth.trim()) return;
@@ -261,6 +262,12 @@ export function ReadingsPanel({
                   ? t("rate.moderate")
                   : t("rate.stable")}
           </div>
+        </div>
+      )}
+
+      {rate === null && measured > 0 && (
+        <div style={{ fontSize: 12, color: DS.text3, marginBottom: 12 }}>
+          {t("rate.insufficient")}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/utils/rateLimit";
@@ -45,10 +46,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const redirectTo =
-    (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000") + "/login";
-  const { error } = await admin.auth.resetPasswordForEmail(email, {
-    redirectTo,
+  // The email link must carry the session itself (implicit flow). The SSR
+  // clients default to PKCE, whose one-time code can only be redeemed by the
+  // client that asked — this server, not the user's browser — so the link
+  // used to fail. /auth/reset turns the tokens into a session and lets the
+  // user pick a new password. The link points back at the site the admin
+  // is using (Supabase only follows it if it is in Auth → Redirect URLs).
+  const appUrl = new URL(request.url).origin;
+  const mailer = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: {
+        flowType: "implicit",
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  );
+  const { error } = await mailer.auth.resetPasswordForEmail(email, {
+    redirectTo: `${appUrl}/auth/reset`,
   });
   if (error) {
     console.error("[users/reset]", error);

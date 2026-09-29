@@ -184,11 +184,17 @@ export async function POST(request: Request) {
   if (!sameOrigin(request)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  // Free Gemini tier removed the cost rationale for admin-only access;
-  // any active authenticated user (rate-limited below) may analyse a photo.
+  // Admins and inspectors only: viewers can't record evidence, so they have
+  // no reason to call the model (the UI hides the button from them too).
   const guard = await requireUser();
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
+  if (guard.ctx.role !== "admin" && guard.ctx.role !== "inspector") {
+    return NextResponse.json(
+      { error: "Photo analysis is available to admins and inspectors." },
+      { status: 403 }
+    );
   }
 
   const rl = rateLimit(`photo:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);

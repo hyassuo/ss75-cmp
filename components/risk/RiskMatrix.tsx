@@ -10,6 +10,7 @@ import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
 import type { ItemWithRelations } from "@/lib/types/domain";
 import { effectivePriority } from "@/lib/domain/calcPriority";
 import { useShell } from "@/lib/context/ShellContext";
+import { useScopedZones } from "@/lib/hooks/useScopedZones";
 import { pressable } from "@/lib/utils/a11y";
 
 function cellClr(p: number, c: number): string {
@@ -18,7 +19,8 @@ function cellClr(p: number, c: number): string {
 }
 
 export function RiskMatrix() {
-  const { zones, itemsByZone } = useData();
+  const { itemsByZone } = useData();
+  const zones = useScopedZones();
   const { t, tPriority, tStatus } = useLang();
   const { openItem } = useShell();
   const allItems: Array<ItemWithRelations & { zoneName: string }> = zones.flatMap(

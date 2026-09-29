@@ -11,6 +11,7 @@ import { isActionOverdue } from "@/lib/domain/actionPlan";
 import { PRIORITY_COLOR } from "@/lib/utils/constants";
 import { useLang } from "@/lib/context/LangContext";
 import { useShell } from "@/lib/context/ShellContext";
+import { useScopedZones } from "@/lib/hooks/useScopedZones";
 import type { ItemWithRelations } from "@/lib/types/domain";
 import { effectivePriority } from "@/lib/domain/calcPriority";
 
@@ -123,7 +124,8 @@ const { openItem } = useShell();
 
 export function ScheduleView() {
   const { t } = useLang();
-  const { zones, itemsByZone } = useData();
+  const { itemsByZone } = useData();
+  const zones = useScopedZones();
   const [horizon, setHorizon] = useState(90);
 
   const allItems: Row[] = zones.flatMap((z) =>

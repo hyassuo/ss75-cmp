@@ -207,6 +207,22 @@ const en = {
   "login.invalid": "Invalid email or password.",
   "login.network": "Can't reach the server. Check the connection and try again.",
   "login.help": "Contact your administrator for access credentials.",
+  "login.forgot": "Forgot password?",
+  "login.forgotNeedEmail": "Type your email above, then tap “Forgot password?”.",
+  "login.forgotSent": "If this email has an account, a reset link is on its way. Open it on this device.",
+  "login.forgotLimit": "Too many reset emails. Wait a few minutes and try again.",
+  "reset.title": "Set a new password",
+  "reset.checking": "Checking the link…",
+  "reset.invalid": "This reset link is invalid or has expired. Ask your administrator for a new one, or use “Forgot password?” on the sign-in page.",
+  "reset.otherDevice": "This link must be opened on the device where the reset was requested, and only once. Request a new one on the sign-in page.",
+  "reset.backToLogin": "Back to sign in",
+  "reset.new": "New password",
+  "reset.confirm": "Repeat the new password",
+  "reset.rule": "At least 8 characters.",
+  "reset.tooShort": "The password needs at least 8 characters.",
+  "reset.mismatch": "The two passwords don't match.",
+  "reset.save": "Save new password",
+  "reset.done": "Password changed. Opening the app…",
   "idle.warning":
     "You'll be signed out in 2 minutes for inactivity. Unsaved item changes are kept on this device.",
   "idle.stay": "Stay signed in",
@@ -332,6 +348,8 @@ const en = {
   "sece.na": "—",
 
   // Rate hints
+  "rate.insufficient":
+    "Corrosion rate: not enough data yet — needs 2 measurements at the same point, at least 90 days apart.",
   "rate.critical": "CRITICAL - Immediate Action",
   "rate.severe": "Severe - Increase Monitoring",
   "rate.moderate": "Moderate - Monitor",
@@ -356,6 +374,9 @@ const en = {
     `No overdue or upcoming inspections within ${h} days.`,
 
   // Export tab
+  "exp.scope": "What to export",
+  "exp.scopeDept": (d: string) => `Only ${d}`,
+  "exp.scopeAll": "All departments",
   "exp.title": "Export",
   "exp.itemsSuffix": "items",
   "exp.format":
@@ -622,6 +643,22 @@ const pt: Translations = {
   "login.invalid": "E-mail ou senha inválidos.",
   "login.network": "Sem comunicação com o servidor. Verifique a conexão e tente novamente.",
   "login.help": "Solicite suas credenciais ao administrador.",
+  "login.forgot": "Esqueci minha senha",
+  "login.forgotNeedEmail": "Digite seu e-mail acima e toque em “Esqueci minha senha”.",
+  "login.forgotSent": "Se este e-mail tiver conta, um link de redefinição foi enviado. Abra-o neste aparelho.",
+  "login.forgotLimit": "Muitos e-mails de redefinição. Aguarde alguns minutos e tente de novo.",
+  "reset.title": "Definir nova senha",
+  "reset.checking": "Verificando o link…",
+  "reset.invalid": "Este link de redefinição é inválido ou expirou. Peça um novo ao administrador ou use “Esqueci minha senha” na tela de entrada.",
+  "reset.otherDevice": "Este link precisa ser aberto no aparelho em que a redefinição foi pedida, e só uma vez. Peça um novo na tela de entrada.",
+  "reset.backToLogin": "Voltar para a entrada",
+  "reset.new": "Nova senha",
+  "reset.confirm": "Repita a nova senha",
+  "reset.rule": "Pelo menos 8 caracteres.",
+  "reset.tooShort": "A senha precisa de pelo menos 8 caracteres.",
+  "reset.mismatch": "As duas senhas não conferem.",
+  "reset.save": "Salvar nova senha",
+  "reset.done": "Senha alterada. Abrindo o app…",
   "idle.warning":
     "Você será desconectado em 2 minutos por inatividade. Alterações não salvas de itens ficam guardadas neste aparelho.",
   "idle.stay": "Continuar conectado",
@@ -747,6 +784,8 @@ const pt: Translations = {
   "sece.no": "NÃO",
 
   // Rate
+  "rate.insufficient":
+    "Taxa de corrosão: dados insuficientes — são necessárias 2 medições no mesmo ponto, com pelo menos 90 dias entre elas.",
   "rate.critical": "CRÍTICA - Ação Imediata",
   "rate.severe": "Severa - Aumentar Monitoramento",
   "rate.moderate": "Moderada - Monitorar",
@@ -772,6 +811,9 @@ const pt: Translations = {
     `Nenhuma inspeção vencida ou prevista nos próximos ${h} dias.`,
 
   // Export
+  "exp.scope": "O que exportar",
+  "exp.scopeDept": (d: string) => `Só ${d}`,
+  "exp.scopeAll": "Todos os departamentos",
   "exp.title": "Exportar",
   "exp.itemsSuffix": "itens",
   "exp.format":

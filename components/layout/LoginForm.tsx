@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNext } from "@/lib/utils/safeNext";
 import { S } from "@/lib/design/styles";
@@ -16,11 +16,46 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const { t, lang, setLang } = useLang();
   const emailId = useId();
   const pwId = useId();
   const errId = useId();
+
+  // A reset email whose link fell back to the Site URL (the app's
+  // /auth/reset not in Supabase's Redirect URLs) lands here with the
+  // tokens — or the "link expired" error — in the fragment.
+  useEffect(() => {
+    const h = window.location.hash;
+    if (/(^|[#&])(access_token|error_code)=/.test(h)) {
+      window.location.replace("/auth/reset" + h);
+    }
+  }, []);
+
+  async function forgot() {
+    if (loading) return;
+    setInfo("");
+    if (!email.trim()) {
+      setErr(t("login.forgotNeedEmail"));
+      return;
+    }
+    setErr("");
+    setLoading(true);
+    const { error } = await createClient().auth.resetPasswordForEmail(
+      email.trim(),
+      { redirectTo: `${window.location.origin}/auth/reset` }
+    );
+    setLoading(false);
+    // Same answer whether or not the address exists (no account probing).
+    if (error && /fetch|network|load failed/i.test(error.message)) {
+      setErr(t("login.network"));
+    } else if (error && /rate limit|too many/i.test(error.message)) {
+      setErr(t("login.forgotLimit"));
+    } else {
+      setInfo(t("login.forgotSent"));
+    }
+  }
 
   async function doLogin(e?: FormEvent) {
     e?.preventDefault();
@@ -183,6 +218,24 @@ export function LoginForm() {
           </div>
         ) : null}
 
+        {info ? (
+          <div
+            role="status"
+            style={{
+              background: DS.grnBg,
+              border: "1px solid " + DS.grnBord,
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 12,
+              color: DS.grn,
+              marginBottom: 16,
+              textAlign: "center",
+            }}
+          >
+            {info}
+          </div>
+        ) : null}
+
         <button
           type="submit"
           disabled={loading}
@@ -207,6 +260,26 @@ export function LoginForm() {
           {loading ? <Spinner size={14} /> : null}
           {loading ? t("login.signingIn") : t("login.signIn")}
         </button>
+
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => void forgot()}
+            disabled={loading}
+            style={{
+              background: "none",
+              border: "none",
+              color: DS.blu,
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "8px 12px",
+              minHeight: 36,
+              cursor: loading ? "default" : "pointer",
+            }}
+          >
+            {t("login.forgot")}
+          </button>
+        </div>
 
         <div
           style={{
