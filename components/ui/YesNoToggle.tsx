@@ -48,7 +48,7 @@ export function YesNoToggle({
           borderRadius: 6,
           padding: "7px 0",
           minHeight: 44,
-          fontSize: 12,
+          fontSize: DS.fs.md,
           cursor: "pointer",
           fontWeight: 700,
         }}

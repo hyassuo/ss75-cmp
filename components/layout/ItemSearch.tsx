@@ -131,7 +131,7 @@ export function ItemSearch() {
           background: "rgba(0,0,0,0.22)",
           color: "#ffffff",
           padding: "0 10px",
-          fontSize: 13,
+          fontSize: DS.fs.base,
           fontFamily: DS.sans,
         }}
       />
@@ -157,7 +157,7 @@ export function ItemSearch() {
             borderRadius: 8,
             zIndex: 999,
             padding: "12px 14px",
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text3,
             boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
           }}
@@ -210,22 +210,22 @@ export function ItemSearch() {
                   alignItems: "center",
                 }}
               >
-                <span style={{ fontFamily: DS.mono, fontSize: 11, color: DS.blu, minWidth: 34 }}>
+                <span style={{ fontFamily: DS.mono, fontSize: DS.fs.sm, color: DS.blu, minWidth: 34 }}>
                   {it.zone_id}
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 13, color: DS.text, fontWeight: 600 }}>
+                  <span style={{ display: "block", fontSize: DS.fs.base, color: DS.text, fontWeight: 600 }}>
                     {it.name}
                   </span>
                   {(it.ifs_obj_id || it.archived) && (
-                    <span style={{ display: "block", fontSize: 11, color: DS.text3, fontFamily: DS.mono }}>
+                    <span style={{ display: "block", fontSize: DS.fs.sm, color: DS.text3, fontFamily: DS.mono }}>
                       {[it.ifs_obj_id, it.archived ? t("search.archived") : null]
                         .filter(Boolean)
                         .join(" \u00b7 ")}
                     </span>
                   )}
                 </span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: STATUS_COLOR[st] }}>
+                <span style={{ fontSize: DS.fs.sm, fontWeight: 700, color: STATUS_COLOR[st] }}>
                   {tStatus(st)}
                 </span>
               </div>

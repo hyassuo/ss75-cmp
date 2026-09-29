@@ -38,7 +38,7 @@ export function BottomNav() {
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
-    fontSize: 11,
+    fontSize: DS.fs.sm,
     fontWeight: active ? 700 : 500,
     fontFamily: DS.sans,
     cursor: "pointer",
@@ -66,7 +66,7 @@ export function BottomNav() {
             aria-current={active ? "page" : undefined}
             style={item(active)}
           >
-            <span aria-hidden="true" style={{ fontSize: 17, lineHeight: 1 }}>
+            <span aria-hidden="true" style={{ fontSize: DS.fs.xl, lineHeight: 1 }}>
               {n.icon}
             </span>
             <span
@@ -99,7 +99,7 @@ export function BottomNav() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 22,
+              fontSize: DS.fs.h2,
               lineHeight: 1,
             }}
           >

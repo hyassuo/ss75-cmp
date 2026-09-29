@@ -91,7 +91,7 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
             <div
               style={{
                 padding: "12px 16px",
-                fontSize: 11,
+                fontSize: DS.fs.sm,
                 color: DS.text3,
                 textTransform: "uppercase",
                 letterSpacing: 1,
@@ -119,7 +119,7 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
                   <span
                     style={{
                       fontFamily: DS.mono,
-                      fontSize: 10,
+                      fontSize: DS.fs.xs,
                       color: DS.blu,
                       minWidth: 30,
                     }}
@@ -129,14 +129,14 @@ export function NewItemProvider({ children }: { children: ReactNode }) {
                   <div>
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: DS.fs.md,
                         fontWeight: 600,
                         color: DS.text,
                       }}
                     >
                       {z.name}
                     </div>
-                    <div style={{ fontSize: 10, color: DS.text3 }}>
+                    <div style={{ fontSize: DS.fs.xs, color: DS.text3 }}>
                       {z.system}
                     </div>
                   </div>

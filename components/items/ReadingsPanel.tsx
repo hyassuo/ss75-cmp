@@ -197,7 +197,7 @@ export function ReadingsPanel({
               padding: "0 22px",
               fontWeight: 700,
               cursor: "pointer",
-              fontSize: 13,
+              fontSize: DS.fs.base,
               whiteSpace: "nowrap",
               height: 36,
               boxSizing: "border-box",
@@ -209,7 +209,7 @@ export function ReadingsPanel({
       )}
 
       {err && (
-        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 10 }}>
+        <div role="alert" style={{ color: DS.red, fontSize: DS.fs.md, marginBottom: 10 }}>
           {err}
         </div>
       )}
@@ -231,7 +231,7 @@ export function ReadingsPanel({
           <div>
             <div
               style={{
-                fontSize: 9,
+                fontSize: DS.fs.xs,
                 color: DS.text3,
                 textTransform: "uppercase",
                 letterSpacing: 1,
@@ -240,7 +240,7 @@ export function ReadingsPanel({
             >{t("f.pitRate")}</div>
             <div
               style={{
-                fontSize: 28,
+                fontSize: DS.fs.h1,
                 fontWeight: 800,
                 color: rateColor(rate),
                 fontFamily: "monospace",
@@ -248,14 +248,14 @@ export function ReadingsPanel({
               }}
             >
               {rate.toFixed(3)}
-              <span style={{ fontSize: 12, marginLeft: 3, fontWeight: 400 }}>
+              <span style={{ fontSize: DS.fs.md, marginLeft: 3, fontWeight: 400 }}>
                 mm/yr
               </span>
             </div>
           </div>
           <div
             style={{
-              fontSize: 12,
+              fontSize: DS.fs.md,
               fontWeight: 700,
               color: rateColor(rate),
             }}
@@ -272,7 +272,7 @@ export function ReadingsPanel({
       )}
 
       {rate === null && measured > 0 && (
-        <div style={{ fontSize: 12, color: DS.text3, marginBottom: 12 }}>
+        <div style={{ fontSize: DS.fs.md, color: DS.text3, marginBottom: 12 }}>
           {t("rate.insufficient")}
         </div>
       )}
@@ -281,7 +281,7 @@ export function ReadingsPanel({
         <div
           style={{
             textAlign: "center",
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text3,
             padding: "12px 0",
           }}
@@ -294,7 +294,7 @@ export function ReadingsPanel({
             style={{
               width: "100%",
               borderCollapse: "collapse",
-              fontSize: 12,
+              fontSize: DS.fs.md,
             }}
           >
             <thead>
@@ -307,7 +307,7 @@ export function ReadingsPanel({
                         textAlign: "left",
                         padding: "6px 8px",
                         color: DS.text3,
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         textTransform: "uppercase",
                       }}
                     >
@@ -381,7 +381,7 @@ export function ReadingsPanel({
                             border: "none",
                             color: DS.red,
                             cursor: "pointer",
-                            fontSize: 14,
+                            fontSize: DS.fs.lg,
                           }}
                         >
                           ×

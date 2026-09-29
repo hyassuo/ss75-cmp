@@ -637,7 +637,8 @@ body {
 
 /* ── Topbar responsive layout ─────────────────────────────────────────────
    Layout/typography live here so media queries can compact the header on
-   small screens (colors stay inline with DS tokens). */
+   small screens (colors stay inline with DS tokens; font sizes are steps
+   of the DS.fs scale). */
 .tb-band-top {
   padding: 7px 20px 5px 14px;
 }
@@ -659,7 +660,7 @@ body {
   min-width: 0;
 }
 .tb-title {
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.3px;
   line-height: 1.1;
@@ -785,7 +786,7 @@ body {
     padding: 6px 12px;
   }
   .tb-title {
-    font-size: 15px;
+    font-size: 16px;
   }
   .tb-row2 {
     margin-left: 52px;

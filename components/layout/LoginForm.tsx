@@ -122,7 +122,7 @@ export function LoginForm() {
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div
             style={{
-              fontSize: 10,
+              fontSize: DS.fs.xs,
               color: DS.text3,
               textTransform: "uppercase",
               letterSpacing: 3,
@@ -134,7 +134,7 @@ export function LoginForm() {
           </div>
           <h1
             style={{
-              fontSize: 18,
+              fontSize: DS.fs.h3,
               fontWeight: 800,
               color: DS.text,
               fontFamily: DS.mono,
@@ -175,7 +175,7 @@ export function LoginForm() {
               setErr("");
             }}
             placeholder={t("login.emailPh")}
-            style={{ ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: 14 }}
+            style={{ ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: DS.fs.lg }}
           />
         </div>
 
@@ -193,7 +193,7 @@ export function LoginForm() {
               setErr("");
             }}
             placeholder={t("login.passwordPh")}
-            style={{ ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: 14 }}
+            style={{ ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: DS.fs.lg }}
           />
         </div>
 
@@ -206,7 +206,7 @@ export function LoginForm() {
               border: "1px solid " + DS.redBord,
               borderRadius: 6,
               padding: "8px 12px",
-              fontSize: 12,
+              fontSize: DS.fs.md,
               color: DS.red,
               marginBottom: 16,
               textAlign: "center",
@@ -224,7 +224,7 @@ export function LoginForm() {
               border: "1px solid " + DS.grnBord,
               borderRadius: 6,
               padding: "8px 12px",
-              fontSize: 12,
+              fontSize: DS.fs.md,
               color: DS.grn,
               marginBottom: 16,
               textAlign: "center",
@@ -246,7 +246,7 @@ export function LoginForm() {
             padding: "11px 0",
             fontWeight: 700,
             cursor: loading ? "default" : "pointer",
-            fontSize: 14,
+            fontSize: DS.fs.lg,
             fontFamily: DS.sans,
             transition: DS.transition,
             display: "flex",
@@ -268,7 +268,7 @@ export function LoginForm() {
               background: "none",
               border: "none",
               color: DS.blu,
-              fontSize: 12,
+              fontSize: DS.fs.md,
               fontWeight: 600,
               padding: "8px 12px",
               minHeight: 36,
@@ -282,7 +282,7 @@ export function LoginForm() {
         <div
           style={{
             marginTop: 20,
-            fontSize: 10,
+            fontSize: DS.fs.xs,
             color: DS.text3,
             textAlign: "center",
             lineHeight: 1.8,
@@ -299,7 +299,7 @@ export function LoginForm() {
               border: "1px solid " + DS.bord,
               borderRadius: 6,
               color: DS.text2,
-              fontSize: 12,
+              fontSize: DS.fs.md,
               padding: "6px 14px",
               minHeight: 36,
               cursor: "pointer",

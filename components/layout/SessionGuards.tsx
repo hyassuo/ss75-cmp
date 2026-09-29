@@ -103,7 +103,7 @@ export function IdleLogout() {
         alignItems: "center",
         flexWrap: "wrap",
         boxShadow: "0 8px 24px rgba(0,0,0,0.3)",
-        fontSize: 13,
+        fontSize: DS.fs.base,
       }}
     >
       <span style={{ flex: "1 1 220px" }}>{t("idle.warning")}</span>
@@ -161,7 +161,7 @@ export function ConnectionBanner() {
         background: DS.yel,
         color: DS.onAccent,
         textAlign: "center",
-        fontSize: 13,
+        fontSize: DS.fs.base,
         fontWeight: 600,
         padding: "6px 12px",
       }}

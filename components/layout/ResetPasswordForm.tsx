@@ -92,7 +92,7 @@ export function ResetPasswordForm() {
     boxShadow: "0 16px 48px rgba(0,0,0,0.25)",
     border: "1px solid " + DS.bord,
   };
-  const inp = { ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: 14 };
+  const inp = { ...S.inp, height: 44, maxHeight: 44, lineHeight: "42px", fontSize: DS.fs.lg };
 
   return (
     <main
@@ -116,7 +116,7 @@ export function ResetPasswordForm() {
       >
         <h1
           style={{
-            fontSize: 18,
+            fontSize: DS.fs.h3,
             fontWeight: 800,
             color: DS.text,
             margin: "0 0 20px",
@@ -127,24 +127,24 @@ export function ResetPasswordForm() {
         </h1>
 
         {phase === "checking" && (
-          <div role="status" style={{ display: "flex", justifyContent: "center", gap: 8, color: DS.text3, fontSize: 13 }}>
+          <div role="status" style={{ display: "flex", justifyContent: "center", gap: 8, color: DS.text3, fontSize: DS.fs.base }}>
             <Spinner size={14} /> {t("reset.checking")}
           </div>
         )}
 
         {phase === "invalid" && (
           <div role="alert">
-            <p style={{ fontSize: 13, color: DS.text2, lineHeight: 1.6, margin: "0 0 16px" }}>
+            <p style={{ fontSize: DS.fs.base, color: DS.text2, lineHeight: 1.6, margin: "0 0 16px" }}>
               {t("reset.invalid")}
             </p>
-            <a href="/login" style={{ color: DS.blu, fontSize: 13, fontWeight: 600 }}>
+            <a href="/login" style={{ color: DS.blu, fontSize: DS.fs.base, fontWeight: 600 }}>
               {t("reset.backToLogin")}
             </a>
           </div>
         )}
 
         {phase === "done" && (
-          <p role="status" style={{ fontSize: 13, color: DS.grn, fontWeight: 600, textAlign: "center" }}>
+          <p role="status" style={{ fontSize: DS.fs.base, color: DS.grn, fontWeight: 600, textAlign: "center" }}>
             {t("reset.done")}
           </p>
         )}
@@ -166,7 +166,7 @@ export function ResetPasswordForm() {
                 }}
                 style={inp}
               />
-              <div style={{ fontSize: 11, color: DS.text3, marginTop: 4 }}>
+              <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginTop: 4 }}>
                 {t("reset.rule")}
               </div>
             </div>
@@ -194,7 +194,7 @@ export function ResetPasswordForm() {
                   border: "1px solid " + DS.redBord,
                   borderRadius: 6,
                   padding: "8px 12px",
-                  fontSize: 12,
+                  fontSize: DS.fs.md,
                   color: DS.red,
                   marginBottom: 16,
                   textAlign: "center",
@@ -216,7 +216,7 @@ export function ResetPasswordForm() {
                 minHeight: 44,
                 fontWeight: 700,
                 cursor: phase === "saving" ? "default" : "pointer",
-                fontSize: 14,
+                fontSize: DS.fs.lg,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

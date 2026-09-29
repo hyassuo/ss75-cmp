@@ -567,7 +567,7 @@ export function ExportTab() {
         padding: "10px 22px",
         fontWeight: 700,
         cursor: busy || !flat.length ? "default" : "pointer",
-        fontSize: 13,
+        fontSize: DS.fs.base,
         opacity: busy || !flat.length ? 0.6 : 1,
         whiteSpace: "nowrap",
       }}
@@ -588,7 +588,7 @@ export function ExportTab() {
       <div style={{ ...S.card, marginBottom: 14 }}>
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -598,7 +598,7 @@ export function ExportTab() {
         >
           {t("exp.title")} — {activeFlat.length} {t("exp.itemsSuffix")}
         </div>
-        <div style={{ fontSize: 12, color: DS.text3, marginBottom: 16 }}>
+        <div style={{ fontSize: DS.fs.md, color: DS.text3, marginBottom: 16 }}>
           {t("exp.format")}
         </div>
         {sysFilter !== "All" && (
@@ -606,7 +606,7 @@ export function ExportTab() {
             style={{ border: "none", padding: 0, margin: "0 0 14px" }}
             disabled={busy !== null}
           >
-            <legend style={{ fontSize: 12, color: DS.text2, fontWeight: 600, marginBottom: 6 }}>
+            <legend style={{ fontSize: DS.fs.md, color: DS.text2, fontWeight: 600, marginBottom: 6 }}>
               {t("exp.scope")}
             </legend>
             {(["dept", "all"] as const).map((v) => (
@@ -618,7 +618,7 @@ export function ExportTab() {
                   gap: 6,
                   marginRight: 16,
                   minHeight: 36,
-                  fontSize: 13,
+                  fontSize: DS.fs.base,
                   color: DS.text,
                   cursor: "pointer",
                 }}
@@ -646,7 +646,7 @@ export function ExportTab() {
             alignItems: "center",
             gap: 8,
             marginTop: 12,
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text2,
             cursor: "pointer",
           }}
@@ -665,7 +665,7 @@ export function ExportTab() {
       <div style={S.card}>
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -678,7 +678,7 @@ export function ExportTab() {
             style={{
               width: "100%",
               borderCollapse: "collapse",
-              fontSize: 12,
+              fontSize: DS.fs.md,
             }}
           >
             <thead>
@@ -701,7 +701,7 @@ export function ExportTab() {
                       textAlign: "left",
                       padding: "8px 10px",
                       color: DS.text3,
-                      fontSize: 10,
+                      fontSize: DS.fs.xs,
                       textTransform: "uppercase",
                       whiteSpace: "nowrap",
                     }}
@@ -731,7 +731,7 @@ export function ExportTab() {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 11,
+                        fontSize: DS.fs.sm,
                         color: DS.blu,
                       }}
                     >
@@ -751,7 +751,7 @@ export function ExportTab() {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         color: DS.grn,
                       }}
                     >
@@ -786,7 +786,7 @@ export function ExportTab() {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 11,
+                        fontSize: DS.fs.sm,
                         color: it.last_insp ? DS.text3 : DS.text3,
                       }}
                     >
@@ -796,7 +796,7 @@ export function ExportTab() {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 11,
+                        fontSize: DS.fs.sm,
                         color: nextClr,
                       }}
                     >
@@ -807,7 +807,7 @@ export function ExportTab() {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         color: it.ifs_wo ? DS.grn : DS.text3,
                       }}
                     >
@@ -817,7 +817,7 @@ export function ExportTab() {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 11,
+                        fontSize: DS.fs.sm,
                         color: rateColor(rt),
                       }}
                     >

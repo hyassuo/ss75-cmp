@@ -334,7 +334,7 @@ export function EvidencePanel({
       >
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.vio,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -395,7 +395,7 @@ export function EvidencePanel({
                 gap: 10,
                 alignItems: "center",
                 marginTop: 8,
-                fontSize: 12,
+                fontSize: DS.fs.md,
                 color: DS.text,
                 minWidth: 0,
               }}
@@ -434,12 +434,12 @@ export function EvidencePanel({
           )}
           <div
             role="status"
-            style={{ fontSize: 11, color: DS.text3, marginTop: preparing ? 6 : 0 }}
+            style={{ fontSize: DS.fs.sm, color: DS.text3, marginTop: preparing ? 6 : 0 }}
           >
             {preparing > 0 && t("evidence.preparing", preparing)}
           </div>
           {compressInfo && (
-            <div style={{ fontSize: 10, color: DS.grn, marginTop: 6 }}>
+            <div style={{ fontSize: DS.fs.xs, color: DS.grn, marginTop: 6 }}>
               {compressInfo}
             </div>
           )}
@@ -462,7 +462,7 @@ export function EvidencePanel({
                 fontWeight: 700,
                 cursor: busy ? "default" : "pointer",
                 opacity: busy && !aiLoading ? 0.6 : 1,
-                fontSize: 13,
+                fontSize: DS.fs.base,
                 fontFamily: DS.sans,
                 transition: DS.transition,
                 display: "flex",
@@ -509,7 +509,7 @@ export function EvidencePanel({
             padding: "12px 18px",
             fontWeight: 700,
             cursor: busy || !desc.trim() ? "default" : "pointer",
-            fontSize: 14,
+            fontSize: DS.fs.lg,
             opacity: busy ? 0.6 : 1,
           }}
         >
@@ -532,7 +532,7 @@ export function EvidencePanel({
               borderRadius: 8,
               padding: "10px 14px",
               marginTop: 10,
-              fontSize: 12,
+              fontSize: DS.fs.md,
               color: DS.red,
             }}
           >
@@ -556,7 +556,7 @@ export function EvidencePanel({
           }}
         >
           <Spinner size={16} color={DS.blu} />
-          <span style={{ fontSize: 12, color: DS.blu, fontWeight: 600 }}>
+          <span style={{ fontSize: DS.fs.md, color: DS.blu, fontWeight: 600 }}>
             {t("f.aiAnalysing")}
           </span>
         </div>
@@ -569,7 +569,7 @@ export function EvidencePanel({
             borderRadius: 8,
             padding: "10px 14px",
             marginBottom: 10,
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.red,
           }}
         >
@@ -590,7 +590,7 @@ export function EvidencePanel({
         <div
           style={{
             textAlign: "center",
-            fontSize: 12,
+            fontSize: DS.fs.md,
             color: DS.text3,
             padding: "12px 0",
           }}
@@ -598,7 +598,7 @@ export function EvidencePanel({
       )}
 
       {listErr && (
-        <div role="alert" style={{ color: DS.red, fontSize: 12, marginBottom: 8 }}>
+        <div role="alert" style={{ color: DS.red, fontSize: DS.fs.md, marginBottom: 8 }}>
           {listErr}
         </div>
       )}
@@ -628,7 +628,7 @@ export function EvidencePanel({
               <span
                 style={{
                   fontFamily: "monospace",
-                  fontSize: 11,
+                  fontSize: DS.fs.sm,
                   color: DS.blu,
                 }}
               >
@@ -636,7 +636,7 @@ export function EvidencePanel({
               </span>
             </div>
             <div
-              style={{ fontSize: 13, color: DS.text2, lineHeight: 1.7 }}
+              style={{ fontSize: DS.fs.base, color: DS.text2, lineHeight: 1.7 }}
             >
               {ev.description}
             </div>
@@ -666,7 +666,7 @@ export function EvidencePanel({
                     target="_blank"
                     rel="noreferrer"
                     style={{
-                      fontSize: 11,
+                      fontSize: DS.fs.sm,
                       color: DS.blu,
                       textDecoration: "none",
                     }}
@@ -674,7 +674,7 @@ export function EvidencePanel({
                     Attachment: {ev.file_name}
                   </a>
                 ) : (
-                  <span style={{ fontSize: 11, color: DS.text3 }}>
+                  <span style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
                     {ev.file_name}
                   </span>
                 )}
@@ -689,7 +689,7 @@ export function EvidencePanel({
                 border: "none",
                 color: DS.red,
                 cursor: "pointer",
-                fontSize: 16,
+                fontSize: DS.fs.xl,
                 padding: "0 4px",
                 flexShrink: 0,
               }}
@@ -711,7 +711,7 @@ function pickBtn(primary: boolean, disabled: boolean): React.CSSProperties {
     borderRadius: 7,
     minHeight: 44,
     padding: "8px 10px",
-    fontSize: 13,
+    fontSize: DS.fs.base,
     fontWeight: 700,
     cursor: disabled ? "default" : "pointer",
     opacity: disabled ? 0.6 : 1,

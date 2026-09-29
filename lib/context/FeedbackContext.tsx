@@ -112,7 +112,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               color: DS.onAccent,
               borderRadius: 8,
               padding: "10px 16px",
-              fontSize: 13,
+              fontSize: DS.fs.base,
               fontWeight: 600,
               boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
               maxWidth: 480,
@@ -150,7 +150,7 @@ function ConfirmDialog({
       </h2>
       <p
         id={msgId}
-        style={{ fontSize: 15, color: DS.text, margin: "4px 0 20px", lineHeight: 1.5 }}
+        style={{ fontSize: DS.fs.xl, color: DS.text, margin: "4px 0 20px", lineHeight: 1.5 }}
       >
         {opts.message}
       </p>
@@ -166,7 +166,7 @@ function ConfirmDialog({
             borderRadius: 8,
             padding: "10px 20px",
             minHeight: 44,
-            fontSize: 14,
+            fontSize: DS.fs.lg,
             cursor: "pointer",
           }}
         >
@@ -182,7 +182,7 @@ function ConfirmDialog({
             borderRadius: 8,
             padding: "10px 20px",
             minHeight: 44,
-            fontSize: 14,
+            fontSize: DS.fs.lg,
             fontWeight: 700,
             cursor: "pointer",
           }}

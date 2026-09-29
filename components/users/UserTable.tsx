@@ -69,7 +69,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
   }
 
   if (loading) {
-    return <div style={{ fontSize: 13, color: DS.text3 }}>Loading users…</div>;
+    return <div style={{ fontSize: DS.fs.base, color: DS.text3 }}>Loading users…</div>;
   }
 
   return (
@@ -77,7 +77,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
       <div style={{ ...S.card, marginBottom: 14 }}>
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -127,7 +127,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                 busy || !invite || newPassword.length < 8
                   ? "default"
                   : "pointer",
-              fontSize: 13,
+              fontSize: DS.fs.base,
               opacity: busy || !invite || newPassword.length < 8 ? 0.6 : 1,
             }}
           >
@@ -138,7 +138,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
           <div
             style={{
               marginTop: 12,
-              fontSize: 12,
+              fontSize: DS.fs.md,
               color: msg.t === "ok" ? DS.grn : DS.red,
               background: msg.t === "ok" ? DS.grnBg : DS.redBg,
               border:
@@ -155,7 +155,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
       <div style={S.card}>
         <div
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.text3,
             textTransform: "uppercase",
             letterSpacing: 1.5,
@@ -170,7 +170,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
             style={{
               width: "100%",
               borderCollapse: "collapse",
-              fontSize: 12,
+              fontSize: DS.fs.md,
             }}
           >
             <thead>
@@ -183,7 +183,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                         textAlign: "left",
                         padding: "8px 10px",
                         color: DS.text3,
-                        fontSize: 10,
+                        fontSize: DS.fs.xs,
                         textTransform: "uppercase",
                         whiteSpace: "nowrap",
                       }}
@@ -208,7 +208,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                         <span
                           style={{
                             marginLeft: 6,
-                            fontSize: 9,
+                            fontSize: DS.fs.xs,
                             color: DS.text3,
                           }}
                         >
@@ -261,7 +261,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                       style={{
                         padding: "8px 10px",
                         fontFamily: "monospace",
-                        fontSize: 11,
+                        fontSize: DS.fs.sm,
                         color: DS.text3,
                       }}
                     >
@@ -284,7 +284,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                             border: "1px solid " + DS.bord,
                             borderRadius: 6,
                             padding: "4px 10px",
-                            fontSize: 11,
+                            fontSize: DS.fs.sm,
                             cursor: busy ? "default" : "pointer",
                             fontWeight: 600,
                           }}
@@ -311,7 +311,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                                 (u.active ? DS.redBord : DS.grnBord),
                               borderRadius: 6,
                               padding: "4px 10px",
-                              fontSize: 11,
+                              fontSize: DS.fs.sm,
                               cursor: busy ? "default" : "pointer",
                               fontWeight: 600,
                             }}
@@ -343,7 +343,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                               border: "none",
                               borderRadius: 6,
                               padding: "4px 10px",
-                              fontSize: 11,
+                              fontSize: DS.fs.sm,
                               cursor: busy ? "default" : "pointer",
                               fontWeight: 600,
                             }}

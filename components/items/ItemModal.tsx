@@ -567,7 +567,7 @@ function ItemModalInner({
         <div>
           <div
             style={{
-              fontSize: 10,
+              fontSize: DS.fs.xs,
               color: DS.blu,
               textTransform: "uppercase",
               letterSpacing: 2.5,
@@ -580,7 +580,7 @@ function ItemModalInner({
           </div>
           <h2
             id={titleId}
-            style={{ fontSize: 17, fontWeight: 800, color: DS.text, margin: 0 }}
+            style={{ fontSize: DS.fs.h3, fontWeight: 800, color: DS.text, margin: 0 }}
           >
             {f.name || f.ifs_obj_desc || t("modal.untitled")}
           </h2>
@@ -593,7 +593,7 @@ function ItemModalInner({
             background: "none",
             border: "1px solid " + DS.bord,
             color: DS.text3,
-            fontSize: 18,
+            fontSize: DS.fs.h3,
             cursor: "pointer",
             borderRadius: 7,
             minWidth: 44,
@@ -691,7 +691,7 @@ function ItemModalInner({
                 border: "none",
                 color: DS.blu,
                 cursor: "pointer",
-                fontSize: 11,
+                fontSize: DS.fs.sm,
                 fontWeight: 600,
                 padding: 0,
                 marginTop: -6,
@@ -733,7 +733,7 @@ function ItemModalInner({
                   border: "none",
                   borderRadius: 7,
                   padding: "0 14px",
-                  fontSize: 12,
+                  fontSize: DS.fs.md,
                   fontWeight: 700,
                   cursor: savingSubarea ? "default" : "pointer",
                   opacity: savingSubarea || !newSubareaName.trim() ? 0.6 : 1,
@@ -753,7 +753,7 @@ function ItemModalInner({
                   color: DS.text3,
                   borderRadius: 7,
                   padding: "0 10px",
-                  fontSize: 12,
+                  fontSize: DS.fs.md,
                   cursor: "pointer",
                 }}
               >
@@ -813,7 +813,7 @@ function ItemModalInner({
               borderRadius: 8,
               padding: "8px 12px",
               marginBottom: 10,
-              fontSize: 12,
+              fontSize: DS.fs.md,
               color: DS.blu,
             }}
           >
@@ -829,7 +829,7 @@ function ItemModalInner({
                 border: "none",
                 color: DS.blu,
                 cursor: "pointer",
-                fontSize: 14,
+                fontSize: DS.fs.lg,
                 padding: "0 2px",
               }}
             >
@@ -918,7 +918,7 @@ function ItemModalInner({
                 borderRadius: 8,
                 padding: "9px 14px",
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: DS.fs.base,
                 fontWeight: 700,
               }}
             >
@@ -936,7 +936,7 @@ function ItemModalInner({
                 borderRadius: 8,
                 padding: "9px 18px",
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: DS.fs.base,
                 fontWeight: 700,
               }}
             >
@@ -959,14 +959,14 @@ function ItemModalInner({
                 borderRadius: 8,
                 padding: "9px 18px",
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: DS.fs.base,
                 fontWeight: 700,
                 display: "flex",
                 gap: 8,
                 alignItems: "center",
               }}
             >
-              <span style={{ fontSize: 14 }}>
+              <span style={{ fontSize: DS.fs.lg }}>
                 {f.status === "OK" && f.resolved_at ? "✓" : "○"}
               </span>
               {f.status === "OK" && f.resolved_at
@@ -984,7 +984,7 @@ function ItemModalInner({
               borderRadius: 8,
               padding: "10px 22px",
               cursor: "pointer",
-              fontSize: 14,
+              fontSize: DS.fs.lg,
             }}
           >{t("common.cancel")}</button>
           {!isReadOnly && (
@@ -999,7 +999,7 @@ function ItemModalInner({
                 padding: "10px 28px",
                 fontWeight: 700,
                 cursor: saving ? "default" : "pointer",
-                fontSize: 14,
+                fontSize: DS.fs.lg,
                 opacity: saving ? 0.6 : 1,
               }}
             >
@@ -1024,7 +1024,7 @@ function banner(bg: string, border: string, color: string): React.CSSProperties 
     borderRadius: 8,
     padding: "10px 12px",
     marginBottom: 12,
-    fontSize: 12,
+    fontSize: DS.fs.md,
     color,
   };
 }
@@ -1036,7 +1036,7 @@ function bannerBtn(color: string): React.CSSProperties {
     color,
     borderRadius: 6,
     padding: "6px 12px",
-    fontSize: 12,
+    fontSize: DS.fs.md,
     fontWeight: 700,
     cursor: "pointer",
     minHeight: 32,

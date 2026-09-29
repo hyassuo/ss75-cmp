@@ -58,6 +58,21 @@ export const DS = {
   sans: "var(--font-sans), system-ui, -apple-system, sans-serif",
   mono: "var(--font-mono), 'IBM Plex Mono', 'Courier New', monospace",
 
+  // Type scale (px). Every inline fontSize uses one of these steps. Nothing
+  // is smaller than 10 px: the app is read on tablets out on deck.
+  fs: {
+    xs: 10, // captions, table headers, small badges, overline labels
+    sm: 11, // secondary / meta text, badges, section labels
+    md: 12, // dense UI text: tables, inputs, notices, small buttons
+    base: 13, // body text, buttons
+    lg: 14, // emphasised body, large buttons, sign-in fields
+    xl: 16, // empty-state titles, tile values, icon glyphs
+    h3: 18, // modal and form headings, small KPI values
+    h2: 22, // KPI numbers
+    h1: 28, // headline numbers, empty-state pictograms
+    display: 48, // the 404 code
+  },
+
   // Motion
   transition: "all 0.18s ease",
 } as const;

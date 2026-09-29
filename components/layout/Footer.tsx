@@ -21,13 +21,13 @@ export function Footer() {
         gap: 10,
       }}
     >
-      <div className="ft-standards" style={{ fontSize: 9, color: DS.sbTxt2 }}>
+      <div className="ft-standards" style={{ fontSize: DS.fs.xs, color: DS.sbTxt2 }}>
         NORSOK M-001/M-503 · DNV-RP-G101 · ISO 21457 · NACE MR0175 · API 2C ·
         DROPS HSE_7100.0_I
       </div>
       <div
         className="ft-rev"
-        style={{ fontSize: 9, color: DS.sbTxt2, fontFamily: DS.mono }}
+        style={{ fontSize: DS.fs.xs, color: DS.sbTxt2, fontFamily: DS.mono }}
       >
         v{VERSION} · {t("footer.developedBy")}
       </div>

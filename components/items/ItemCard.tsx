@@ -48,7 +48,7 @@ export function ItemCard({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: 13,
+            fontSize: DS.fs.base,
             fontWeight: 700,
             color: DS.text,
             marginBottom: 4,
@@ -63,7 +63,7 @@ export function ItemCard({
           <div
             style={{
               fontFamily: "monospace",
-              fontSize: 10,
+              fontSize: DS.fs.xs,
               color: DS.grn,
               marginBottom: 4,
             }}
@@ -121,7 +121,7 @@ export function ItemCard({
         </div>
         <div
           style={{
-            fontSize: 10,
+            fontSize: DS.fs.xs,
             color: isOverdue(item.next_insp)
               ? DS.red
               : dd !== null && dd <= 30

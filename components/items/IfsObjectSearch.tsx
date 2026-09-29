@@ -126,7 +126,7 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
               border: "none",
               color: DS.text3,
               cursor: "pointer",
-              fontSize: 14,
+              fontSize: DS.fs.lg,
               padding: 0,
             }}
           >
@@ -136,7 +136,7 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
         {loading && (
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.text3,
               padding: "3px 0",
               marginTop: 2,
@@ -185,7 +185,7 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
                 <span
                   style={{
                     fontFamily: "monospace",
-                    fontSize: 10,
+                    fontSize: DS.fs.xs,
                     color: DS.blu,
                     minWidth: 100,
                     flexShrink: 0,
@@ -193,13 +193,13 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
                 >
                   {o.id}
                 </span>
-                <span style={{ fontSize: 12, color: DS.text2, flex: 1 }}>
+                <span style={{ fontSize: DS.fs.md, color: DS.text2, flex: 1 }}>
                   {o.desc}
                 </span>
                 {o.sece && (
                   <span
                     style={{
-                      fontSize: 9,
+                      fontSize: DS.fs.xs,
                       color: DS.red,
                       fontWeight: 800,
                       background: DS.redBg,
@@ -218,7 +218,7 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
       {value && value.sece && (
         <div
           style={{
-            fontSize: 10,
+            fontSize: DS.fs.xs,
             color: DS.red,
             marginTop: 3,
             fontWeight: 700,

@@ -39,7 +39,7 @@ export function ZonesTab() {
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: DS.text3, marginBottom: 16 }}>
+      <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginBottom: 16 }}>
         {visibleZones.length} {visibleZones.length !== 1 ? t("dash.zones") : t("dash.zone")} ·{" "}
         {totalItems} {totalItems !== 1 ? t("dash.items") : t("dash.item")}
       </div>
@@ -80,7 +80,7 @@ export function ZonesTab() {
                     <span
                       style={{
                         fontFamily: "monospace",
-                        fontSize: 13,
+                        fontSize: DS.fs.base,
                         color: DS.blu,
                         fontWeight: 800,
                       }}
@@ -89,7 +89,7 @@ export function ZonesTab() {
                     </span>
                     <span
                       style={{
-                        fontSize: 16,
+                        fontSize: DS.fs.xl,
                         fontWeight: 800,
                         color: DS.text,
                       }}
@@ -107,7 +107,7 @@ export function ZonesTab() {
                   </div>
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: DS.fs.md,
                       color: DS.text3,
                       marginTop: 3,
                     }}
@@ -122,7 +122,7 @@ export function ZonesTab() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <span style={{ fontSize: 10, color: DS.text3 }}>
+                    <span style={{ fontSize: DS.fs.xs, color: DS.text3 }}>
                       {activeItems.length +
                         (activeItems.length !== 1 ? " " + t("dash.items") : " " + t("dash.item"))}
                     </span>
@@ -157,7 +157,7 @@ export function ZonesTab() {
                   border: "1px solid " + DS.bord,
                   borderRadius: 8,
                   padding: "8px 18px",
-                  fontSize: 12,
+                  fontSize: DS.fs.md,
                   cursor: "pointer",
                   fontWeight: 700,
                   whiteSpace: "nowrap",
@@ -210,7 +210,7 @@ export function ZonesTab() {
                       <div key={s.id} style={{ marginBottom: 12 }}>
                         <div
                           style={{
-                            fontSize: 11,
+                            fontSize: DS.fs.sm,
                             color: DS.text3,
                             textTransform: "uppercase",
                             letterSpacing: 1.2,
@@ -230,7 +230,7 @@ export function ZonesTab() {
                       <div>
                         <div
                           style={{
-                            fontSize: 11,
+                            fontSize: DS.fs.sm,
                             color: DS.text3,
                             textTransform: "uppercase",
                             letterSpacing: 1.2,

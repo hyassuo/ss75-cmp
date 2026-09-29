@@ -55,7 +55,7 @@ const { openItem } = useShell();
       <div
         style={{
           fontFamily: "monospace",
-          fontSize: 11,
+          fontSize: DS.fs.sm,
           color: rowColor,
           minWidth: 80,
         }}
@@ -65,7 +65,7 @@ const { openItem } = useShell();
       <div
         style={{
           fontFamily: "monospace",
-          fontSize: 11,
+          fontSize: DS.fs.sm,
           color: DS.blu,
           minWidth: 34,
         }}
@@ -74,11 +74,11 @@ const { openItem } = useShell();
       </div>
       <div style={{ flex: 1 }}>
         <div
-          style={{ fontSize: 13, fontWeight: 700, color: DS.text }}
+          style={{ fontSize: DS.fs.base, fontWeight: 700, color: DS.text }}
         >
           {it.name || it.id}
         </div>
-        <div style={{ fontSize: 11, color: DS.text3 }}>
+        <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
           {it.zname} | {it.freq_insp || "-"}
         </div>
       </div>
@@ -110,7 +110,7 @@ const { openItem } = useShell();
       <div
         style={{
           fontFamily: "monospace",
-          fontSize: 11,
+          fontSize: DS.fs.sm,
           color: DS.text3,
           minWidth: 72,
           textAlign: "right",
@@ -164,7 +164,7 @@ export function ScheduleView() {
           flexWrap: "wrap",
         }}
       >
-        <div style={{ fontSize: 12, color: DS.text3, fontWeight: 600 }}>{t("sched.horizon")}</div>
+        <div style={{ fontSize: DS.fs.md, color: DS.text3, fontWeight: 600 }}>{t("sched.horizon")}</div>
         {[30, 60, 90, 180].map((h) => (
           <button
             key={h}
@@ -175,7 +175,7 @@ export function ScheduleView() {
               border: "1px solid " + DS.bord,
               borderRadius: 20,
               padding: "5px 16px",
-              fontSize: 12,
+              fontSize: DS.fs.md,
               cursor: "pointer",
               fontWeight: 600,
             }}
@@ -183,7 +183,7 @@ export function ScheduleView() {
             {h} {t("sched.days")}
           </button>
         ))}
-        <div style={{ fontSize: 11, color: DS.text3, marginLeft: 8 }}>
+        <div style={{ fontSize: DS.fs.sm, color: DS.text3, marginLeft: 8 }}>
           {t("sched.until")} {fmt(cutStr)}
         </div>
       </div>
@@ -192,7 +192,7 @@ export function ScheduleView() {
         <div style={{ marginBottom: 20 }}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.red,
               textTransform: "uppercase",
               letterSpacing: 1.5,
@@ -212,7 +212,7 @@ export function ScheduleView() {
         <div style={{ marginBottom: 20 }}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.vio,
               textTransform: "uppercase",
               letterSpacing: 1.5,
@@ -242,7 +242,7 @@ export function ScheduleView() {
                 <span
                   style={{
                     fontFamily: "monospace",
-                    fontSize: 11,
+                    fontSize: DS.fs.sm,
                     color: DS.red,
                     fontWeight: 800,
                     minWidth: 38,
@@ -253,7 +253,7 @@ export function ScheduleView() {
                 <span
                   style={{
                     fontFamily: "monospace",
-                    fontSize: 10,
+                    fontSize: DS.fs.xs,
                     color: DS.blu,
                   }}
                 >
@@ -261,7 +261,7 @@ export function ScheduleView() {
                 </span>
                 <span
                   style={{
-                    fontSize: 13,
+                    fontSize: DS.fs.base,
                     fontWeight: 600,
                     color: DS.text,
                     flex: 1,
@@ -279,7 +279,7 @@ export function ScheduleView() {
                 <span
                   style={{
                     fontFamily: "monospace",
-                    fontSize: 11,
+                    fontSize: DS.fs.sm,
                     color: DS.text3,
                     minWidth: 72,
                     textAlign: "right",
@@ -297,7 +297,7 @@ export function ScheduleView() {
         <div style={{ marginBottom: 20 }}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.ora,
               textTransform: "uppercase",
               letterSpacing: 1.5,
@@ -322,7 +322,7 @@ export function ScheduleView() {
             marginBottom: 20,
           }}
         >
-          <div style={{ fontSize: 14, color: DS.grn, fontWeight: 600 }}>
+          <div style={{ fontSize: DS.fs.lg, color: DS.grn, fontWeight: 600 }}>
             {t("sched.allClear", horizon)}
           </div>
         </div>
@@ -332,7 +332,7 @@ export function ScheduleView() {
         <div style={S.card}>
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.text3,
               textTransform: "uppercase",
               letterSpacing: 1.5,
@@ -352,7 +352,7 @@ export function ScheduleView() {
                   background: DS.sur2,
                   borderRadius: 7,
                   padding: "8px 12px",
-                  fontSize: 12,
+                  fontSize: DS.fs.md,
                   display: "flex",
                   gap: 8,
                   alignItems: "center",
@@ -361,7 +361,7 @@ export function ScheduleView() {
                 <span
                   style={{
                     fontFamily: "monospace",
-                    fontSize: 10,
+                    fontSize: DS.fs.xs,
                     color: DS.blu,
                   }}
                 >

@@ -30,10 +30,10 @@ export default function AppError({
         borderLeft: "3px solid " + DS.red,
       }}
     >
-      <div style={{ fontSize: 32, marginBottom: 12 }}>⚠</div>
+      <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>⚠</div>
       <div
         style={{
-          fontSize: 15,
+          fontSize: DS.fs.xl,
           color: DS.text,
           fontWeight: 700,
           marginBottom: 6,
@@ -43,7 +43,7 @@ export default function AppError({
       </div>
       <div
         style={{
-          fontSize: 13,
+          fontSize: DS.fs.base,
           color: DS.text3,
           marginBottom: 20,
           maxWidth: 480,
@@ -67,7 +67,7 @@ export default function AppError({
           padding: "10px 22px",
           fontWeight: 700,
           cursor: "pointer",
-          fontSize: 13,
+          fontSize: DS.fs.base,
         }}
       >
         {chunk ? "Reload" : "Try again"}

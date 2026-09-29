@@ -136,7 +136,7 @@ export function Topbar() {
                       borderRadius: 4,
                       padding: "6px 10px",
                       minHeight: 32,
-                      fontSize: 10,
+                      fontSize: DS.fs.xs,
                       fontWeight: 700,
                       fontFamily: DS.mono,
                       letterSpacing: 0.6,
@@ -173,7 +173,7 @@ export function Topbar() {
                   className="tb-chip-extra"
                   aria-hidden
                   style={{
-                    fontSize: 12,
+                    fontSize: DS.fs.md,
                     lineHeight: 1,
                     color: chipColor,
                     fontWeight: 800,
@@ -185,7 +185,7 @@ export function Topbar() {
               <span
                 className="tb-chip-extra"
                 style={{
-                  fontSize: 10,
+                  fontSize: DS.fs.xs,
                   fontWeight: 800,
                   fontFamily: DS.mono,
                   letterSpacing: 0.8,
@@ -208,7 +208,7 @@ export function Topbar() {
           </div>
           <div
             style={{
-              fontSize: 11,
+              fontSize: DS.fs.sm,
               color: DS.sbTxt2,
               fontFamily: DS.mono,
               letterSpacing: 0.4,
@@ -235,7 +235,7 @@ export function Topbar() {
       >
         <span
           style={{
-            fontSize: 11,
+            fontSize: DS.fs.sm,
             color: DS.sbTxt2,
             fontWeight: 500,
             flexShrink: 0,
