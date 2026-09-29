@@ -1,8 +1,10 @@
 "use client";
 
+import { ArrowDown, ArrowRight, Circle, Diamond, Grid3x3, Info, Triangle, type LucideIcon } from "lucide-react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import { useData } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
@@ -21,15 +23,24 @@ function cellLevel(p: number, c: number): Level {
 }
 
 // Colour plus a shape per level: the four colours are close in brightness,
-// so colour-blind users (and a phone in direct sunlight) read the shape.
+// so colour-blind users (and a phone in direct sunlight) read the shape:
+// circle, diamond, triangle outline, solid triangle (SVG, not font glyphs).
 // These are RPN bands of the matrix (risk.level.*), not the item Priority
 // (calcPriority also weighs SECE and due dates), hence their own names.
-const LEVEL: Record<Level, { color: string; glyph: string; range: string }> = {
-  Low: { color: DS.grn, glyph: "\u25CB", range: "RPN \u2264 3" }, // white circle
-  Medium: { color: DS.yel, glyph: "\u25C7", range: "RPN 4\u20137" }, // white diamond
-  High: { color: DS.ora, glyph: "\u25B3", range: "RPN 8\u201314" }, // white triangle
-  Critical: { color: DS.red, glyph: "\u25B2", range: "RPN \u2265 15" }, // black triangle
+const LEVEL: Record<
+  Level,
+  { color: string; shape: LucideIcon; filled: boolean; range: string }
+> = {
+  Low: { color: DS.grn, shape: Circle, filled: false, range: "RPN \u2264 3" },
+  Medium: { color: DS.yel, shape: Diamond, filled: false, range: "RPN 4\u20137" },
+  High: { color: DS.ora, shape: Triangle, filled: false, range: "RPN 8\u201314" },
+  Critical: { color: DS.red, shape: Triangle, filled: true, range: "RPN \u2265 15" },
 };
+
+function LevelShape({ level }: { level: Level }) {
+  const l = LEVEL[level];
+  return <Icon icon={l.shape} filled={l.filled} size="sm" />;
+}
 
 export function RiskMatrix() {
   const { itemsByZone } = useData();
@@ -47,7 +58,9 @@ export function RiskMatrix() {
   if (!withRisk.length) {
     return (
       <div style={{ ...S.card, textAlign: "center", padding: "48px 24px" }}>
-        <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>△</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: DS.text3 }}>
+          <Icon icon={Grid3x3} size="xl" />
+        </div>
         <div
           style={{
             fontSize: DS.fs.xl,
@@ -101,9 +114,13 @@ export function RiskMatrix() {
                 color: DS.blu,
                 listStyle: "none",
                 userSelect: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
               }}
             >
-              ⓘ {t("risk.legend")}
+              <Icon icon={Info} size="sm" />
+              {t("risk.legend")}
             </summary>
             <div
               style={{
@@ -210,7 +227,21 @@ export function RiskMatrix() {
                     whiteSpace: "nowrap",
                   }}
                 >
-                  P↓ C→
+                  {/* Axes: probability down the rows, consequence across. */}
+                  <span
+                    aria-hidden="true"
+                    style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center" }}>
+                      P<Icon icon={ArrowDown} size="xs" />
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center" }}>
+                      C<Icon icon={ArrowRight} size="xs" />
+                    </span>
+                  </span>
+                  <span className="sr-only">
+                    {t("f.probability")} / {t("f.consequence")}
+                  </span>
                 </th>
                 {[1, 2, 3, 4, 5].map((i) => (
                   <th
@@ -289,12 +320,11 @@ export function RiskMatrix() {
                               marginBottom: 3,
                               display: "flex",
                               justifyContent: "space-between",
+                              alignItems: "center",
                             }}
                           >
                             <span>{p * c}</span>
-                            <span aria-hidden="true" style={{ fontSize: DS.fs.md, lineHeight: 1 }}>
-                              {LEVEL[level].glyph}
-                            </span>
+                            <LevelShape level={level} />
                             <span className="sr-only">{t(`risk.level.${level}`)}</span>
                           </div>
                           {its.map((it) => (
@@ -340,14 +370,9 @@ export function RiskMatrix() {
           {(["Low", "Medium", "High", "Critical"] as const).map((lv) => (
             <div
               key={lv}
-              style={{ display: "flex", gap: 6, alignItems: "center" }}
+              style={{ display: "flex", gap: 6, alignItems: "center", color: LEVEL[lv].color }}
             >
-              <span
-                aria-hidden="true"
-                style={{ color: LEVEL[lv].color, fontWeight: 800, fontSize: DS.fs.base }}
-              >
-                {LEVEL[lv].glyph}
-              </span>
+              <LevelShape level={lv} />
               <span style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
                 {t(`risk.level.${lv}`)} ({LEVEL[lv].range})
               </span>

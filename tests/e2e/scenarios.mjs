@@ -2889,10 +2889,29 @@ async function main() {
     }
   });
 
-  await run("e2glyphs", "E2: risk matrix — shape per level in every cell, sr-only level, tooltip, translated legend, fonts, 390px", async (c) => {
-    const LV = { Low: "○", Medium: "◇", High: "△", Critical: "▲" };
+  await run("e2glyphs", "E2: risk matrix: SVG shape per level in every cell and the legend, sr-only level, tooltip, translated legend, shapes painted, 390px", async (c) => {
+    // Level marker: lucide shape name (+ "-filled" when solid), from the SVG.
+    const LV = { Low: "circle", Medium: "diamond", High: "triangle", Critical: "triangle-filled" };
     const lvOf = (v) => (v >= 15 ? "Critical" : v >= 8 ? "High" : v >= 4 ? "Medium" : "Low");
-    const readMatrix = (page) => page.evaluate(() => {
+    // In the page: what a marker is, how it looks and whether it paints.
+    const shapeOf = (el) => {
+      if (!el || el.tagName.toLowerCase() !== "svg") return null;
+      const cls = [...el.classList].filter((x) => x.startsWith("lucide-")).map((x) => x.slice(7));
+      const geo = el.firstElementChild;
+      const bb = geo ? geo.getBBox() : { width: 0, height: 0 };
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      return {
+        shape: cls.length === 1 ? cls[0] + (el.getAttribute("fill") === "currentColor" ? "-filled" : "") : "?" + cls.join(","),
+        // Geometry + fill: equal markers draw the same thing, levels differ.
+        sig: el.innerHTML.replace(/\s+/g, " ") + "|" + el.getAttribute("fill"),
+        hidden: el.getAttribute("aria-hidden"),
+        painted: r.width >= 10 && r.height >= 10 && bb.width > 10 && bb.height > 10 && cs.visibility === "visible" && cs.display !== "none" && parseFloat(cs.opacity) === 1 && cs.stroke !== "none" && cs.stroke === cs.color,
+        text: el.textContent,
+      };
+    };
+    // String expressions run through the DevTools protocol (no eval under the page CSP).
+    const inPage = (page, fn) => page.evaluate(`(${fn})(${shapeOf})`);
+    const readMatrix = (page) => inPage(page, (shapeOf) => {
       const rows = [...document.querySelectorAll("main table tbody tr")];
       return rows.map((tr) => [...tr.children].slice(1).map((td) => {
         const box = td.firstElementChild, head = box.firstElementChild, sp = [...head.children];
@@ -2901,59 +2920,45 @@ async function main() {
         const hr = head.getBoundingClientRect(), br = box.getBoundingClientRect();
         const g = sp[1]?.getBoundingClientRect(), n = sp[0]?.getBoundingClientRect();
         return {
-          rpn: sp[0]?.textContent, glyph: sp[1]?.textContent, glyphHidden: sp[1]?.getAttribute("aria-hidden"),
+          rpn: sp[0]?.textContent, mark: shapeOf(sp[1]),
           sr: sr?.textContent, srHidden: cs ? cs.position === "absolute" && parseFloat(cs.width) <= 1 && (cs.clip !== "auto" || cs.clipPath !== "none") && cs.overflow === "hidden" : false,
           title: head.getAttribute("title"), items: box.querySelectorAll("[role=button]").length,
           fits: !!g && g.right <= br.right + 0.5 && n.right <= g.left, headW: Math.round(hr.width),
         };
       }));
     });
-    const readLegend = (page) => page.evaluate(() => {
+    const readLegend = (page) => inPage(page, (shapeOf) => {
       const t = document.querySelector("main table");
-      let el = t.parentElement.nextElementSibling;
-      return [...el.children].map((d) => ({ glyph: d.children[0]?.textContent, hidden: d.children[0]?.getAttribute("aria-hidden"), text: d.children[1]?.textContent }));
+      const el = t.parentElement.nextElementSibling;
+      return [...el.children].map((d) => ({ ...shapeOf(d.children[0]), text: d.children[1]?.textContent }));
     });
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
     await gotoTab(page, "Risk Matrix");
     await page.locator("main table tbody tr").first().waitFor({ timeout: 20000 });
     const m = await readMatrix(page);
-    const bad = [], seen = {};
+    const bad = [], seen = {}, sigs = {};
     m.forEach((row, i) => row.forEach((cell, j) => {
       const p = 5 - i, cc = j + 1, v = p * cc, lv = lvOf(v);
       if (cell.items) seen[lv] = (seen[lv] || 0) + cell.items;
-      if (cell.rpn !== String(v) || cell.glyph !== LV[lv] || cell.glyphHidden !== "true" || cell.sr !== `${lv} risk` || !cell.srHidden || cell.title !== `${lv} risk · RPN ${v}`)
+      (sigs[lv] ||= new Set()).add(cell.mark?.sig);
+      if (cell.rpn !== String(v) || cell.mark?.shape !== LV[lv] || cell.mark.hidden !== "true" || !cell.mark.painted || cell.mark.text !== "" || cell.sr !== `${lv} risk` || !cell.srHidden || cell.title !== `${lv} risk · RPN ${v}`)
         bad.push({ p, c: cc, cell });
     }));
     c.expect(m.length === 5 && m.every((r) => r.length === 5), "5x5 matrix");
-    c.expect(bad.length === 0, "every cell: RPN, level glyph (aria-hidden), sr-only level name (visually hidden), tooltip 'Level · RPN n'", bad.slice(0, 4));
+    c.expect(bad.length === 0, "every cell: RPN, level shape (SVG, aria-hidden, painted in the level colour, no text), sr-only level name (visually hidden), tooltip 'Level · RPN n'", bad.slice(0, 4));
     c.step(`items per level: ${JSON.stringify(seen)}`);
-    c.expect(["Low", "Medium", "High", "Critical"].every((l) => seen[l] > 0), "all four levels have items (non-empty) and show their glyph", seen);
+    c.expect(["Low", "Medium", "High", "Critical"].every((l) => seen[l] > 0), "all four levels have items (non-empty) and show their shape", seen);
     const lg = await readLegend(page);
-    c.expect(JSON.stringify(lg) === JSON.stringify([
-      { glyph: LV.Low, hidden: "true", text: "Low risk (RPN ≤ 3)" }, { glyph: LV.Medium, hidden: "true", text: "Medium risk (RPN 4–7)" },
-      { glyph: LV.High, hidden: "true", text: "High risk (RPN 8–14)" }, { glyph: LV.Critical, hidden: "true", text: "Critical risk (RPN ≥ 15)" }]), "legend: 4 entries, glyph + level + range (EN)", lg);
-    // Which font actually draws the glyphs (Inter / Plex are latin-subset webfonts).
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
-    await page.evaluate(() => {
-      document.querySelector("main table tbody tr td:nth-child(2) > div > div > span[aria-hidden]")?.setAttribute("data-e2e-g", "cell");
-      const t = document.querySelector("main table").parentElement.nextElementSibling;
-      t.querySelectorAll('span[aria-hidden="true"]').forEach((s, i) => s.setAttribute("data-e2e-g", "legend" + i));
-      document.querySelectorAll("main table tbody tr").forEach((tr, i) => tr.querySelectorAll('span[aria-hidden="true"]').forEach((s, j) => s.setAttribute("data-e2e-g", `c${i}${j}`)));
-    });
-    const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
-    const { nodeIds } = await cdp.send("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-e2e-g]" });
-    const fonts = {};
-    for (const nid of nodeIds) {
-      const { attributes } = await cdp.send("DOM.getAttributes", { nodeId: nid });
-      const tag = attributes[attributes.indexOf("data-e2e-g") + 1];
-      const { fonts: f } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId: nid });
-      fonts[tag] = f.map((x) => `${x.familyName}${x.isCustomFont ? "*" : ""}:${x.glyphCount}`).join(",");
-    }
-    const uniq = [...new Set(Object.values(fonts))];
-    c.step(`glyph fonts (family:glyphs, *=webfont): ${JSON.stringify(uniq)}`);
-    c.expect(Object.values(fonts).every((f) => f && !/LastResort|^$/.test(f) && /:\d+/.test(f)), "every glyph is drawn by a real font (no tofu)", fonts);
+    c.expect(JSON.stringify(lg.map((l) => [l.shape, l.hidden, l.painted, l.text])) === JSON.stringify([
+      [LV.Low, "true", true, "Low risk (RPN ≤ 3)"], [LV.Medium, "true", true, "Medium risk (RPN 4–7)"],
+      [LV.High, "true", true, "High risk (RPN 8–14)"], [LV.Critical, "true", true, "Critical risk (RPN ≥ 15)"]]), "legend: 4 entries, painted shape + level + range (EN)", lg);
+    lg.forEach((l, i) => sigs[["Low", "Medium", "High", "Critical"][i]].add(l.sig));
+    const perLevel = Object.fromEntries(Object.entries(sigs).map(([k, v]) => [k, v.size]));
+    const distinct = new Set(Object.values(sigs).map((v) => [...v][0])).size;
+    c.expect(Object.values(perLevel).every((n) => n === 1) && Object.keys(perLevel).length === 4 && distinct === 4, "one shape per level (same drawing in every cell and the legend), four distinct shapes", perLevel);
+    const noText = await page.evaluate(() => /[\u2190-\u21ff\u2460-\u27bf\u{1f300}-\u{1faff}]/u.test(document.querySelector("main").innerText));
+    c.expect(!noText, "no arrow / geometric / emoji characters left in the Risk Matrix text");
     await shot(c, page, "matrix-en");
 
     // Portuguese.
@@ -2978,7 +2983,7 @@ async function main() {
     });
     const cramped = mm.flat().filter((x) => !x.fits);
     c.step(`390px: cell header width ${Math.min(...mm.flat().map((x) => x.headW))}-${Math.max(...mm.flat().map((x) => x.headW))}px`);
-    c.expect(cramped.length === 0, "390px: RPN and glyph fit side by side in every cell", cramped.slice(0, 3));
+    c.expect(cramped.length === 0 && mm.flat().every((x) => x.mark?.painted), "390px: RPN and shape fit side by side in every cell, shapes painted", cramped.slice(0, 3));
     c.expect(lay.wrapOverflow <= 0 && lay.docOverflow <= 0 && lay.mainOverflow <= 0, "390px: matrix causes no horizontal overflow", lay);
     await shot(c, mob, "matrix-390");
     await mob.context().close();
@@ -4067,7 +4072,7 @@ async function main() {
     }
   });
 
-  await run("e5ui", "E5: Button/Notice — Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; × delete buttons named in EN/PT", async (c) => {
+  await run("e5ui", "E5: Button/Notice — Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; X delete buttons (icon only) named in EN/PT", async (c) => {
     const E5 = "00000000-0000-0000-0000-0000000e5a01";
     const NAME = "E2E E5 UI Target";
     await sql(
@@ -4136,8 +4141,10 @@ async function main() {
       }
       await page.waitForTimeout(1200);
     };
-    // aria-labels of the modal's × buttons (for failure details).
-    const xLabels = (page) => modal(page).locator("button", { hasText: /^×$/ }).evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")));
+    // aria-labels of the modal's icon-only X buttons (for failure details).
+    const xLabels = (page) => modal(page).locator("button:has(svg.lucide-x)").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")));
+    // An icon-only X button: one X icon (SVG), no text.
+    const xOnly = async (b) => (await b.locator("svg.lucide-x").count()) === 1 && (await b.innerText()).trim() === "";
 
     try {
       // ---- 1. sign-in form: the button is a submit button, Enter submits,
@@ -4196,7 +4203,7 @@ async function main() {
       }
       await fp.context().close();
 
-      // ---- 3. desktop 1440 px: text sizes on every main screen; the ×
+      // ---- 3. desktop 1440 px: text sizes on every main screen; the X
       //      delete buttons have names.
       const desk = await newPage(c, "admin1-1440");
       await login(desk, "admin1@test.local");
@@ -4207,8 +4214,8 @@ async function main() {
         if (scope === ".modal-overlay") {
           const ev = modal(desk).getByRole("button", { name: "Delete evidence", exact: true });
           const rd = modal(desk).getByRole("button", { name: "Delete reading", exact: true });
-          c.expect((await ev.count()) === 1 && (await ev.innerText()).trim() === "×", "evidence × is named 'Delete evidence'", await xLabels(desk));
-          c.expect((await rd.count()) === 2 && (await rd.first().innerText()).trim() === "×", "each reading × is named 'Delete reading'", await xLabels(desk));
+          c.expect((await ev.count()) === 1 && (await xOnly(ev)), "evidence X is named 'Delete evidence'", await xLabels(desk));
+          c.expect((await rd.count()) === 2 && (await xOnly(rd.first())) && (await xOnly(rd.last())), "each reading X is named 'Delete reading'", await xLabels(desk));
           // Confirmation (Button + data-autofocus): the safe choice gets focus.
           desk.__manualDialogs = true;
           await rd.first().click();
@@ -4245,13 +4252,13 @@ async function main() {
       }
       c.expect(total >= 15, `Buttons measured on the phone screens: ${total}`);
 
-      // ---- 5. Portuguese: the × delete buttons are named in PT.
+      // ---- 5. Portuguese: the X delete buttons are named in PT.
       await mob.context().addCookies([{ name: "ss75-cmp.lang", value: "pt", url: APP }]);
       await visit(mob, `/dashboard?tab=zones&item=${E5}`, ".modal-overlay");
       const evPt = modal(mob).getByRole("button", { name: "Excluir evidência", exact: true });
       const rdPt = modal(mob).getByRole("button", { name: "Excluir leitura", exact: true });
-      c.expect((await evPt.count()) === 1, "PT: evidence × is named 'Excluir evidência'", await xLabels(mob));
-      c.expect((await rdPt.count()) === 2, "PT: each reading × is named 'Excluir leitura'", await xLabels(mob));
+      c.expect((await evPt.count()) === 1, "PT: evidence X is named 'Excluir evidência'", await xLabels(mob));
+      c.expect((await rdPt.count()) === 2, "PT: each reading X is named 'Excluir leitura'", await xLabels(mob));
       b = await buttonSizes(mob, ".modal-overlay");
       c.expect(b.list.length > 0 && b.list.every((x) => x.h >= 44), `PT 390 px item modal: all ${b.list.length} Buttons >= 44 px tall`, b.list.filter((x) => x.h < 44));
       await shot(c, mob, "pt-modal");

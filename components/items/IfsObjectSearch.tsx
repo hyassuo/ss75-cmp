@@ -1,8 +1,10 @@
 "use client";
 
 import { useId, useRef, useState, type KeyboardEvent } from "react";
+import { X } from "lucide-react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
 import type { IfsObject } from "@/lib/types/domain";
 import { useLang } from "@/lib/context/LangContext";
@@ -64,7 +66,7 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
     onSelect(null);
   }
 
-  // Combobox keyboard model: ↓/↑ move through the results, Enter picks,
+  // Combobox keyboard model: ArrowDown/ArrowUp move through the results, Enter picks,
   // Escape closes the list (without closing the surrounding modal).
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (!open || res.length === 0) return;
@@ -116,6 +118,9 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
             onClick={clear}
             aria-label={t("ifs.clear")}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
               position: "absolute",
               right: 4,
               minWidth: 32,
@@ -126,11 +131,10 @@ export function IfsObjectSearch({ value, onSelect }: Props) {
               border: "none",
               color: DS.text3,
               cursor: "pointer",
-              fontSize: DS.fs.lg,
               padding: 0,
             }}
           >
-            ×
+            <Icon icon={X} size="md" />
           </button>
         )}
         {loading && (

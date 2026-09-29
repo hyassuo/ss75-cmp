@@ -56,7 +56,7 @@ const en = {
   "nav.audit": "Audit Log",
   "nav.newItem": "+ New Item",
   "nav.addItem": "+ Item",
-  "nav.signOut": "⏻  Sign out",
+  "nav.signOut": "Sign out",
   "nav.signOutConfirm": "Sign out?",
 
   // Footer
@@ -356,7 +356,7 @@ const en = {
   "f.setPC": "Set P + C",
   "f.imageReady": "Image ready — click to run AI corrosion analysis.",
   "f.uploadFirst": "Upload an image to enable AI analysis.",
-  "f.analyse": "🔍 Analyse with AI",
+  "f.analyse": "Analyse with AI",
   "f.analysing": "Analysing...",
 
   // Probability descriptions (from MSC_2123.0_A)
@@ -526,7 +526,7 @@ const pt: Translations = {
   "nav.audit": "Auditoria",
   "nav.newItem": "+ Novo Item",
   "nav.addItem": "+ Item",
-  "nav.signOut": "⏻  Sair",
+  "nav.signOut": "Sair",
   "nav.signOutConfirm": "Encerrar sessão?",
 
   // Footer
@@ -827,7 +827,7 @@ const pt: Translations = {
   "f.imageReady":
     "Imagem pronta — clique para executar a análise de corrosão por IA.",
   "f.uploadFirst": "Anexe uma imagem para habilitar a análise por IA.",
-  "f.analyse": "🔍 Analisar com IA",
+  "f.analyse": "Analisar com IA",
   "f.analysing": "Analisando...",
 
   // Probability descriptions

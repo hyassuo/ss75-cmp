@@ -1,8 +1,10 @@
 "use client";
 
 import { useId, useState } from "react";
+import { X } from "lucide-react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
 import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
@@ -370,14 +372,16 @@ export function ReadingsPanel({
                           onClick={() => void remove(r.id)}
                           aria-label={t("readings.delete")}
                           style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                             background: "none",
                             border: "none",
                             color: DS.red,
                             cursor: "pointer",
-                            fontSize: DS.fs.lg,
                           }}
                         >
-                          ×
+                          <Icon icon={X} size="md" />
                         </button>
                       )}
                     </td>

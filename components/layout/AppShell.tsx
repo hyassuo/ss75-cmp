@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { Topbar } from "@/components/layout/Topbar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
@@ -111,16 +113,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                     onClick={clearError}
                     aria-label={t("common.dismiss")}
                     style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                       background: "none",
                       border: "none",
                       color: DS.red,
-                      fontSize: DS.fs.h3,
                       cursor: "pointer",
                       minWidth: 32,
                       minHeight: 32,
                     }}
                   >
-                    ×
+                    <Icon icon={X} size="md" />
                   </button>
                 </Notice>
               )}

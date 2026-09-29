@@ -1,7 +1,9 @@
 "use client";
 
 import { useId } from "react";
+import { Check } from "lucide-react";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
 
 interface Props {
@@ -42,6 +44,10 @@ export function YesNoToggle({
         onClick={() => onChange(isYes)}
         style={{
           flex: 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
           background: c.bg,
           color: c.fg,
           border: (on ? "2px solid " : "1px solid ") + c.bd,
@@ -53,7 +59,7 @@ export function YesNoToggle({
           fontWeight: 700,
         }}
       >
-        {on ? "✓ " : ""}
+        {on && <Icon icon={Check} size="md" />}
         {isYes ? yesLabel : noLabel}
       </button>
     );

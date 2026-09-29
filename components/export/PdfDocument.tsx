@@ -155,7 +155,7 @@ export function PdfDocument({
               lastSub = it.subarea;
               rows.push(
                 <Text key={`s${idx}`} style={s.subarea}>
-                  {it.subarea ? `▸ ${it.subarea}` : "▸ —"}
+                  {it.subarea || "No sub-area"}
                 </Text>
               );
             }

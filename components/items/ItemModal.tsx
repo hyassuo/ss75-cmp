@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Circle, CircleCheck, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Section } from "@/components/ui/Section";
 import { Input } from "@/components/ui/Input";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { EvidencePanel } from "@/components/items/EvidencePanel";
 import { ReadingsPanel } from "@/components/items/ReadingsPanel";
 import { HistoryPanel } from "@/components/items/HistoryPanel";
@@ -592,10 +594,12 @@ function ItemModalInner({
           onClick={() => void cancel()}
           aria-label={t("common.close")}
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
             background: "none",
             border: "1px solid " + DS.bord,
             color: DS.text3,
-            fontSize: DS.fs.h3,
             cursor: "pointer",
             borderRadius: 7,
             minWidth: 44,
@@ -603,7 +607,7 @@ function ItemModalInner({
             flexShrink: 0,
           }}
         >
-          ×
+          <Icon icon={X} size="lg" />
         </button>
       </div>
 
@@ -741,7 +745,7 @@ function ItemModalInner({
                 aria-label={t("common.cancel")}
                 style={{ padding: "0 12px" }}
               >
-                ×
+                <Icon icon={X} size="md" />
               </Button>
             </div>
           )}
@@ -806,15 +810,17 @@ function ItemModalInner({
               onClick={() => setPendingAiReading(null)}
               aria-label={t("modal.discardAiReading")}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
                 background: "none",
                 border: "none",
                 color: DS.blu,
                 cursor: "pointer",
-                fontSize: DS.fs.lg,
                 padding: "0 2px",
               }}
             >
-              ×
+              <Icon icon={X} size="md" />
             </button>
           </Notice>
         )}
@@ -873,7 +879,7 @@ function ItemModalInner({
               aria-label={t("common.dismiss")}
               style={bannerBtn(DS.red)}
             >
-              ×
+              <Icon icon={X} size="md" />
             </Button>
           </Notice>
         )}
@@ -916,9 +922,7 @@ function ItemModalInner({
                   : undefined
               }
             >
-              <span style={{ fontSize: DS.fs.lg }}>
-                {f.status === "OK" && f.resolved_at ? "✓" : "○"}
-              </span>
+              <Icon icon={f.status === "OK" && f.resolved_at ? CircleCheck : Circle} size="md" />
               {f.status === "OK" && f.resolved_at
                 ? t("modal.resolved") : t("modal.markResolved")}
             </Button>

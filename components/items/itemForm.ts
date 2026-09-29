@@ -14,7 +14,7 @@ import type {
   MaterialLossBand,
 } from "@/lib/types/domain";
 
-// Pure form logic of the item modal: item ⇄ form mapping, the diff that is
+// Pure form logic of the item modal: item/form mapping both ways, the diff that is
 // actually saved, and the rebase used for drafts and conflicts. Kept free
 // of React so it can be unit-tested (tests/itemForm.test.ts) — this is the
 // code that decides what gets written over whose changes.
