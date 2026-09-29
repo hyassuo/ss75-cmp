@@ -65,6 +65,8 @@ export function EvidencePanel({
   const [files, setFiles] = useState<File[]>([]);
   const file = files[0] ?? null;
   const [progress, setProgress] = useState("");
+  // Photos of the current pick still being compressed (0 = none).
+  const [preparing, setPreparing] = useState(0);
   const [b64, setB64] = useState<string | null>(null);
   const [compressInfo, setCompressInfo] = useState("");
   const [mediaType, setMediaType] = useState<string>("");
@@ -89,9 +91,31 @@ export function EvidencePanel({
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // Base64 of the head photo for the AI step, re-read whenever the head
+  // changes (a new pick, or the queue moving on after a partial save) so
+  // the analysis always describes the photo it will be saved with.
   useEffect(() => {
-    onDirtyChange?.(!!file || !!desc.trim());
-  }, [file, desc, onDirtyChange]);
+    setB64(null);
+    setMediaType("");
+    setAiResult(null);
+    setAiErr("");
+    if (!file || !file.type.startsWith("image")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setB64((reader.result as string).split(",")[1]);
+      setMediaType(file.type);
+    };
+    reader.readAsDataURL(file);
+    return () => reader.abort();
+  }, [file]);
+
+  useEffect(() => {
+    onDirtyChange?.(!!file || !!desc.trim() || preparing > 0);
+  }, [file, desc, preparing, onDirtyChange]);
+
+  // Picking, the AI call and saving all work on the queue's head photo:
+  // one at a time, so none of them acts on a photo that another replaced.
+  const busy = preparing > 0 || uploading || aiLoading;
 
   useEffect(() => {
     let active = true;
@@ -124,45 +148,37 @@ export function EvidencePanel({
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
+    // Cleared so that picking the same file(s) again still fires onChange.
+    e.target.value = "";
     if (!picked.length) return;
     setCompressInfo("");
     setSaveErr("");
-    const tooMany = picked.length > MAX_BATCH;
+    const kept = picked.slice(0, MAX_BATCH);
+    setPreparing(kept.length);
     // Compress phone-sized photos (5–8 MB) down to ~300–500 KB before any
     // upload / base64 conversion. PDFs and small images pass through.
     const out: File[] = [];
     let before = 0;
     let after = 0;
     let anyCompressed = false;
-    for (const raw of picked.slice(0, MAX_BATCH)) {
-      const r = await compressImage(raw);
-      out.push(r.file);
-      before += r.originalBytes;
-      after += r.finalBytes;
-      anyCompressed ||= r.compressed;
+    try {
+      for (const raw of kept) {
+        const r = await compressImage(raw);
+        out.push(r.file);
+        before += r.originalBytes;
+        after += r.finalBytes;
+        anyCompressed ||= r.compressed;
+      }
+    } finally {
+      setPreparing(0);
     }
-    const fl = out[0];
     setFiles(out);
-    setAiResult(null);
-    setAiErr("");
     if (anyCompressed) {
       setCompressInfo(
         `${t("f.optimised")} ${(before / 1024 / 1024).toFixed(1)} MB → ${(after / 1024).toFixed(0)} KB`
       );
     }
-    if (tooMany) setSaveErr(t("evidence.batchLimit", MAX_BATCH));
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      if (fl.type.startsWith("image")) {
-        setB64(result.split(",")[1]);
-        setMediaType(fl.type);
-      } else {
-        setB64(null);
-        setMediaType("");
-      }
-    };
-    reader.readAsDataURL(fl);
+    if (picked.length > MAX_BATCH) setSaveErr(t("evidence.batchLimit", MAX_BATCH));
   }
 
   async function runAI() {
@@ -250,7 +266,7 @@ export function EvidencePanel({
   }
 
   async function add() {
-    if (!desc.trim() || uploading) return;
+    if (!desc.trim() || busy) return;
     setUploading(true);
     setSaveErr("");
     // Saved one by one, dropping each from the queue as it lands: a failure
@@ -264,25 +280,21 @@ export function EvidencePanel({
         // Only the first (previewed) photo carries the AI analysis.
         const res = await saveOne(queue[0], saved === 0 ? aiResult : null);
         if (!res.ok) {
-          setSaveErr(res.error);
+          // Say what did land, so nobody re-picks (and duplicates) those.
+          setSaveErr(
+            saved ? `${res.error} ${t("evidence.batchKept", saved, total)}` : res.error
+          );
           return;
         }
         queue.shift();
         saved += 1;
         setFiles(queue.filter((f): f is File => f !== null));
-        if (saved === 1) setAiResult(null);
       }
       toast(total > 1 ? t("toast.evidencesSaved", total) : t("toast.evidenceSaved"));
       setDate(today());
       setDesc("");
       setFiles([]);
-      setB64(null);
-      setMediaType("");
       setCompressInfo("");
-      setAiResult(null);
-      setAiErr("");
-      if (fileRef.current) fileRef.current.value = "";
-      if (cameraRef.current) cameraRef.current.value = "";
     } catch (e) {
       setSaveErr(
         t("evidence.saveFailed") + " " + (e instanceof Error ? e.message : String(e))
@@ -362,14 +374,16 @@ export function EvidencePanel({
             <button
               type="button"
               onClick={() => cameraRef.current?.click()}
-              style={pickBtn(true)}
+              disabled={busy}
+              style={pickBtn(true, busy)}
             >
               📷 {t("f.takePhoto")}
             </button>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              style={pickBtn(false)}
+              disabled={busy}
+              style={pickBtn(false, busy)}
             >
               🖼 {t("f.fromGallery")}
             </button>
@@ -418,6 +432,12 @@ export function EvidencePanel({
               )}
             </div>
           )}
+          <div
+            role="status"
+            style={{ fontSize: 11, color: DS.text3, marginTop: preparing ? 6 : 0 }}
+          >
+            {preparing > 0 && t("evidence.preparing", preparing)}
+          </div>
           {compressInfo && (
             <div style={{ fontSize: 10, color: DS.grn, marginTop: 6 }}>
               {compressInfo}
@@ -431,7 +451,7 @@ export function EvidencePanel({
             <Label>{t("f.step2")}</Label>
             <button
               onClick={() => void runAI()}
-              disabled={aiLoading}
+              disabled={busy}
               style={{
                 width: "100%",
                 background: aiLoading ? "transparent" : DS.vio,
@@ -440,7 +460,8 @@ export function EvidencePanel({
                 borderRadius: 7,
                 padding: "10px 14px",
                 fontWeight: 700,
-                cursor: aiLoading ? "default" : "pointer",
+                cursor: busy ? "default" : "pointer",
+                opacity: busy && !aiLoading ? 0.6 : 1,
                 fontSize: 13,
                 fontFamily: DS.sans,
                 transition: DS.transition,
@@ -478,7 +499,7 @@ export function EvidencePanel({
         {/* Step 4 — save */}
         <button
           onClick={() => void add()}
-          disabled={uploading || !desc.trim()}
+          disabled={busy || !desc.trim()}
           style={{
             width: "100%",
             background: !desc.trim() ? DS.bord : DS.blu,
@@ -487,9 +508,9 @@ export function EvidencePanel({
             borderRadius: 7,
             padding: "12px 18px",
             fontWeight: 700,
-            cursor: uploading || !desc.trim() ? "default" : "pointer",
+            cursor: busy || !desc.trim() ? "default" : "pointer",
             fontSize: 14,
-            opacity: uploading ? 0.6 : 1,
+            opacity: busy ? 0.6 : 1,
           }}
         >
           {uploading
@@ -498,8 +519,13 @@ export function EvidencePanel({
               ? t("evidence.saveMany", files.length)
               : t("f.saveEvidence")}
         </button>
+        {/* The label change above is not announced; this is. */}
+        <div role="status" className="sr-only">
+          {progress}
+        </div>
         {saveErr && (
           <div
+            role="alert"
             style={{
               background: DS.redBg,
               border: "1px solid " + DS.redBord,
@@ -677,7 +703,7 @@ export function EvidencePanel({
   );
 }
 
-function pickBtn(primary: boolean): React.CSSProperties {
+function pickBtn(primary: boolean, disabled: boolean): React.CSSProperties {
   return {
     background: primary ? DS.vio : DS.sur,
     color: primary ? "#fff" : DS.text,
@@ -687,6 +713,7 @@ function pickBtn(primary: boolean): React.CSSProperties {
     padding: "8px 10px",
     fontSize: 13,
     fontWeight: 700,
-    cursor: "pointer",
+    cursor: disabled ? "default" : "pointer",
+    opacity: disabled ? 0.6 : 1,
   };
 }

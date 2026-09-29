@@ -171,6 +171,9 @@ const en = {
   "evidence.batchLimit": (n: number) => `Up to ${n} photos at a time — only the first ${n} were kept.`,
   "evidence.batchProgress": (i: number, n: number) => `Saving ${i} of ${n}…`,
   "evidence.morePhotos": (n: number) => `+${n} more`,
+  "evidence.preparing": (n: number) => (n === 1 ? "Preparing the photo…" : `Preparing ${n} photos…`),
+  "evidence.batchKept": (saved: number, n: number) =>
+    `(${saved} of ${n} saved — Save again for the other ${n - saved}.)`,
   "evidence.saveMany": (n: number) => `Save ${n} evidence records`,
   "toast.evidencesSaved": (n: number) => `${n} evidence records saved`,
   "evidence.saveFailed": "Evidence not saved:",
@@ -622,8 +625,11 @@ const pt: Translations = {
   "evidence.confirmDelete": "Excluir esta evidência e a foto?",
   "evidence.batchLimit": (n: number) => `Até ${n} fotos por vez — só as ${n} primeiras foram mantidas.`,
   "evidence.batchProgress": (i: number, n: number) => `Salvando ${i} de ${n}…`,
-  "evidence.morePhotos": (n: number) => `+${n} fotos`,
-  "evidence.saveMany": (n: number) => `Salvar ${n} evidências`,
+  "evidence.morePhotos": (n: number) => `+${n} ${n === 1 ? "arquivo" : "arquivos"}`,
+  "evidence.preparing": (n: number) => (n === 1 ? "Preparando a foto…" : `Preparando ${n} fotos…`),
+  "evidence.batchKept": (saved: number, n: number) =>
+    `(${saved} de ${n} salvas — salve de novo para as outras ${n - saved}.)`,
+  "evidence.saveMany": (n: number) => `Salvar ${n} registros de evidência`,
   "toast.evidencesSaved": (n: number) => `${n} evidências salvas`,
   "evidence.saveFailed": "Evidência não salva:",
   "common.deleteFailed": "Não foi possível excluir:",
