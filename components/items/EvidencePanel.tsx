@@ -687,7 +687,7 @@ export function EvidencePanel({
               style={{
                 background: "none",
                 border: "none",
-                color: "rgba(192,57,43,0.5)",
+                color: DS.red,
                 cursor: "pointer",
                 fontSize: 16,
                 padding: "0 4px",

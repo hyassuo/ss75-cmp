@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { useData } from "@/lib/context/DataContext";
 import { fmtCompact, today, isOverdue, daysUntil } from "@/lib/utils/format";
@@ -725,7 +725,7 @@ export function ExportTab() {
                 return (
                   <tr
                     key={it.id}
-                    style={{ borderBottom: "1px solid #f1f5f9" }}
+                    style={{ borderBottom: "1px solid " + tint(DS.bord, 60) }}
                   >
                     <td
                       style={{

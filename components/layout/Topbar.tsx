@@ -10,9 +10,9 @@ import { useLang } from "@/lib/context/LangContext";
 import { ItemSearch } from "@/components/layout/ItemSearch";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
-// Subtle band tones for the two-tone header.
-const TOP_BAND = DS.sbBg; // #2c3e52
-const BOTTOM_BAND = "#243446"; // slightly darker, gives the banded look
+// Subtle band tones for the two-tone header (dark in both themes).
+const TOP_BAND = DS.sbBg;
+const BOTTOM_BAND = DS.sbBand; // slightly darker, gives the banded look
 
 export function Topbar() {
   // "Today" in the device's time zone: the server renders in UTC, so the
@@ -130,7 +130,7 @@ export function Topbar() {
                     onClick={() => setLang(l)}
                     aria-pressed={active}
                     style={{
-                      background: active ? "#3b5570" : "transparent",
+                      background: active ? DS.sbAct : "transparent",
                       color: active ? "#ffffff" : DS.sbTxt2,
                       border: "none",
                       borderRadius: 4,
@@ -261,7 +261,7 @@ export function Topbar() {
                 aria-pressed={active}
                 className="tb-pill"
                 style={{
-                  background: active ? "#3b5570" : "transparent",
+                  background: active ? DS.sbAct : "transparent",
                   color: active ? "#ffffff" : DS.sbTxt2,
                   fontWeight: active ? 700 : 500,
                   fontFamily: DS.sans,

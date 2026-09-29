@@ -55,7 +55,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         style={{
           ...S.inp,
           ...(mono ? S.mono : {}),
-          background: disabled ? "#eef2f7" : DS.sur2,
+          background: disabled ? DS.bg : DS.sur2,
           color: disabled ? DS.text3 : DS.text,
           ...(error ? { borderColor: DS.red } : {}),
         }}

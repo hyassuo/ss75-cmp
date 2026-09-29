@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
-import { parseTheme, THEME_COOKIE, type Theme } from "@/lib/theme/theme";
+import { parseTheme, THEME_COLOR, THEME_COOKIE, type Theme } from "@/lib/theme/theme";
+import { useServerTheme } from "@/lib/theme/ThemeContext";
 
 type Choice = Theme | "system";
 const NEXT: Record<Choice, Choice> = { system: "light", light: "dark", dark: "system" };
@@ -18,7 +19,10 @@ const GLYPH: Record<Choice, string> = {
 // applied at once through <html data-theme>.
 export function ThemeToggle() {
   const { t } = useLang();
-  const [choice, setChoice] = useState<Choice>("system");
+  // Server cookie first (right in the server HTML); then <html data-theme>,
+  // which is newer when the root layout was not re-rendered since a change.
+  const serverChoice = useServerTheme();
+  const [choice, setChoice] = useState<Choice>(serverChoice ?? "system");
 
   useEffect(() => {
     setChoice(parseTheme(document.documentElement.dataset.theme) ?? "system");
@@ -35,6 +39,13 @@ export function ThemeToggle() {
       root.dataset.theme = next;
       document.cookie = `${THEME_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
     }
+    // Browser UI colour: the server sets it per theme on the next load.
+    const dark =
+      next === "dark" ||
+      (next === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document
+      .querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+      .forEach((m) => (m.content = THEME_COLOR[dark ? "dark" : "light"]));
   }
 
   const label = t("theme.label", t(`theme.${choice}`));

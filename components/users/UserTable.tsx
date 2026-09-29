@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { S } from "@/lib/design/styles";
-import { DS } from "@/lib/design/tokens";
+import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { fmt } from "@/lib/utils/format";
 import { createClient } from "@/lib/supabase/client";
@@ -194,7 +194,7 @@ export function UserTable({ currentUserId }: { currentUserId: string }) {
                 return (
                   <tr
                     key={u.id}
-                    style={{ borderBottom: "1px solid #f1f5f9" }}
+                    style={{ borderBottom: "1px solid " + tint(DS.bord, 60) }}
                   >
                     <td style={{ padding: "8px 10px", color: DS.text }}>
                       {u.email}

@@ -14,7 +14,7 @@ export function Gauge({ score, size = 52 }: GaugeProps) {
           width: size,
           height: size,
           borderRadius: "50%",
-          border: "3px solid #dde3ec",
+          border: "3px solid " + DS.bord,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

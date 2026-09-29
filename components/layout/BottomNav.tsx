@@ -87,7 +87,7 @@ export function BottomNav() {
           type="button"
           onClick={openNewItem}
           aria-label={t("nav.newItem")}
-          style={{ ...item(false), color: "#fff" }}
+          style={{ ...item(false), color: DS.onAccent }}
         >
           <span
             aria-hidden="true"

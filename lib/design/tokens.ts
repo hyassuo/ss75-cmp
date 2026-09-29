@@ -45,6 +45,7 @@ export const DS = {
 
   // Dark topbar / sidebar
   sbBg: "var(--ds-sb-bg)",
+  sbBand: "var(--ds-sb-band)", // lower band of the top bar, a shade darker
   sbBord: "var(--ds-sb-bord)",
   sbTxt: "var(--ds-sb-txt)",
   sbTxt2: "var(--ds-sb-txt2)",

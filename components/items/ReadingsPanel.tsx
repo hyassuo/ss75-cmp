@@ -336,7 +336,7 @@ export function ReadingsPanel({
                 return (
                   <tr
                     key={r.id}
-                    style={{ borderBottom: "1px solid #f1f5f9" }}
+                    style={{ borderBottom: "1px solid " + tint(DS.bord, 60) }}
                   >
                     <td
                       style={{
@@ -379,7 +379,7 @@ export function ReadingsPanel({
                           style={{
                             background: "none",
                             border: "none",
-                            color: "rgba(192,57,43,0.5)",
+                            color: DS.red,
                             cursor: "pointer",
                             fontSize: 14,
                           }}
