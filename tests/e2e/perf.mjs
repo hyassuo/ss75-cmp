@@ -104,35 +104,41 @@ async function once(browser) {
 
   // ---- 2. sign in -> dashboard with real data
   const app = watchApp(page);
-  let itemsBytes = 0, itemsBr = 0, itemPages = 0;
-  page.on("response", async (r) => {
-    if (!r.url().startsWith(`${GW}/rest/v1/items?select=`) || r.request().method() !== "GET") return;
-    const body = await r.body().catch(() => null);
-    if (!body) return;
-    itemPages += 1;
-    itemsBytes += body.length;
-    itemsBr += br(body);
-  });
-  await page.locator('input[type="email"]').fill(EMAIL);
-  await page.locator('input[type="password"]').fill(PASSWORD);
-  const t0 = Date.now();
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await page.waitForURL(/\/dashboard/, { timeout: 60000 });
-  await page.waitForFunction(
-    () => (document.querySelector("main.app-content")?.innerText || "").trim().length > 40,
-    null,
-    { timeout: 60000 }
-  );
-  const t1 = Date.now();
-  await page.waitForTimeout(300); // responses still being read
-  const signLog = (await gwLog(t0)).filter((l) => l.t <= t1);
-  out.signIn = {
-    wallMs: t1 - t0,
-    ...supabaseStats(signLog),
-    appDocOrRsc: app.filter((a) => a.t <= t1 && (a.kind === "document" || a.kind === "rsc")).map((a) => `${a.kind} ${a.url}`),
-    appRequests: app.filter((a) => a.t <= t1).length,
-    itemPages, itemsKb: kb(itemsBytes), itemsKbBrotli: kb(itemsBr),
+  const signIn = async () => {
+    let itemsBytes = 0, itemsBr = 0, itemPages = 0;
+    const onItems = async (r) => {
+      if (!r.url().startsWith(`${GW}/rest/v1/items?select=`) || r.request().method() !== "GET") return;
+      const body = await r.body().catch(() => null);
+      if (!body) return;
+      itemPages += 1;
+      itemsBytes += body.length;
+      itemsBr += br(body);
+    };
+    page.on("response", onItems);
+    const a0 = app.length;
+    await page.locator('input[type="email"]').fill(EMAIL);
+    await page.locator('input[type="password"]').fill(PASSWORD);
+    const t0 = Date.now();
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 60000 });
+    await page.waitForFunction(
+      () => (document.querySelector("main.app-content")?.innerText || "").trim().length > 40,
+      null,
+      { timeout: 60000 }
+    );
+    const t1 = Date.now();
+    await page.waitForTimeout(300); // responses still being read
+    page.off("response", onItems);
+    const during = app.slice(a0).filter((a) => a.t <= t1);
+    return {
+      wallMs: t1 - t0,
+      ...supabaseStats((await gwLog(t0)).filter((l) => l.t <= t1)),
+      appDocOrRsc: during.filter((a) => a.kind === "document" || a.kind === "rsc").map((a) => `${a.kind} ${a.url}`),
+      appRequests: during.length,
+      itemPages, itemsKb: kb(itemsBytes), itemsKbBrotli: kb(itemsBr),
+    };
   };
+  out.signIn = await signIn();
 
   // ---- 3. warm navigation: client tabs, then a server-rendered admin page
   await page.waitForLoadState("networkidle");
@@ -168,6 +174,11 @@ async function once(browser) {
     () => page.locator('a[href="/users"]').first().click(),
     () => page.getByText("viewer1@test.local").first().waitFor({ timeout: 60000 })
   );
+
+  // ---- 4. the same device signs in again (HTTP cache and storage kept)
+  await ctx.clearCookies();
+  await page.goto(`${APP}/login`, { waitUntil: "networkidle" });
+  out.signInAgain = await signIn();
   await ctx.close();
   return out;
 }
@@ -203,6 +214,8 @@ async function main() {
     ["sign-in -> data: requests to the app", m("signIn", "appRequests")],
     ["sign-in -> data: item pages", m("signIn", "itemPages")],
     ["sign-in -> data: items KB (raw / brotli)", `${m("signIn", "itemsKb")} / ${m("signIn", "itemsKbBrotli")}`],
+    ["sign-in again, same device: wall (ms)", m("signInAgain", "wallMs")],
+    ["sign-in again, same device: serial Supabase round-trips", m("signInAgain", "serialRoundTrips")],
     ["warm tab -> Zones (ms)", m("tabZones", "wallMs")],
     ["warm tab -> Risk (ms)", m("tabRisk", "wallMs")],
     ["warm nav -> /users (ms)", m("navUsers", "wallMs")],
