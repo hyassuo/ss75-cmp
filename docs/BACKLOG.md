@@ -1,8 +1,31 @@
 # Backlog — SS-75 CMP
 
-Estado em 28/09/2026, após a v1.17.0 (PR #4). Reúne o que ficou em aberto
+Estado em 29/09/2026, após a v1.20.0 (PR #28). Reúne o que ficou em aberto
 da revisão completa (segurança + UI/UX) e das auditorias das etapas 1–4.
 Cada item foi conferido no código desta versão.
+
+## Ações pendentes do responsável (resumo)
+
+Tudo o que hoje depende de você, em ordem de prioridade. Os detalhes de cada
+item estão na seção indicada; ao concluir, marque aqui e avise para o item ir
+para "Concluídos".
+
+| # | P | O quê | Onde |
+|---|---|-------|------|
+| A6 | P1 | Configurar SMTP próprio no Supabase | Seção A |
+| A7 | P1 | Liberar `https://ss75-cmp.vercel.app/auth/reset` nas Redirect URLs | Seção A |
+| A1 | P1 | Desativar o cadastro público e exigir confirmação de e-mail | Seção A |
+| A2 | P1 | Secrets do GitHub + rodar o workflow **Backup** uma vez | Seção A |
+| A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Seção A |
+| A3 | P2 | Ensaiar um restore | Seção A |
+| A4 | P2 | `supabase migration repair` | Seção A |
+| C5 | P2 | Ativar MFA no Supabase (depois eu faço a parte do app) | Seção C |
+| F1 | P2 | Criar conta no Sentry e passar o DSN | Seção F |
+| F2 | P2 | Gerar um token de acesso do Supabase para o CI | Seção F |
+| C7 | P3 | Informar o prazo desejado para os links das fotos | Seção C |
+| A10 | P3 | Node.js 22.x nas configurações da Vercel | Seção A |
+| A5 | P3 | PITR, se o plano permitir | Seção A |
+| D3 | P3 | Definir os requisitos do módulo de espessura (UT) | Seção D |
 
 Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der.
 
@@ -17,7 +40,6 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A5 | P3 | PITR (point-in-time recovery) | Se o plano do Supabase permitir. |
 | A6 | P1 | SMTP próprio para os e-mails de autenticação | Sem SMTP próprio o Supabase **só entrega e-mail para membros da equipe do projeto** (2 por hora, sem garantia) — reset de senha e confirmação de cadastro não chegam aos usuários. Supabase → Authentication → Emails → SMTP Settings (ex.: Resend, SendGrid, Amazon SES). |
 | A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
-| A8 | P1 | Aplicar as migrations novas no Supabase | SQL Editor, na ordem: `supabase/migrations/20260929000000_rate_limits.sql` (C4) e `supabase/migrations/20260929000100_active_reads_insert_audit.sql` (C6 + D2). Sem elas o app funciona, mas o limite de requisições fica só por instância, usuários inativos ainda leem as tabelas de referência e inclusões de leituras/evidências não são auditadas. |
 | A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Os deploys de preview (um por PR) não têm `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`: só `/login` abre, as outras páginas dão erro 500 (já era assim antes do Next 16). Vercel → Settings → Environment Variables → marcar *Preview* — de preferência apontando para um projeto Supabase de teste, não o de produção. |
 | A10 | P3 | Alinhar a versão do Node na Vercel | Vercel → Settings → Build and Deployment → Node.js Version: está 24.x, mas o app declara 22.x (`engines`, que prevalece). Mudar para 22.x só evita confusão. |
 
@@ -34,14 +56,14 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| C5 | P2 | Senhas fracas | Sem MFA e sem troca obrigatória no primeiro acesso. |
-| C7 | P3 | Links assinados de fotos valem 1 h | `components/items/EvidencePanel.tsx:101` (`3600`). Reduzir (ex.: 10 min) e renovar sob demanda. |
+| C5 | P2 | Senhas fracas | Sem MFA e sem troca obrigatória no primeiro acesso. **Sua ação:** Supabase → Authentication → Multi-Factor → habilitar TOTP. **Depois (minha parte):** tela de cadastro/validação do código no app e exigir MFA para admin. |
+| C7 | P3 | Links assinados de fotos valem 1 h | `components/items/EvidencePanel.tsx:134` (`3600`). **Sua ação:** dizer por quanto tempo uma foto aberta precisa continuar acessível (ex.: 10 min) e se links de fotos são compartilhados fora do app. **Depois (minha parte):** reduzir e renovar sob demanda. |
 
 ## D. Dados e lógica
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| D3 | P3 | Módulo de espessura (UT) para tubulações | Futuro: espessura remanescente por ponto, espessura mínima por linha, taxa curto/longo prazo (a maior vale) e vida remanescente — padrão API 570. |
+| D3 | P3 | Módulo de espessura (UT) para tubulações | Futuro: espessura remanescente por ponto, espessura mínima por linha, taxa curto/longo prazo (a maior vale) e vida remanescente — padrão API 570. **Sua ação:** quando quiser começar, definir as linhas/pontos de medição, a espessura mínima de cada linha e quem registra as medições. |
 
 ## E. UI/UX
 
@@ -51,8 +73,8 @@ _(nenhum item aberto)_
 
 | # | P | Item | Sugestão |
 |---|---|------|----------|
-| F1 | P2 | Monitoramento de erros | Sentry ou similar (precisa de conta). |
-| F2 | P2 | Tipos do banco escritos à mão | `lib/types/database.types.ts` → gerar com `supabase gen types typescript --linked` e checar no CI. |
+| F1 | P2 | Monitoramento de erros | Sentry ou similar. **Sua ação:** criar a conta/projeto (Next.js) e me passar o DSN (ele pode ir direto nas variáveis da Vercel como `NEXT_PUBLIC_SENTRY_DSN`). **Depois (minha parte):** integrar e ajustar o CSP. |
+| F2 | P2 | Tipos do banco escritos à mão | `lib/types/database.types.ts` → gerar com `supabase gen types typescript --linked` e checar no CI. **Sua ação:** criar um token em supabase.com → Account → Access Tokens e salvar como secret `SUPABASE_ACCESS_TOKEN` no GitHub (Settings → Secrets → Actions). **Depois (minha parte):** job no CI que gera e compara os tipos. |
 
 ## Concluídos
 
@@ -74,3 +96,4 @@ _(nenhum item aberto)_
 | F3 | Testes E2E ampliados | 6 cenários novos: item arquivado (fora das telas e do PDF, dentro do CSV/XLSX; Arquivar/Desarquivar), IA no item (só campos vazios, "Aplicar" sobrescreve, leitura estimada só no Salvar e fora da taxa), SECE sobe a prioridade, conteúdo do PDF (uma linha por item, nota de fotos), página de Usuários e higiene das rotas (JSON inválido, 429, mensagens genéricas), prefetch sem sessão. Mais testes unitários do filtro da saída da IA e checagem SQL entre unidades. Continuam sem teste automático: câmera real, IA real (Gemini) e Realtime. |
 | E5 | Padronização visual | Tailwind removido (o reset base dele foi copiado para o `globals.css`, sem mudança visual); uma escala de fontes em `DS.fs`, sem texto abaixo de 10 px; botões e caixas de mensagem feitos à mão viraram os componentes `Button` e `Notice` em `components/ui/`. |
 | F5 | Migração de versões major | Next 15 → 16 (build com Turbopack; `middleware.ts` virou `proxy.ts`, mesmo CSP com nonce), React 18 → 19, Vitest 4 → 5, ESLint 8 → 9 com config flat (`eslint .`, mesmas regras de antes). Sem mudança de comportamento; unitários, SQL e os 57 cenários E2E passando. |
+| A8 | Migrations de 29/09 aplicadas | `20260929000000_rate_limits.sql` (C4) e `20260929000100_active_reads_insert_audit.sql` (C6 + D2) rodadas no Supabase de produção em 29/09/2026: limite de requisições compartilhado, tabelas de referência só para ativos e auditoria de inclusões ativos. |
