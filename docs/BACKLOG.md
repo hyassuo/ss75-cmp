@@ -15,34 +15,32 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A3 | P2 | Ensaiar um restore real | Seguir README → "Backups" num projeto Supabase descartável. |
 | A4 | P2 | Adotar o histórico de migrações | `supabase link` → `supabase migration repair --status applied 20260928000000 20260928000100` → `supabase db diff --linked` (deve vir vazio). |
 | A5 | P3 | PITR (point-in-time recovery) | Se o plano do Supabase permitir. |
+| A6 | P1 | SMTP próprio para os e-mails de autenticação | Sem SMTP próprio o Supabase **só entrega e-mail para membros da equipe do projeto** (2 por hora, sem garantia) — reset de senha e confirmação de cadastro não chegam aos usuários. Supabase → Authentication → Emails → SMTP Settings (ex.: Resend, SendGrid, Amazon SES). |
+| A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
 
 ## B. Decisões tomadas (29/09/2026)
 
 | # | Decisão | O que muda |
 |---|---------|------------|
 | B1 | Manter a regra do admin inicial (`hyassuo@gmail.com`) como está | Com A1 (confirmação de e-mail) ninguém consegue assumir o e-mail. Trocar por configuração só ao abrir uma segunda unidade. |
-| B2 | Análise por IA só para **admin e inspector** | Rota `app/api/ai/analyze-photo` passa a recusar viewer; o botão some para viewer. |
-| B3 | Filtro de departamento vale em todo o app | Risk Matrix e Schedule respeitam o filtro; o Export ganha a escolha "só este departamento / todos" e o PDF traz o departamento no cabeçalho. |
-| D1 | Metodologia principal = **fotos + análise por IA**; leituras de profundidade são opcionais | Ver D1 abaixo. Espessura por UT (tubulações) vira item futuro (D3). |
+| B2 | Análise por IA só para **admin e inspector** | ✅ Implementado: a rota `app/api/ai/analyze-photo` recusa viewer (o botão já não aparecia para ele). |
+| B3 | Filtro de departamento vale em todo o app | ✅ Implementado: Risk Matrix e Schedule respeitam o filtro; o Export pergunta "só este departamento / todos", o nome do arquivo e o cabeçalho do PDF dizem o recorte. |
+| D1 | Metodologia principal = **fotos + análise por IA**; leituras de profundidade são opcionais | ✅ Implementado (ver "Concluídos"). Espessura por UT (tubulações) vira item futuro (D3). |
 
 ## C. Segurança
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| C1 | P1 | Reset de senha provavelmente não funciona | `app/api/users/reset/route.ts:48` manda o link para `/login`, e não existe tela de nova senha nem tratamento do evento `PASSWORD_RECOVERY`. Criar rota de callback + tela "definir nova senha". |
-| C2 | P1 | Desativar usuário não encerra as sessões dele | `app/api/users/update/route.ts`: além de `active = false`, revogar as sessões (ban temporário ou sign-out pelo Admin API). Hoje o token segue válido até expirar. |
 | C3 | P2 | CSP permissivo | `next.config.mjs:12-16`: `'unsafe-eval'` e `'unsafe-inline'` em `script-src`, `https://*.supabase.co` genérico e Gemini no `connect-src` (só o servidor chama o Gemini). Usar nonce, a URL exata do projeto, e remover o Gemini. |
 | C4 | P2 | Rate limit em memória | `lib/utils/rateLimit.ts` conta por instância — na Vercel (serverless) não limita de verdade. Mover para Postgres/KV e criar cota diária de IA. |
 | C5 | P2 | Senhas fracas | Sem MFA e sem troca obrigatória no primeiro acesso. |
 | C6 | P3 | Usuário inativo lê tabelas de referência | Policies `units`, `zones`, `ifs_objects` usam `USING (true)`. Trocar por "usuário ativo". |
 | C7 | P3 | Links assinados de fotos valem 1 h | `components/items/EvidencePanel.tsx:101` (`3600`). Reduzir (ex.: 10 min) e renovar sob demanda. |
-| C8 | P3 | Logout de usuário inativo é global | `app/(app)/layout.tsx:26` chama `signOut()` sem `{ scope: "local" }`. |
 
 ## D. Dados e lógica
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| D1 | P2 | Taxa de corrosão só com medição real e comparável | `lib/domain/calcRate.ts:21`: calcular apenas com ≥ 2 medições reais **no mesmo ponto** e ≥ 90 dias entre elas; senão, "dados insuficientes" (sem alerta). Estimativas da IA seguem fora da taxa. Status/prioridade continuam guiados pela avaliação visual (P×C). |
 | D2 | P3 | Auditoria não registra inclusão de leituras e evidências | Exclusões e mudanças no item são auditadas; inserções de leituras/evidências não. |
 | D3 | P3 | Módulo de espessura (UT) para tubulações | Futuro: espessura remanescente por ponto, espessura mínima por linha, taxa curto/longo prazo (a maior vale) e vida remanescente — padrão API 570. |
 
@@ -65,3 +63,12 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | F3 | P3 | Lacunas dos testes E2E | Login e Storage são simulados; página de Usuários, câmera real, IA e Realtime não são cobertos. |
 | F4 | P3 | Planos antigos em `docs/plans/` | Os 5 planos parecem já executados (amostras conferidas: data local, penalidade única, PDF sem corte de zona, IA sem sobrescrever, rate limit nas rotas de usuários). Revisar os critérios de aceite e arquivar. |
 | F5 | P3 | Migração de versões major | Next 15 → 16, React 18 → 19, Vitest 4 → 5: o Dependabot passou a ignorar majors; fazer como projeto próprio, com os testes E2E como rede de segurança. |
+
+## Concluídos
+
+| # | Item | Como ficou |
+|---|------|-----------|
+| C1 | Reset de senha | O e-mail do "Reset PW" leva a `/auth/reset`, onde o usuário define a nova senha (mín. 8 caracteres). Login ganhou "Esqueci minha senha". Depende de A6 e A7 para os e-mails chegarem. |
+| C2 | Sessões de usuário desativado | Desativar bloqueia a conta de autenticação (sem renovar sessão nem entrar de novo); reativar libera. |
+| D1 | Taxa de corrosão | Só com ≥ 2 medições reais no mesmo ponto e ≥ 90 dias entre elas; por ponto vale a pior entre longo e curto prazo, e o item assume o pior ponto. Sem isso aparece "dados insuficientes", sem alerta. |
+| C8 | ~~Logout de usuário inativo é global~~ | Descartado: para uma conta desativada, encerrar as sessões em todos os aparelhos é o comportamento certo. |

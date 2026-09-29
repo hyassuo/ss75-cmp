@@ -3,6 +3,7 @@
 // Run through run.sh (which starts everything); results land in
 // $ARTIFACTS/results.json and screenshots in $ARTIFACTS/*.png.
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
 import zlib from "node:zlib";
 import { spawn } from "node:child_process";
@@ -116,6 +117,36 @@ async function apiAs(email) {
   const { error } = await c.auth.signInWithPassword({ email, password: PASSWORD });
   if (error) throw error;
   return c;
+}
+
+// Minimal RFC 4180 CSV parser (quoted fields, "" escapes, , or ; separator).
+function parseCsv(text, sep = ",") {
+  const rows = [];
+  let row = [], f = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"' && text[i + 1] === '"') { f += '"'; i++; }
+      else if (ch === '"') q = false;
+      else f += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === sep) { row.push(f); f = ""; }
+    else if (ch === "\n") { row.push(f); rows.push(row); row = []; f = ""; }
+    else if (ch !== "\r") f += ch;
+  }
+  if (f || row.length) { row.push(f); rows.push(row); }
+  return rows;
+}
+
+// The @supabase/ssr session cookie (sb-<ref>-auth-token, maybe chunked
+// .0/.1, "base64-" + base64url JSON) -> {access_token, refresh_token, ...}.
+async function sessionFromCookies(page) {
+  const ck = (await page.context().cookies()).filter((k) => /^sb-.*-auth-token(\.\d+)?$/.test(k.name));
+  ck.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  let v = ck.map((k) => k.value).join("");
+  if (!v) return null;
+  if (v.startsWith("base64-")) v = Buffer.from(v.slice(7), "base64url").toString("utf8");
+  try { return JSON.parse(decodeURIComponent(v)); } catch { try { return JSON.parse(v); } catch { return null; } }
 }
 
 // ------------------------------------------------------------ test context
@@ -1684,6 +1715,426 @@ async function main() {
     await shot(c, page, "xlsx-fail-toast");
     c.expect(c.native.length === 0, "no native alert()", c.native);
     await page.context().close();
+  });
+
+  // ------------------------------------------- batch 2 (C1, C2, B2, B3, D1)
+  // Scenario ids name the change they cover (c2ban = C2, …); r1-r3 = C1.
+
+  await run("b2ai", "B2: photo analysis API refuses viewers (403); inspectors pass the role gate", async (c) => {
+    const role403 = "Photo analysis is available to admins and inspectors.";
+    const post = (page) =>
+      page.request.post(`${APP}/api/ai/analyze-photo`, {
+        headers: { Origin: APP },
+        data: { image: "data:image/png;base64," + tinyPng().toString("base64"), mimeType: "image/png" },
+      });
+    const v = await newPage(c, "viewer1");
+    await login(v, "viewer1@test.local");
+    const rv = await post(v);
+    const bv = await rv.json().catch(() => ({}));
+    c.expect(rv.status() === 403 && bv.error === role403, "viewer -> 403 with the role message", { status: rv.status(), body: bv });
+    await v.context().close();
+    const i = await newPage(c, "insp1");
+    await login(i, "insp1@test.local");
+    const ri = await post(i);
+    const bi = await ri.json().catch(() => ({}));
+    c.step(`inspector -> ${ri.status()} ${JSON.stringify(bi).slice(0, 200)}`);
+    c.expect(ri.status() !== 403 && bi.error !== role403, "inspector is not refused by the role gate (no Gemini key here, so a later 4xx/5xx is fine)", { status: ri.status(), body: bi });
+    await i.context().close();
+  });
+
+  await run("b3dept", "B3: department filter drives Risk Matrix, Schedule and Export (scope radios, file name, rows)", async (c) => {
+    const DEPT = "Third Party";
+    const deptZones = await sql("SELECT zid, name FROM zones WHERE system = $1", [DEPT]);
+    const zids = new Set(deptZones.map((z) => z.zid));
+    const znames = new Set(deptZones.map((z) => z.name));
+    const cnt = async (where, p = []) => Number((await one(`SELECT count(*) FROM items i JOIN zones z ON z.zid = i.zone_id WHERE ${where}`, p)).count);
+    const allActive = await cnt("NOT coalesce(i.archived, false)");
+    const deptActive = await cnt("z.system = $1 AND NOT coalesce(i.archived, false)", [DEPT]);
+    const deptAll = await cnt("z.system = $1", [DEPT]);
+    const allItems = Number((await one("SELECT count(*) FROM items")).count);
+    const deptSched = await cnt("z.system = $1 AND NOT coalesce(i.archived, false) AND i.next_insp IS NOT NULL AND i.next_insp <= current_date + 90", [DEPT]);
+    c.step(`${DEPT}: zones ${[...zids].join(",")}; ${deptActive} active / ${deptAll} items; ${deptSched} in the 90-day schedule; all: ${allActive} active / ${allItems}`);
+
+    const page = await newPage(c, "admin1");
+    await login(page, "admin1@test.local");
+    const pills = page.locator('[role="group"][aria-label="Department filter"] button');
+    const assessed = async () => {
+      const txt = await page.getByText(/\d+ of \d+ items assessed/).first().textContent();
+      return Number(txt.match(/of (\d+) items/)[1]);
+    };
+    await gotoTab(page, "Risk Matrix");
+    c.expect((await assessed()) === allActive, `Risk Matrix, All: ${allActive} items`, await assessed());
+
+    await pills.filter({ hasText: DEPT }).click();
+    await page.waitForTimeout(300);
+    c.expect((await pills.filter({ hasText: DEPT }).getAttribute("aria-pressed")) === "true", `'${DEPT}' pressed in the top bar`);
+    c.expect((await assessed()) === deptActive, `Risk Matrix, ${DEPT}: ${deptActive} items`, await assessed());
+    const riskZones = await page.locator("main").evaluate((m) =>
+      [...m.querySelectorAll("div")].filter((d) => !d.children.length).map((d) => d.textContent || "").filter((t) => / \| P:\d x C:\d$/.test(t)).map((t) => t.replace(/ \| P:.*$/, ""))
+    );
+    c.expect(riskZones.length > 0 && riskZones.every((z) => znames.has(z)), `high-risk list only has ${DEPT} zones (${riskZones.length} rows)`, [...new Set(riskZones)]);
+    await shot(c, page, "risk");
+
+    await gotoTab(page, "Schedule");
+    await page.locator("main button", { hasText: " | " }).first().waitFor({ timeout: 10000 }).catch(() => {});
+    const schedZids = await page.locator("main button", { hasText: " | " }).evaluateAll((bs) => bs.map((b) => (b.innerText.match(/\bZ\d{2}\b/) || ["?"])[0]));
+    c.expect(schedZids.length === deptSched, `Schedule, ${DEPT}: ${deptSched} rows`, schedZids.length);
+    c.expect(schedZids.every((z) => zids.has(z)), `Schedule rows only from ${[...zids].join(",")}`, [...new Set(schedZids)]);
+    await shot(c, page, "schedule");
+
+    await gotoTab(page, "Export");
+    const onlyDept = page.getByRole("radio", { name: `Only ${DEPT}` });
+    const allDept = page.getByRole("radio", { name: "All departments" });
+    await onlyDept.waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect((await onlyDept.count()) === 1 && (await allDept.count()) === 1, "Export shows 'Only <dept>' / 'All departments' radios");
+    c.expect((await onlyDept.isChecked().catch(() => false)) && !(await allDept.isChecked().catch(() => true)), "default is 'Only <dept>'");
+    await shot(c, page, "export-scope");
+    const csvRows = async (tag) => {
+      const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.getByRole("button", { name: /^Export CSV$/ }).click()]);
+      const f = path.join(ART, `b3dept-${tag}.csv`);
+      await dl.saveAs(f);
+      const rows = parseCsv(fs.readFileSync(f, "utf8").replace(/^\uFEFF/, ""));
+      const head = rows.shift();
+      return { name: dl.suggestedFilename(), zones: rows.map((r) => r[head.indexOf("Zone")]) };
+    };
+    const d = await csvRows("dept");
+    c.expect(/^ss75-cmp_third-party_\d{4}-\d{2}-\d{2}\.csv$/.test(d.name), "CSV file name carries the department", d.name);
+    c.expect(d.zones.length === deptAll && d.zones.every((z) => zids.has(z)), `CSV has only the ${deptAll} ${DEPT} rows`, { rows: d.zones.length, zones: [...new Set(d.zones)] });
+    const xlsx = async (tag) => {
+      const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.getByRole("button", { name: /Export XLSX/ }).first().click()]);
+      const f = path.join(ART, `b3dept-${tag}.xlsx`);
+      await dl.saveAs(f);
+      const wb = XLSX.read(fs.readFileSync(f));
+      return { name: dl.suggestedFilename(), items: XLSX.utils.sheet_to_json(wb.Sheets["Items"]), log: XLSX.utils.sheet_to_json(wb.Sheets["Change Log"]) };
+    };
+    const deptHist = Number((await one(
+      "SELECT count(*) FROM history h JOIN items i ON i.id = h.item_id JOIN zones z ON z.zid = i.zone_id WHERE z.system = $1", [DEPT]
+    )).count);
+    const allHist = Number((await one("SELECT count(*) FROM history")).count);
+    const orphanHist = Number((await one("SELECT count(*) FROM history WHERE item_id IS NULL")).count);
+    const xd = await xlsx("dept");
+    c.expect(/^ss75-cmp_third-party_\d{4}-\d{2}-\d{2}\.xlsx$/.test(xd.name), "XLSX file name carries the department", xd.name);
+    c.expect(xd.items.length === deptAll, `XLSX Items sheet: ${deptAll} ${DEPT} rows`, xd.items.length);
+    c.expect(xd.log.length === deptHist, `XLSX Change Log: only the ${deptHist} events of ${DEPT} items (no deleted-item events)`, { rows: xd.log.length, deleted: xd.log.filter((r) => r.Item === "E2E Delete Target").length });
+    await allDept.check();
+    const xa = await xlsx("all");
+    c.expect(xa.log.length === allHist, `'All departments' XLSX Change Log keeps all ${allHist} events (incl. ${orphanHist} of deleted items)`, xa.log.length);
+    const a = await csvRows("all");
+    c.expect(/^ss75-cmp_\d{4}-\d{2}-\d{2}\.csv$/.test(a.name), "'All departments' -> plain file name", a.name);
+    c.expect(a.zones.length === allItems && new Set(a.zones).size > zids.size, `'All departments' exports all ${allItems} rows`, a.zones.length);
+    await pills.filter({ hasText: /^All$/ }).click();
+    await page.waitForTimeout(300);
+    c.expect((await page.getByRole("radio").count()) === 0, "with 'All' in the top bar the scope radios are hidden");
+    await page.context().close();
+  });
+
+  await run("d1rate", "D1: corrosion rate needs 2 readings at the same point >= 90 days apart", async (c) => {
+    const unit = (await one("SELECT id FROM units WHERE code = 'SS-75'")).id;
+    const cases = [
+      { id: "00000000-0000-0000-0000-0000000e2e10", name: "E2E Rate 30 Days", r: [[30, 1.0, "P1"], [0, 1.1, "P1"]], rate: null },
+      { id: "00000000-0000-0000-0000-0000000e2e11", name: "E2E Rate 120 Days", r: [[120, 1.0, "P1"], [0, 1.2, "P1"]], rate: "0.608" },
+      { id: "00000000-0000-0000-0000-0000000e2e12", name: "E2E Rate Two Points", r: [[200, 1.0, "P1"], [0, 1.3, "P2"]], rate: null },
+      { id: "00000000-0000-0000-0000-0000000e2e13", name: "E2E Rate Same Point Spelling", r: [[100, 1.0, "Frame 7"], [0, 1.1, " frame  7 "]], rate: "0.365" },
+    ];
+    for (const k of cases) {
+      await sql(
+        `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by)
+         VALUES ($1, $2, 'Z13', $3, 'Attention', 2, 2, $4) ON CONFLICT (id) DO NOTHING`,
+        [k.id, unit, k.name, USERS.insp2]
+      );
+      for (const [ago, mm, loc] of k.r) {
+        await sql("INSERT INTO readings (item_id, reading_date, depth_mm, location) VALUES ($1, current_date - $2::int, $3, $4)", [k.id, ago, mm, loc]);
+      }
+    }
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    for (const k of cases) {
+      await openItem(page, k.name);
+      const hint = modal(page).getByText(/^Corrosion rate: not enough data yet/);
+      const rateBox = modal(page).getByText("Pit Growth Rate", { exact: true });
+      await modal(page).getByRole("cell", { name: String(k.r[1][1].toFixed(1)), exact: true }).first().waitFor({ timeout: 10000 }).catch(() => {});
+      if (k.rate === null) {
+        c.expect((await hint.count()) === 1 && (await rateBox.count()) === 0, `'${k.name}': 'not enough data' hint, no rate`, { hint: await hint.count(), rate: await rateBox.count() });
+      } else {
+        const shown = new RegExp(k.rate.replace(".", "\\.") + "\\s*mm/yr").test(await modal(page).innerText());
+        c.expect((await hint.count()) === 0 && (await rateBox.count()) === 1 && shown, `'${k.name}': rate ${k.rate} mm/yr shown, no hint`, { hint: await hint.count(), rate: await rateBox.count(), shown });
+      }
+      await shot(c, page, k.id.slice(-2));
+      await modal(page).getByRole("button", { name: "Cancel", exact: true }).click();
+      await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    }
+    await page.context().close();
+  });
+
+  // C1 helpers: the fake GoTrue keeps "sent" emails; per-user passwords and
+  // bans live in auth.users and are put back after each scenario.
+  const mailsSince = async (t) => (await fetch(`${GW}/__ctl/mail?since=${t}`)).json();
+  const signInApi = async (email, password) => {
+    const cl = createClient(GW, process.env.ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    return (await cl.auth.signInWithPassword({ email, password })).error;
+  };
+  const resetForm = (page) => page.getByLabel("New password", { exact: true });
+  const invalidMsg = (page) => page.getByText(/This reset link is invalid/);
+
+  await run("r2", "C1: /auth/reset without tokens (even signed in) refuses; expired link on /login is forwarded; Site-URL fallback forwarded", async (c) => {
+    const anon = await newPage(c, "anon");
+    await anon.goto(`${APP}/auth/reset`);
+    await invalidMsg(anon).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(await invalidMsg(anon).isVisible(), "no tokens -> invalid-link message");
+    c.expect((await anon.locator('input[type="password"]').count()) === 0, "no password form");
+    await anon.context().close();
+
+    const insp = await newPage(c, "insp1");
+    await login(insp, "insp1@test.local");
+    await insp.goto(`${APP}/auth/reset`);
+    await invalidMsg(insp).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(await invalidMsg(insp).isVisible() && (await insp.locator('input[type="password"]').count()) === 0, "signed in, no tokens -> still invalid, no form");
+    await shot(c, insp, "signed-in-no-token");
+    await insp.goto(`${APP}/auth/reset?code=${crypto.randomUUID()}`);
+    await invalidMsg(insp).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(await invalidMsg(insp).isVisible() && (await insp.locator('input[type="password"]').count()) === 0, "?code= (PKCE) is not accepted -> invalid, no form");
+    // Someone else's recovery link opened on this signed-in device, landing
+    // on /dashboard: forwarded to /auth/reset, tokens gone from the URL.
+    const tr = Date.now();
+    await fetch(`${GW}/auth/v1/recover?redirect_to=${encodeURIComponent(`${APP}/auth/reset`)}`, {
+      method: "POST", headers: { apikey: process.env.ANON_KEY, "content-type": "application/json" }, body: JSON.stringify({ email: "viewer1@test.local" }),
+    });
+    const [vm] = await mailsSince(tr);
+    const loc = (await fetch(vm.action_link, { redirect: "manual" })).headers.get("location") || "";
+    const frag = loc.slice(loc.indexOf("#"));
+    c.expect(/type=recovery/.test(frag) && /access_token=/.test(frag), "recovery fragment obtained from the email link", loc.slice(0, 80));
+    await insp.goto(`${APP}/dashboard${frag}`);
+    await insp.waitForURL(/\/auth\/reset/, { timeout: 20000 }).catch(() => {});
+    await resetForm(insp).waitFor({ timeout: 20000 }).catch(() => {});
+    c.expect(q(insp).pathname === "/auth/reset" && (await resetForm(insp).isVisible()), "recovery hash on /dashboard (other user signed in) -> forwarded, form shown", insp.url());
+    c.expect(!/access_token|refresh_token|type=recovery/.test(insp.url()), "tokens gone from the URL", insp.url());
+    const who = (await sessionFromCookies(insp))?.user?.email;
+    c.step(`session in this browser after the forward: ${who}`);
+    c.expect(who === "viewer1@test.local", "the browser's session is now the link's user (viewer1), not insp1", who);
+    await shot(c, insp, "dashboard-forwarded");
+    await insp.context().close();
+
+    const exp = await newPage(c, "anon-expired");
+    await exp.goto(`${APP}/login#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
+    await exp.waitForURL(/\/auth\/reset/, { timeout: 15000 }).catch(() => {});
+    await invalidMsg(exp).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(q(exp).pathname === "/auth/reset", "/login forwards the error fragment to /auth/reset", exp.url());
+    c.expect(await invalidMsg(exp).isVisible() && (await exp.locator('input[type="password"]').count()) === 0, "expired link -> invalid message, no form");
+    c.expect(!/error_code|otp_expired/.test(exp.url()), "error params stripped from the URL", exp.url());
+    await shot(c, exp, "expired");
+    await exp.context().close();
+
+    // A redirect_to outside the allow list falls back to the Site URL (the
+    // app root) with the tokens in the fragment -> / -> /login -> /auth/reset.
+    const t0 = Date.now();
+    const rr = await fetch(`${GW}/auth/v1/recover?redirect_to=${encodeURIComponent("https://elsewhere.example/auth/reset")}`, {
+      method: "POST", headers: { apikey: process.env.ANON_KEY, "content-type": "application/json" }, body: JSON.stringify({ email: "insp2@test.local" }),
+    });
+    const [m] = (await mailsSince(t0)).filter((x) => x.email === "insp2@test.local");
+    c.expect(rr.status === 200 && m?.redirect_to === APP, "not-allowed redirect -> link falls back to the Site URL", m);
+    const fb = await newPage(c, "insp2-mail");
+    await fb.goto(m.action_link);
+    await resetForm(fb).waitFor({ timeout: 20000 }).catch(() => {});
+    c.expect(q(fb).pathname === "/auth/reset" && (await resetForm(fb).isVisible()), "Site-URL link is forwarded to /auth/reset and the form is ready", fb.url());
+    c.expect(!/access_token|refresh_token/.test(fb.url()), "tokens not left in the URL", fb.url());
+    await shot(c, fb, "site-url-fallback");
+    await fb.context().close();
+  });
+
+  await run("r3", "C1: 'Forgot password?' — empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
+    const page = await newPage(c, "anon");
+    await page.goto(`${APP}/login`);
+    const forgot = page.getByRole("button", { name: "Forgot password?" });
+    const email = page.locator('input[type="email"]');
+    await forgot.click();
+    const hint = page.getByRole("alert").filter({ hasText: "Type your email above" });
+    await hint.waitFor({ timeout: 5000 }).catch(() => {});
+    c.expect(await hint.isVisible(), "empty email -> hint to type the email first");
+    const sentTxt = "If this email has an active account, a reset link is on its way.";
+    const sent = page.getByRole("status").filter({ hasText: sentTxt });
+    const ask = async (addr) => {
+      const t = Date.now();
+      await email.fill(addr);
+      const [resp] = await Promise.all([
+        page.waitForResponse((r) => r.url().endsWith("/api/auth/forgot"), { timeout: 15000 }),
+        forgot.click(),
+      ]);
+      await sent.waitFor({ timeout: 10000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      return { status: resp.status(), shown: await sent.isVisible(), mails: await mailsSince(t) };
+    };
+    try {
+      const unknown = await ask("nobody@test.local");
+      c.expect(unknown.status === 200 && unknown.shown, "unknown email -> neutral confirmation", unknown);
+      c.expect(!(await hint.isVisible().catch(() => false)), "hint cleared");
+      c.expect(unknown.mails.length === 0, "no email for an unknown address", unknown.mails);
+      await sql("UPDATE profiles SET active = false WHERE email = 'viewer1@test.local'");
+      const inactive = await ask("viewer1@test.local");
+      c.expect(inactive.status === 200 && inactive.shown, "inactive account -> the same neutral confirmation", inactive);
+      c.expect(inactive.mails.length === 0, "no email for an inactive account", inactive.mails);
+      const active = await ask("Insp1@Test.local");
+      c.expect(active.status === 200 && active.shown, "active account (mixed case) -> neutral confirmation", active);
+      const m = active.mails[0];
+      c.expect(active.mails.length === 1 && m.email === "insp1@test.local", "one email for the active account", active.mails);
+      c.expect(m?.requested_redirect_to === `${APP}/auth/reset`, `redirect requested: ${APP}/auth/reset`, m?.requested_redirect_to);
+      await shot(c, page, "sent");
+      // Implicit flow: the link works in another browser (e.g. the Mail app's).
+      const other = await newPage(c, "other-device");
+      await other.goto(m.action_link);
+      await resetForm(other).waitFor({ timeout: 20000 }).catch(() => {});
+      c.expect(q(other).pathname === "/auth/reset" && (await resetForm(other).isVisible()), "link opened in another browser -> new-password form", other.url());
+      c.expect(!/access_token|refresh_token/.test(other.url()), "tokens removed from the URL", other.url());
+      await shot(c, other, "other-device");
+      await other.context().close();
+    } finally {
+      await sql("UPDATE profiles SET active = true WHERE email = 'viewer1@test.local'");
+    }
+    await page.context().close();
+  });
+
+  await run("r1", "C1: admin 'Reset PW' -> email to /auth/reset -> new password (validation) -> dashboard; old password refused", async (c) => {
+    const EMAIL = "viewer1@test.local";
+    const NEWPW = "N3w-Passw0rd!";
+    try {
+      const adm = await newPage(c, "admin1");
+      await login(adm, "admin1@test.local");
+      await adm.goto(`${APP}/users`);
+      const row = adm.locator("tr", { hasText: EMAIL });
+      await row.waitFor({ timeout: 30000 });
+      const t0 = Date.now();
+      await row.getByRole("button", { name: "Reset PW" }).click();
+      await adm.getByText("Password reset email sent.").waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await adm.getByText("Password reset email sent.").isVisible(), "'Password reset email sent.' shown");
+      const mails = (await mailsSince(t0)).filter((m) => m.email === EMAIL);
+      c.expect(mails.length === 1, "one recovery email sent", mails);
+      const m = mails[0];
+      c.expect(m?.requested_redirect_to === `${APP}/auth/reset`, `redirect requested: ${APP}/auth/reset`, m?.requested_redirect_to);
+      await shot(c, adm, "users");
+      await adm.context().close();
+
+      const u = await newPage(c, "viewer1-mail");
+      await u.goto(m.action_link);
+      await resetForm(u).waitFor({ timeout: 20000 }).catch(() => {});
+      c.expect(q(u).pathname === "/auth/reset" && (await resetForm(u).isVisible()), "link opens /auth/reset with the form", u.url());
+      c.expect(!/access_token|refresh_token|type=recovery/.test(u.url()), "tokens removed from the URL", u.url());
+      const pw2 = u.getByLabel("Repeat the new password");
+      const save = u.getByRole("button", { name: "Save new password" });
+      const alert = u.locator('form [role="alert"]');
+      await resetForm(u).fill("short1");
+      await pw2.fill("short1");
+      await save.click();
+      c.expect(/at least 8 characters/.test(await alert.innerText().catch(() => "")), "too short -> 'at least 8 characters'", await alert.allInnerTexts());
+      await resetForm(u).fill(NEWPW);
+      await pw2.fill(NEWPW + "x");
+      await save.click();
+      c.expect(/don't match/.test(await alert.innerText().catch(() => "")), "mismatch -> 'don't match'", await alert.allInnerTexts());
+      await resetForm(u).fill(PASSWORD);
+      await pw2.fill(PASSWORD);
+      await save.click();
+      await alert.filter({ hasText: /different from the current/ }).waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(/Choose a password different from the current one/.test(await alert.innerText().catch(() => "")), "same as the current password -> translated 'same_password' message", await alert.allInnerTexts());
+      const pre = await one("SELECT encrypted_password FROM auth.users WHERE email = $1", [EMAIL]);
+      c.expect(pre.encrypted_password === null, "nothing changed server-side on invalid input");
+      await shot(c, u, "mismatch");
+      await resetForm(u).fill(NEWPW);
+      await pw2.fill(NEWPW);
+      await save.click();
+      await u.getByText("Password changed. Opening the app…").waitFor({ timeout: 10000 }).catch(() => {});
+      c.expect(await u.getByText("Password changed. Opening the app…").isVisible().catch(() => false), "'Password changed' shown");
+      await u.waitForURL(/\/dashboard/, { timeout: 20000 }).catch(() => {});
+      c.expect(q(u).pathname === "/dashboard", "lands on /dashboard", u.url());
+      await waitLoaded(u).catch(() => {});
+      c.expect(!/access_token|refresh_token/.test(u.url()), "no tokens in the final URL", u.url());
+      const hist = await u.evaluate(() => history.length);
+      c.step(`history entries in the reset tab: ${hist}`);
+      await shot(c, u, "dashboard");
+      await u.context().close();
+
+      const oldErr = await signInApi(EMAIL, PASSWORD);
+      c.expect(!!oldErr && /Invalid login credentials/.test(oldErr.message), "old password refused", oldErr?.message);
+      const newErr = await signInApi(EMAIL, NEWPW);
+      c.expect(!newErr, "new password works", newErr?.message);
+      const again = await newPage(c, "viewer1-again");
+      await again.goto(m.action_link);
+      await invalidMsg(again).waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await invalidMsg(again).isVisible(), "the email link works only once (second use -> invalid)", again.url());
+      await again.context().close();
+    } finally {
+      await sql("UPDATE auth.users SET encrypted_password = NULL WHERE email = $1", [EMAIL]);
+    }
+  });
+
+  await run("c2ban", "C2: deactivating a signed-in inspector ends the session (no refresh, no sign-in); reactivating allows sign-in", async (c) => {
+    const EMAIL = "insp2@test.local";
+    try {
+      const insp = await newPage(c, "insp2");
+      await login(insp, EMAIL);
+      const adm = await newPage(c, "admin1");
+      await login(adm, "admin1@test.local");
+      await adm.goto(`${APP}/users`);
+      const row = adm.locator("tr", { hasText: EMAIL });
+      await row.waitFor({ timeout: 30000 });
+      // Ban call fails -> 502, nothing changed, same action offered again.
+      await ctl.fault({ method: "PUT", prefix: "/auth/v1/admin/users/", status: 500, times: 1, body: { code: 500, error_code: "unexpected_failure", msg: "Unexpected failure" } });
+      await row.getByRole("button", { name: "Deactivate" }).click();
+      const failMsg = adm.getByText("Could not update the user's sign-in access. Try again.");
+      await failMsg.waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await failMsg.isVisible(), "ban failure -> 'Could not update the user's sign-in access' shown");
+      const st0 = await one("SELECT p.active, u.banned_until FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.email = $1", [EMAIL]);
+      c.expect(st0.active === true && st0.banned_until === null, "ban failure -> profile unchanged (still active, not banned)", st0);
+      await row.getByRole("button", { name: "Deactivate" }).waitFor({ timeout: 5000 }).catch(() => {});
+      c.expect((await row.getByRole("button", { name: "Deactivate" }).count()) === 1, "row still offers 'Deactivate' (retry)");
+      await shot(c, adm, "ban-failed");
+      await ctl.clear();
+      await row.getByRole("button", { name: "Deactivate" }).click();
+      await adm.getByText("User deactivated.").waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await adm.getByText("User deactivated.").isVisible(), "'User deactivated.' shown", await adm.locator("main").innerText().then((t) => t.slice(0, 300)));
+      const st = await one("SELECT p.active, u.banned_until > now() + interval '10 years' AS banned FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.email = $1", [EMAIL]);
+      c.expect(st.active === false && st.banned === true, "profile inactive and auth user banned", st);
+      await shot(c, adm, "deactivated");
+
+      // The inspector's browser still holds a session: its tokens are refused.
+      const sess = await sessionFromCookies(insp);
+      c.expect(!!sess?.refresh_token, "inspector's session cookie read");
+      const rf = await fetch(`${GW}/auth/v1/token?grant_type=refresh_token`, {
+        method: "POST", headers: { apikey: process.env.ANON_KEY, "content-type": "application/json" }, body: JSON.stringify({ refresh_token: sess?.refresh_token }),
+      });
+      const rfb = await rf.json().catch(() => ({}));
+      c.expect(rf.status === 400 && rfb.error_code === "user_banned", "token refresh refused (user_banned)", { status: rf.status, body: rfb });
+      const items = await fetch(`${GW}/rest/v1/items?select=id&limit=5`, { headers: { apikey: process.env.ANON_KEY, Authorization: `Bearer ${sess?.access_token}` } });
+      const rows = await items.json().catch(() => null);
+      c.expect(Array.isArray(rows) && rows.length === 0, "REST with the old access token returns no rows (RLS: inactive)", { status: items.status, rows });
+      await insp.reload();
+      await insp.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+      c.expect(q(insp).pathname === "/login", "inspector's next page load -> /login", insp.url());
+      await shot(c, insp, "kicked-out");
+      await insp.locator('input[type="email"]').fill(EMAIL);
+      await insp.locator('input[type="password"]').fill(PASSWORD);
+      await insp.getByRole("button", { name: /sign in/i }).click();
+      const err = insp.getByRole("alert");
+      await err.first().waitFor({ timeout: 10000 }).catch(() => {});
+      const errText = (await err.allInnerTexts()).join(" | ");
+      c.step(`sign-in error shown: "${errText}"`);
+      c.expect(/This account is deactivated\. Contact your administrator\./.test(errText) && q(insp).pathname === "/login", "new sign-in refused: 'This account is deactivated…', stays on /login", { errText, url: insp.url() });
+      await shot(c, insp, "signin-refused");
+
+      await row.getByRole("button", { name: "Activate" }).click();
+      await adm.getByText("User activated.").waitFor({ timeout: 15000 }).catch(() => {});
+      const st2 = await one("SELECT p.active, u.banned_until FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.email = $1", [EMAIL]);
+      c.expect(st2.active === true && st2.banned_until === null, "reactivated: profile active, ban lifted", st2);
+      await adm.context().close();
+      await insp.getByRole("button", { name: /sign in/i }).click();
+      await insp.waitForURL(/\/dashboard/, { timeout: 30000 }).catch(() => {});
+      c.expect(q(insp).pathname === "/dashboard", "sign-in works again after reactivation", insp.url());
+      await waitLoaded(insp).catch(() => {});
+      await insp.getByText(/\d+\/\d+ inspected/).first().waitFor({ timeout: 15000 }).catch(() => {});
+      await shot(c, insp, "signed-in-again");
+      c.expect((await insp.getByText(/\d+\/\d+ inspected/).count()) > 0, "data visible again", await insp.locator("main").innerText().catch(() => "").then((t) => t.slice(0, 200)));
+      await insp.context().close();
+    } finally {
+      await sql("UPDATE profiles SET active = true WHERE email = $1", [EMAIL]);
+      await sql("UPDATE auth.users SET banned_until = NULL WHERE email = $1", [EMAIL]);
+    }
   });
 
   await browser.close();

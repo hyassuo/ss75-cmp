@@ -20,6 +20,7 @@ import type { HistoryEntry } from "@/lib/types/domain";
 import type { PdfItem, PdfPhoto } from "@/components/export/PdfDocument";
 import { effectivePriority } from "@/lib/domain/calcPriority";
 import { useFeedback } from "@/lib/context/FeedbackContext";
+import { useShell } from "@/lib/context/ShellContext";
 
 // Cap per item to keep PDF size sane (~250 KB per JPEG => 1 MB max per item).
 const MAX_PHOTOS_PER_ITEM = 4;
@@ -105,7 +106,7 @@ async function blobToJpegDataURL(blob: Blob): Promise<string> {
 // "did nothing". We open the tab up front, then point it at the blob URL
 // once generation finishes. The URL is revoked after a minute so the tab
 // has time to load it.
-function showPdfInTab(win: Window | null, blob: Blob) {
+function showPdfInTab(win: Window | null, blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   if (win && !win.closed) {
     win.location.href = url;
@@ -113,18 +114,30 @@ function showPdfInTab(win: Window | null, blob: Blob) {
     // Tab was blocked/closed — fall back to a same-gesture download.
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ss75-cmp_${today()}.pdf`;
+    a.download = name;
     a.click();
   }
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function ExportTab() {
-  const { lang, t, tPriority, tStatus } = useLang();
+  const { lang, t, tPriority, tStatus, tDept } = useLang();
   // Excel in pt-BR expects ";" (the comma is the decimal separator).
   const csvSep = lang === "pt" ? ";" : ",";
   const { toast } = useFeedback();
-  const { zones, itemsByZone, subareas } = useData();
+  const { zones: allZones, itemsByZone, subareas } = useData();
+  // With a department picked in the top bar, the export says explicitly
+  // whether it covers that department or everything — a PDF must never
+  // look like a department report while holding all of them (or vice versa).
+  const { sysFilter } = useShell();
+  const [scope, setScope] = useState<"dept" | "all">("dept");
+  const deptOnly = sysFilter !== "All" && scope === "dept";
+  const zones = deptOnly
+    ? allZones.filter((z) => z.system === sysFilter)
+    : allZones;
+  const scopeLabel = deptOnly ? sysFilter : "All departments";
+  const deptSlug = sysFilter.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const fileBase = `ss75-cmp_${deptOnly ? deptSlug + "_" : ""}${today()}`;
   const subareaName = new Map(subareas.map((s) => [s.id, s.name]));
   const [busy, setBusy] = useState<string | null>(null);
   // Default ON so a fresh user sees the expected, complete PDF (photos
@@ -195,7 +208,7 @@ export function ExportTab() {
     ].join("\n");
     download(
       new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }),
-      `ss75-cmp_${today()}.csv`
+      `${fileBase}.csv`
     );
   }
 
@@ -224,8 +237,10 @@ export function ExportTab() {
         "history fetch"
       );
       if (res.error) throw new Error(`history fetch: ${res.error}`);
-      const history = res.data.filter(
-        (h) => h.item_id === null || itemIds.has(h.item_id)
+      // Deleted items' events (item_id NULL) carry no zone, so a
+      // department export can't tell whose they are: whole-unit only.
+      const history = res.data.filter((h) =>
+        h.item_id === null ? !deptOnly : itemIds.has(h.item_id)
       );
       const nameById = new Map(flat.map((i) => [i.id, i]));
       const deletedNames = latestNameByRef(history);
@@ -301,7 +316,7 @@ export function ExportTab() {
         new Blob([out], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
-        `ss75-cmp_${today()}.xlsx`
+        `${fileBase}.xlsx`
       );
     } catch (e) {
       // Surface the failure — was previously silent, so a thrown error left
@@ -518,6 +533,7 @@ export function ExportTab() {
           items={items}
           photosByItem={photosByItem}
           note={note || undefined}
+          scope={scopeLabel}
         />
       ).toBlob();
       console.info(`[pdf] rendered blob: ${blob.size} bytes`);
@@ -529,7 +545,7 @@ export function ExportTab() {
           (photoLoad?.failed ? `, ${photoLoad.failed} failed` : "") +
           ") — opening…"
       );
-      showPdfInTab(win, blob);
+      showPdfInTab(win, blob, `${fileBase}.pdf`);
     } catch (e) {
       if (win && !win.closed) win.close();
       const msg = e instanceof Error ? e.message : String(e);
@@ -585,6 +601,40 @@ export function ExportTab() {
         <div style={{ fontSize: 12, color: DS.text3, marginBottom: 16 }}>
           {t("exp.format")}
         </div>
+        {sysFilter !== "All" && (
+          <fieldset
+            style={{ border: "none", padding: 0, margin: "0 0 14px" }}
+            disabled={busy !== null}
+          >
+            <legend style={{ fontSize: 12, color: DS.text2, fontWeight: 600, marginBottom: 6 }}>
+              {t("exp.scope")}
+            </legend>
+            {(["dept", "all"] as const).map((v) => (
+              <label
+                key={v}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginRight: 16,
+                  minHeight: 36,
+                  fontSize: 13,
+                  color: DS.text,
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="exp-scope"
+                  value={v}
+                  checked={scope === v}
+                  onChange={() => setScope(v)}
+                />
+                {v === "dept" ? t("exp.scopeDept", tDept(sysFilter)) : t("exp.scopeAll")}
+              </label>
+            ))}
+          </fieldset>
+        )}
         <div className="exp-btn-row">
           {btn(t("exp.csv"), "CSV", exportCSV, "csv")}
           {btn(t("exp.xlsx"), "XLSX", () => void exportXLSX(), "xlsx")}

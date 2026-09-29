@@ -16,11 +16,42 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
+  const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
   const { t, lang, setLang } = useLang();
   const emailId = useId();
   const pwId = useId();
   const errId = useId();
+
+  async function forgot() {
+    if (loading) return;
+    setInfo("");
+    if (!email.trim()) {
+      setErr(t("login.forgotNeedEmail"));
+      return;
+    }
+    setErr("");
+    setLoading(true);
+    // Sent by the server (implicit flow): the link then works in any
+    // browser, e.g. opened from Mail while the app is installed on iOS.
+    let status = 0;
+    try {
+      const r = await fetch("/api/auth/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      status = r.status;
+    } catch {
+      status = 0;
+    }
+    setLoading(false);
+    // Same answer whether or not the address exists (no account probing).
+    if (status === 0) setErr(t("login.network"));
+    else if (status === 429) setErr(t("login.forgotLimit"));
+    else if (status === 400) setErr(t("login.forgotNeedEmail"));
+    else setInfo(t("login.forgotSent"));
+  }
 
   async function doLogin(e?: FormEvent) {
     e?.preventDefault();
@@ -42,6 +73,8 @@ export function LoginForm() {
       setErr(
         /invalid login credentials/i.test(error.message)
           ? t("login.invalid")
+          : error.code === "user_banned" || /banned/i.test(error.message)
+            ? t("login.inactive")
           : /fetch|network|load failed/i.test(error.message)
             ? t("login.network")
             : error.message || t("login.invalid")
@@ -183,6 +216,24 @@ export function LoginForm() {
           </div>
         ) : null}
 
+        {info ? (
+          <div
+            role="status"
+            style={{
+              background: DS.grnBg,
+              border: "1px solid " + DS.grnBord,
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 12,
+              color: DS.grn,
+              marginBottom: 16,
+              textAlign: "center",
+            }}
+          >
+            {info}
+          </div>
+        ) : null}
+
         <button
           type="submit"
           disabled={loading}
@@ -207,6 +258,26 @@ export function LoginForm() {
           {loading ? <Spinner size={14} /> : null}
           {loading ? t("login.signingIn") : t("login.signIn")}
         </button>
+
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => void forgot()}
+            disabled={loading}
+            style={{
+              background: "none",
+              border: "none",
+              color: DS.blu,
+              fontSize: 12,
+              fontWeight: 600,
+              padding: "8px 12px",
+              minHeight: 36,
+              cursor: loading ? "default" : "pointer",
+            }}
+          >
+            {t("login.forgot")}
+          </button>
+        </div>
 
         <div
           style={{

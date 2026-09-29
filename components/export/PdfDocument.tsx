@@ -106,6 +106,8 @@ export interface PdfDocProps {
   // Photo coverage note ("N embedded · M failed · cap reached") — rendered
   // in the header so the report documents its own omissions.
   note?: string;
+  // "All departments" or the department the report is limited to.
+  scope: string;
 }
 
 export function PdfDocument({
@@ -116,6 +118,7 @@ export function PdfDocument({
   items,
   photosByItem,
   note,
+  scope,
 }: PdfDocProps) {
   const zones = Array.from(new Set(items.map((i) => i.zid))).sort();
 
@@ -124,7 +127,7 @@ export function PdfDocument({
       <Page size="A4" style={s.page}>
         <Text style={s.title}>Corrosion Management Plan</Text>
         <Text style={s.sub}>
-          SS-75 Noble Courage · Generated {generated}
+          SS-75 Noble Courage · {scope} · Generated {generated}
         </Text>
         <Text style={s.sub}>
           Total {total} · SECE {sece} · Critical {critical} · NORSOK M-001 /

@@ -1,12 +1,17 @@
 // Fake Supabase API gateway for local E2E runs.
 //
 //   /rest/v1/*     -> proxied to PostgREST v12 (JWT passed through)
-//   /auth/v1/*     -> minimal GoTrue: password + refresh_token grants, /user, /logout
+//   /auth/v1/*     -> minimal GoTrue: password + refresh_token grants,
+//                     GET+PUT /user (password change), /recover + /verify
+//                     (recovery email, implicit flow), /logout, admin
+//                     PUT /admin/users/:id (ban_duration). Per-user passwords
+//                     and bans live in auth.users (encrypted_password,
+//                     banned_until); a ban blocks sign-in, refresh and /user.
 //   /storage/v1/*  -> minimal Storage API. Every object row is written/read/
 //                     deleted in Postgres AS THE CALLER (SET ROLE + JWT claims),
 //                     so the schema's real storage.objects RLS policies decide.
 //                     File bytes live on disk under $STORAGE_DIR.
-//   /__ctl/*       -> test control: fault injection + request log
+//   /__ctl/*       -> test control: fault injection, request log, mail outbox
 //
 // Response shapes follow @supabase/auth-js and @supabase/storage-js v2.
 import http from "node:http";
@@ -99,11 +104,21 @@ function matchFault(method, url) {
 }
 
 // --------------------------------------------------------------- auth (GoTrue)
-const refreshTokens = new Map(); // token -> user id
+// Error bodies, status codes and messages follow supabase/auth (GoTrue v2).
+const SITE_URL = process.env.APP_URL || "http://localhost:3000"; // GoTrue "Site URL"
+const OTP_TTL = 3600; // seconds a recovery link stays valid
+const refreshTokens = new Map(); // token -> {uid, sid}
+const otps = new Map(); // email-link token -> {uid, redirectTo, exp}
+const outbox = []; // "sent" emails: {t, type, email, requested_redirect_to, redirect_to, action_link}
+
+const hashPw = (pw) => "e2e-sha256$" + crypto.createHash("sha256").update(String(pw)).digest("hex");
+const passwordOk = (u, pw) => (u.encrypted_password ? hashPw(pw) === u.encrypted_password : pw === PASSWORD);
+const isBanned = (u) => !!u.banned_until && new Date(u.banned_until).getTime() > Date.now();
+const authErr = (res, status, error_code, msg, extra = {}) => send(res, status, { code: status, error_code, msg, ...extra });
 
 async function userRow(where, value) {
   const { rows } = await pool.query(
-    `SELECT id, email, raw_user_meta_data, created_at FROM auth.users WHERE ${where} = $1`,
+    `SELECT id, email, raw_user_meta_data, created_at, encrypted_password, banned_until FROM auth.users WHERE ${where} = $1`,
     [value]
   );
   return rows[0] || null;
@@ -125,12 +140,14 @@ function userJson(u) {
     identities: [],
     created_at: ts,
     updated_at: ts,
+    ...(u.banned_until ? { banned_until: new Date(u.banned_until).toISOString() } : {}),
     is_anonymous: false,
   };
 }
 
 function issueSession(u) {
   const now = Math.floor(Date.now() / 1000);
+  const sid = crypto.randomUUID();
   const access_token = sign(
     {
       aud: "authenticated",
@@ -142,7 +159,7 @@ function issueSession(u) {
       phone: "",
       role: "authenticated",
       aal: "aal1",
-      session_id: crypto.randomUUID(),
+      session_id: sid,
       is_anonymous: false,
       app_metadata: { provider: "email", providers: ["email"] },
       user_metadata: u.raw_user_meta_data || {},
@@ -150,7 +167,7 @@ function issueSession(u) {
     SECRET
   );
   const refresh_token = crypto.randomBytes(16).toString("hex");
-  refreshTokens.set(refresh_token, u.id);
+  refreshTokens.set(refresh_token, { uid: u.id, sid });
   return {
     access_token,
     token_type: "bearer",
@@ -161,37 +178,143 @@ function issueSession(u) {
   };
 }
 
+// GoTrue's requireAuthentication: a valid JWT whose user exists and is not
+// banned (a ban rejects access tokens issued before it, too).
+async function authedUser(req, res) {
+  const claims = verify(bearer(req), SECRET);
+  if (!claims || !claims.sub) {
+    authErr(res, 403, "bad_jwt", "invalid JWT: unable to parse or verify signature");
+    return null;
+  }
+  const u = await userRow("id", claims.sub);
+  if (!u) {
+    authErr(res, 403, "user_not_found", "User from sub claim in JWT does not exist");
+    return null;
+  }
+  if (isBanned(u)) {
+    authErr(res, 403, "user_banned", "User is banned");
+    return null;
+  }
+  return { u, claims };
+}
+
+// Go time.ParseDuration subset ("876000h", "1h30m", "90s").
+function parseDuration(s) {
+  const m = /^(?:\d+(?:\.\d+)?(?:h|m|s|ms))+$/.exec(s);
+  if (!m) return null;
+  const unit = { h: 3600e3, m: 60e3, s: 1e3, ms: 1 };
+  let ms = 0;
+  for (const [, n, u] of s.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)) ms += Number(n) * unit[u];
+  return ms;
+}
+
+// Redirect targets outside the allow list fall back to the Site URL, as in GoTrue.
+const allowedRedirect = (to) => (to && (to === SITE_URL || to.startsWith(SITE_URL + "/")) ? to : SITE_URL);
+
 async function handleAuth(req, res, sub, query) {
   if (req.method === "POST" && sub === "/token") {
     const body = json(await readBody(req));
     const grant = query.get("grant_type");
     if (grant === "password") {
       const u = body.email ? await userRow("lower(email)", String(body.email).toLowerCase()) : null;
-      if (!u || body.password !== PASSWORD) {
-        return send(res, 400, { code: 400, error_code: "invalid_credentials", msg: "Invalid login credentials" });
-      }
+      if (!u) return authErr(res, 400, "invalid_credentials", "Invalid login credentials");
+      if (isBanned(u)) return authErr(res, 400, "user_banned", "User is banned");
+      if (!passwordOk(u, body.password)) return authErr(res, 400, "invalid_credentials", "Invalid login credentials");
       return send(res, 200, issueSession(u));
     }
     if (grant === "refresh_token") {
-      const uid = refreshTokens.get(body.refresh_token);
-      if (!uid) {
-        return send(res, 400, { code: 400, error_code: "refresh_token_not_found", msg: "Invalid Refresh Token: Refresh Token Not Found" });
-      }
+      const rt = refreshTokens.get(body.refresh_token);
+      if (!rt) return authErr(res, 400, "refresh_token_not_found", "Invalid Refresh Token: Refresh Token Not Found");
+      const u = await userRow("id", rt.uid);
+      if (!u) return authErr(res, 400, "user_not_found", "User not found");
+      if (isBanned(u)) return authErr(res, 400, "user_banned", "Invalid Refresh Token: User Banned");
       refreshTokens.delete(body.refresh_token);
-      const u = await userRow("id", uid);
-      if (!u) return send(res, 400, { code: 400, error_code: "user_not_found", msg: "User not found" });
       return send(res, 200, issueSession(u));
     }
-    return send(res, 400, { code: 400, error_code: "unsupported_grant_type", msg: "Unsupported grant type" });
+    return authErr(res, 400, "unsupported_grant_type", "Unsupported grant type");
   }
   if (req.method === "GET" && sub === "/user") {
-    const claims = verify(bearer(req), SECRET);
-    if (!claims || !claims.sub) {
-      return send(res, 403, { code: 403, error_code: "bad_jwt", msg: "invalid JWT: unable to parse or verify signature" });
+    const a = await authedUser(req, res);
+    return a && send(res, 200, userJson(a.u));
+  }
+  // updateUser: only the password is supported by the fake.
+  if (req.method === "PUT" && sub === "/user") {
+    const body = json(await readBody(req));
+    const a = await authedUser(req, res);
+    if (!a) return;
+    const extra = ["email", "phone"].filter((k) => body[k]);
+    if (extra.length) return authErr(res, 400, "validation_failed", `fake GoTrue: updating ${extra.join(", ")} not implemented`);
+    if (typeof body.password === "string") {
+      if (body.password.length < 6) {
+        return authErr(res, 422, "weak_password", "Password should be at least 6 characters.", { weak_password: { reasons: ["length"] } });
+      }
+      if (passwordOk(a.u, body.password)) {
+        return authErr(res, 422, "same_password", "New password should be different from the old password.");
+      }
+      await pool.query("UPDATE auth.users SET encrypted_password = $2 WHERE id = $1", [a.u.id, hashPw(body.password)]);
+      // GoTrue revokes the user's other sessions on a password change.
+      for (const [tok, rt] of refreshTokens) if (rt.uid === a.u.id && rt.sid !== a.claims.session_id) refreshTokens.delete(tok);
+      record({ t: Date.now(), kind: "password-changed", user: a.u.email });
     }
-    const u = await userRow("id", claims.sub);
-    if (!u) return send(res, 403, { code: 403, error_code: "user_not_found", msg: "User from sub claim in JWT does not exist" });
-    return send(res, 200, userJson(u));
+    return send(res, 200, userJson(await userRow("id", a.u.id)));
+  }
+  // resetPasswordForEmail (implicit flow only — the app sends it from the
+  // server): "sends" the email to the outbox (/__ctl/mail). Same answer
+  // whether or not the address exists.
+  if (req.method === "POST" && sub === "/recover") {
+    const body = json(await readBody(req));
+    if (!body.email) return authErr(res, 400, "validation_failed", "Password recovery requires an email");
+    const u = await userRow("lower(email)", String(body.email).toLowerCase());
+    if (!u) return send(res, 200, {});
+    if (body.code_challenge) return authErr(res, 400, "validation_failed", "fake GoTrue: PKCE recovery not implemented");
+    const token = crypto.randomBytes(20).toString("hex");
+    const redirectTo = allowedRedirect(query.get("redirect_to"));
+    otps.set(token, { uid: u.id, redirectTo, exp: Date.now() + OTP_TTL * 1000 });
+    const action_link = `http://localhost:${PORT}/auth/v1/verify?token=${token}&type=recovery&redirect_to=${encodeURIComponent(redirectTo)}`;
+    const mail = { t: Date.now(), type: "recovery", email: u.email, requested_redirect_to: query.get("redirect_to"), redirect_to: redirectTo, action_link };
+    outbox.push(mail);
+    record({ kind: "mail", ...mail });
+    return send(res, 200, {});
+  }
+  // The email link: consumes the one-time token and redirects to the app
+  // with the session (or the "expired" error) in the fragment.
+  if (req.method === "GET" && sub === "/verify") {
+    const o = otps.get(query.get("token"));
+    const fallback = allowedRedirect(query.get("redirect_to"));
+    if (!o || o.exp < Date.now() || query.get("type") !== "recovery") {
+      otps.delete(query.get("token"));
+      const err = new URLSearchParams({ error: "access_denied", error_code: "otp_expired", error_description: "Email link is invalid or has expired" });
+      return send(res, 303, null, { Location: `${fallback}#${err}` });
+    }
+    otps.delete(query.get("token"));
+    const s = issueSession(await userRow("id", o.uid));
+    const frag = new URLSearchParams({
+      access_token: s.access_token, expires_at: String(s.expires_at), expires_in: String(s.expires_in),
+      refresh_token: s.refresh_token, token_type: "bearer", type: "recovery",
+    });
+    return send(res, 303, null, { Location: `${o.redirectTo}#${frag}` });
+  }
+  // Admin API (service_role key): only ban_duration is implemented.
+  const adminUser = /^\/admin\/users\/([0-9a-f-]{36})$/.exec(sub);
+  if (req.method === "PUT" && adminUser) {
+    const body = json(await readBody(req));
+    const claims = verify(bearer(req), SECRET);
+    if (!claims || claims.role !== "service_role") return authErr(res, 403, "not_admin", "User not allowed");
+    const extra = Object.keys(body).filter((k) => k !== "ban_duration");
+    if (extra.length) return authErr(res, 400, "validation_failed", `fake GoTrue: admin update of ${extra.join(", ")} not implemented`);
+    const u = await userRow("id", adminUser[1]);
+    if (!u) return authErr(res, 404, "user_not_found", "User not found");
+    if (typeof body.ban_duration === "string" && body.ban_duration !== "") {
+      let until = null;
+      if (body.ban_duration !== "none") {
+        const ms = parseDuration(body.ban_duration);
+        if (ms === null) return authErr(res, 400, "validation_failed", `invalid format for ban duration: time: invalid duration "${body.ban_duration}"`);
+        until = ms === 0 ? null : new Date(Date.now() + ms);
+      }
+      await pool.query("UPDATE auth.users SET banned_until = $2 WHERE id = $1", [u.id, until]);
+      record({ t: Date.now(), kind: "ban", user: u.email, banned_until: until });
+    }
+    return send(res, 200, userJson(await userRow("id", u.id)));
   }
   if (req.method === "POST" && sub === "/logout") {
     await readBody(req);
@@ -200,7 +323,7 @@ async function handleAuth(req, res, sub, query) {
   if (req.method === "GET" && (sub === "/settings" || sub === "/health")) {
     return send(res, 200, sub === "/health" ? { name: "fake-gotrue" } : { external: { email: true }, disable_signup: true });
   }
-  return send(res, 404, { code: 404, error_code: "not_found", msg: `fake GoTrue: ${req.method} ${sub} not implemented` });
+  return authErr(res, 404, "not_found", `fake GoTrue: ${req.method} ${sub} not implemented`);
 }
 
 // ------------------------------------------------------------------ storage
@@ -489,6 +612,11 @@ const server = http.createServer(async (req, res) => {
       if (url === "/__ctl/log") {
         const since = Number(u.searchParams.get("since") || 0);
         return send(res, 200, recent.filter((r) => (r.t || 0) >= since));
+      }
+      if (url === "/__ctl/mail") {
+        // Emails GoTrue "sent" (password recovery), newest last.
+        const since = Number(u.searchParams.get("since") || 0);
+        return send(res, 200, outbox.filter((m) => m.t >= since));
       }
       if (url === "/__ctl/health") return send(res, 200, { ok: true });
       return send(res, 404, { error: "unknown ctl" });

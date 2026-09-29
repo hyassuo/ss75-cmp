@@ -24,8 +24,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 GRANT anon, authenticated, service_role TO authenticator;
 
--- auth.users: columns the fake GoTrue returns.
+-- auth.users: columns the fake GoTrue returns / keeps. encrypted_password
+-- NULL = the shared test password ($E2E_PASSWORD); banned_until as in GoTrue.
 ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS encrypted_password text;
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS banned_until timestamptz;
 
 -- storage.objects: the columns Supabase Storage keeps (the stub only has
 -- id/bucket_id/name/owner). Unique like the real table.

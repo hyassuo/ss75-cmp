@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
+import { sendRecoveryEmail } from "@/lib/supabase/recoveryMail";
 import { rateLimit } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
@@ -45,11 +46,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const redirectTo =
-    (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000") + "/login";
-  const { error } = await admin.auth.resetPasswordForEmail(email, {
-    redirectTo,
-  });
+  // The link points back at the site the admin is using.
+  const { error } = await sendRecoveryEmail(email, new URL(request.url).origin);
   if (error) {
     console.error("[users/reset]", error);
     return NextResponse.json(
