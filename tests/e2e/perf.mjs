@@ -179,6 +179,27 @@ async function once(browser) {
   await ctx.clearCookies();
   await page.goto(`${APP}/login`, { waitUntil: "networkidle" });
   out.signInAgain = await signIn();
+
+  // ---- 5. opening the installed app later: start_url "/" with a session
+  await page.goto("about:blank"); // leave the app (the session stays)
+  const a0 = app.length;
+  const s0 = Date.now();
+  await page.goto(`${APP}/`);
+  await page.waitForFunction(
+    () => (document.querySelector("main.app-content")?.innerText || "").trim().length > 40,
+    null,
+    { timeout: 60000 }
+  );
+  const s1 = Date.now();
+  await page.waitForTimeout(300);
+  const st = supabaseStats((await gwLog(s0)).filter((l) => l.t <= s1));
+  out.launch = {
+    wallMs: s1 - s0,
+    supabaseRequests: st.supabaseRequests,
+    serialRoundTrips: st.serialRoundTrips,
+    requests: st.requests,
+    appDocOrRsc: app.slice(a0).filter((x) => x.t <= s1 && (x.kind === "document" || x.kind === "rsc")).length,
+  };
   await ctx.close();
   return out;
 }
@@ -216,6 +237,9 @@ async function main() {
     ["sign-in -> data: items KB (raw / brotli)", `${m("signIn", "itemsKb")} / ${m("signIn", "itemsKbBrotli")}`],
     ["sign-in again, same device: wall (ms)", m("signInAgain", "wallMs")],
     ["sign-in again, same device: serial Supabase round-trips", m("signInAgain", "serialRoundTrips")],
+    ["app launch (\"/\", signed in) -> data: wall (ms)", m("launch", "wallMs")],
+    ["app launch: serial Supabase round-trips", m("launch", "serialRoundTrips")],
+    ["app launch: document/RSC requests to the app", m("launch", "appDocOrRsc")],
     ["warm tab -> Zones (ms)", m("tabZones", "wallMs")],
     ["warm tab -> Risk (ms)", m("tabRisk", "wallMs")],
     ["warm nav -> /users (ms)", m("navUsers", "wallMs")],
@@ -226,6 +250,8 @@ async function main() {
   console.log("\nsign-in requests (first run):");
   for (const r of runs[0].signIn.requests) console.log(`  ${r}`);
   console.log(`  app: ${runs[0].signIn.appDocOrRsc.join(" | ")}`);
+  console.log("\napp launch requests (first run):");
+  for (const r of runs[0].launch.requests) console.log(`  ${r}`);
   console.log("\n/users requests (first run):");
   for (const r of runs[0].navUsers.requests) console.log(`  ${r}`);
 }
