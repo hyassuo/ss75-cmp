@@ -2528,6 +2528,385 @@ async function main() {
     await page.context().close();
   });
 
+  // ------------------------------------------------------------ E1 / E2
+  // Fixtures for the top-bar search: an accented name with IFS codes and an
+  // archived twin (inserted before login, removed afterwards).
+  const S = { live: "00000000-0000-0000-0000-0000000e1501", old: "00000000-0000-0000-0000-0000000e1502" };
+  const seedSearch = () => sql(
+    `INSERT INTO items (id, unit_id, zone_id, name, status, ifs_obj_id, ifs_wo, archived, created_by, created_at)
+     SELECT v.id::uuid, u.id, 'Z05', v.name, 'OK', v.obj, v.wo, v.arch, '00000000-0000-0000-0000-00000000c002', now() - interval '3 days'
+       FROM units u, (VALUES ($1, 'E2E Ação Valve Search', 'OBJ-HULL-3', 'WO-777123', false),
+                             ($2, 'E2E Ação Archived Search', NULL, NULL, true)) AS v(id, name, obj, wo, arch)
+      WHERE u.code = 'SS-75' ON CONFLICT (id) DO NOTHING`, [S.live, S.old]);
+  const unseedSearch = () => sql("DELETE FROM items WHERE id = ANY($1::uuid[])", [[S.live, S.old]]);
+  // The top-bar search (the item modal's IFS picker is also a combobox).
+  const tbSearch = (page) => page.locator('#app-root input[role="combobox"][type="search"]');
+  const searchState = (page) => page.evaluate(() => {
+    const inp = document.querySelector('#app-root input[role="combobox"][type="search"]');
+    const lb = document.getElementById(inp.getAttribute("aria-controls"));
+    const opts = lb ? [...lb.querySelectorAll('[role="option"]')] : [];
+    return {
+      value: inp.value, focused: document.activeElement === inp,
+      expanded: inp.getAttribute("aria-expanded"), ad: inp.getAttribute("aria-activedescendant"),
+      label: inp.getAttribute("aria-label"), placeholder: inp.placeholder,
+      listbox: lb ? { role: lb.getAttribute("role"), label: lb.getAttribute("aria-label"),
+        childRoles: [...lb.children].map((ch) => ch.getAttribute("role")) } : null,
+      opts: opts.map((o) => ({ id: o.id, sel: o.getAttribute("aria-selected"), text: o.innerText.replace(/\s+/g, " ").trim() })),
+      status: lb?.querySelector('[role="status"]')?.textContent ?? null,
+    };
+  });
+
+  await run("e1search", "E1: top-bar item search — name/IFS/WO, accents, archived last, cap, keys, '/', Escape, mouse, no results, PT, users/audit, 390px", async (c) => {
+    await seedSearch();
+    try {
+      const page = await newPage(c, "insp1");
+      await login(page, "insp1@test.local");
+      const box = tbSearch(page);
+      c.expect((await box.count()) === 1, "one search combobox in the top bar");
+
+      // '/' from the page focuses it without typing '/'; Ctrl+/ and modified keys are left alone.
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.keyboard.press("/");
+      let st = await searchState(page);
+      c.expect(st.focused && st.value === "", "'/' focuses the search (no '/' typed)", st);
+      const prevented = await page.evaluate(() => {
+        document.activeElement?.blur();
+        const ev = (o) => { const e = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true, ...o }); document.body.dispatchEvent(e); return e.defaultPrevented; };
+        return { ctrl: ev({ ctrlKey: true }), meta: ev({ metaKey: true }), alt: ev({ altKey: true }), plain: ev({}) };
+      });
+      c.expect(!prevented.ctrl && !prevented.meta && !prevented.alt && prevented.plain, "only a plain '/' is taken (Ctrl/Cmd/Alt+/ and Ctrl+F untouched)", prevented);
+      c.expect(st.label === "Search items" && /Search items/.test(st.placeholder), "EN label + placeholder", st);
+      c.expect(st.expanded === "false" && st.listbox === null, "collapsed while empty (aria-expanded=false)", st);
+      const ph = await page.evaluate(() => {
+        const i = document.querySelector('#app-root input[role="combobox"][type="search"]'), cs = getComputedStyle(i);
+        const ctx = document.createElement("canvas").getContext("2d");
+        ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        return { text: Math.round(ctx.measureText(i.placeholder).width), room: Math.round(i.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)) };
+      });
+      c.step(`NOTE: 1440px placeholder needs ${ph.text}px, field has ${ph.room}px -> the '/' hint is ${ph.text > ph.room ? "cut off" : "visible"}`);
+      // The input closes its list 150 ms after a blur; that timer isn't
+      // cancelled when focus comes back (documented, not failed).
+      await box.focus();
+      await page.keyboard.type("acao");
+      await page.evaluate(() => document.activeElement?.blur());
+      await box.focus();
+      await page.waitForTimeout(300);
+      st = await searchState(page);
+      c.step(`NOTE: blur + refocus within 150 ms -> list ${st.listbox ? "still open" : "closed while the field has focus (stale blur timer)"} (focused=${st.focused}, expanded=${st.expanded})`);
+      await page.keyboard.press("Escape");
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.waitForTimeout(300);
+
+      // One character: nothing yet.
+      await box.focus();
+      await page.keyboard.type("E");
+      st = await searchState(page);
+      c.expect(st.listbox === null && st.expanded === "false", "1 character -> no list", st);
+      await page.keyboard.press("Escape");
+
+      // Accent-insensitive, archived last, combobox wiring.
+      await page.keyboard.type("acao");
+      await page.locator('[role="listbox"]').waitFor({ timeout: 5000 });
+      st = await searchState(page);
+      c.step(`'acao' -> ${st.opts.map((o) => o.text).join(" | ")}`);
+      c.expect(st.opts.length === 2 && /E2E Ação Valve Search/.test(st.opts[0].text) && /E2E Ação Archived Search.*archived/.test(st.opts[1].text),
+        "'acao' finds 'Ação' (accents ignored); archived one last, marked 'archived'", st.opts);
+      c.expect(st.expanded === "true" && st.listbox?.role === "listbox" && st.listbox.label === "Search items", "aria-expanded=true, listbox labelled", st.listbox);
+      c.expect(st.opts.every((o) => o.id) && new Set(st.opts.map((o) => o.id)).size === st.opts.length, "options have unique ids");
+      c.expect(st.ad === st.opts[0].id && st.opts[0].sel === "true", "aria-activedescendant -> first option (aria-selected)", st);
+      await page.keyboard.press("ArrowDown");
+      st = await searchState(page);
+      c.expect(st.ad === st.opts[1].id && st.opts[1].sel === "true" && st.opts[0].sel === "false", "ArrowDown moves the active option", st);
+      await page.keyboard.press("ArrowDown");
+      st = await searchState(page);
+      c.expect(st.ad === st.opts[0].id, "ArrowDown wraps to the first", st.ad);
+      await page.keyboard.press("ArrowUp");
+      st = await searchState(page);
+      c.expect(st.ad === st.opts[1].id, "ArrowUp wraps to the last", st.ad);
+      await page.keyboard.press("ArrowUp");
+      await shot(c, page, "list");
+      await page.keyboard.press("Enter");
+      await modal(page).waitFor({ timeout: 5000 });
+      c.expect(q(page).searchParams.get("item") === S.live, "Enter opens the highlighted item (?item=)", page.url());
+      const title = await page.evaluate(() => { const d = document.querySelector('.modal-card[role="dialog"]'); return document.getElementById(d.getAttribute("aria-labelledby"))?.textContent; });
+      c.expect(title === "E2E Ação Valve Search", "modal shows the picked item", title);
+      st = await searchState(page);
+      c.expect(st.value === "" && st.listbox === null, "search cleared after picking", st);
+
+      // '/' while the modal is open does nothing (page behind is inert).
+      await page.keyboard.press("/");
+      const inDlg = await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'));
+      st = await searchState(page);
+      c.expect(inDlg && !st.focused && st.value === "", "'/' with the item modal open: focus stays in the dialog", { inDlg, st });
+      await page.keyboard.press("Escape");
+      await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      c.expect(!(await modalOpen(page)), "Escape closes the item modal (not swallowed by the search)");
+      const focusAfter = await page.evaluate(() => { const a = document.activeElement; return a ? `${a.tagName}${a.getAttribute("role") ? "[role=" + a.getAttribute("role") + "]" : ""}` : "none"; });
+      c.step(`NOTE: focus after closing an item opened from the search: ${focusAfter}`);
+
+      // IFS object / work order.
+      await box.focus();
+      await page.keyboard.type("obj-hull");
+      await page.locator('[role="listbox"]').waitFor({ timeout: 5000 });
+      st = await searchState(page);
+      c.expect(st.opts.length === 1 && /OBJ-HULL-3/.test(st.opts[0].text), "IFS object id 'obj-hull' finds the item (code shown)", st.opts);
+      await box.fill("");
+      await page.keyboard.type("WO-777123");
+      st = await searchState(page);
+      c.expect(st.opts.length === 1 && /E2E Ação Valve/.test(st.opts[0].text), "work order 'WO-777123' finds the item", st.opts);
+      // Escape clears.
+      await page.keyboard.press("Escape");
+      st = await searchState(page);
+      c.expect(st.value === "" && st.listbox === null && st.expanded === "false" && st.focused, "Escape clears the query and closes the list (focus stays)", st);
+      // Cap at 20.
+      await page.keyboard.type("bulk");
+      st = await searchState(page);
+      c.expect(st.opts.length === 20, "results capped at 20", st.opts.length);
+      // No results.
+      await box.fill("");
+      await page.keyboard.type("zzqqxx");
+      st = await searchState(page);
+      c.expect(st.opts.length === 0 && st.status === "No items found." && !st.ad, "no match -> 'No items found.' (role=status), no activedescendant", st);
+      c.step(`NOTE: listbox children roles with no results: ${JSON.stringify(st.listbox?.childRoles)}`);
+      // Mouse: mousedown on an option opens it (before the input blurs).
+      await box.fill("");
+      await page.keyboard.type("ação valve");
+      await page.locator('[role="option"]').first().click();
+      await modal(page).waitFor({ timeout: 5000 });
+      c.expect(q(page).searchParams.get("item") === S.live, "clicking an option opens the item", page.url());
+      await page.keyboard.press("Escape");
+      await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      // Blur closes the list.
+      await box.fill("");
+      await page.keyboard.type("acao");
+      await page.locator("main").click({ position: { x: 5, y: 5 } });
+      await page.waitForTimeout(400);
+      st = await searchState(page);
+      c.expect(st.listbox === null, "clicking elsewhere closes the list", st);
+      await box.fill("");
+
+      // Responsiveness with the full data set (1200+ items).
+      await page.evaluate(() => {
+        window.__lt = [];
+        try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)); }).observe({ type: "longtask", buffered: false }); } catch {}
+      });
+      await box.focus();
+      const t0 = Date.now();
+      await page.keyboard.type("bulk item 01", { delay: 40 });
+      await page.waitForTimeout(300);
+      const lt = await page.evaluate(() => window.__lt);
+      c.step(`typing 12 chars over ${visibleItems}+ items: ${Date.now() - t0} ms, long tasks: ${JSON.stringify(lt)}`);
+      c.expect(!lt.length || Math.max(...lt) < 250, "no keystroke blocks the main thread >= 250 ms", lt);
+      await page.keyboard.press("Escape");
+
+      // Tablet widths: the bottom band wraps instead of overflowing.
+      for (const w of [1024, 800]) {
+        await page.setViewportSize({ width: w, height: 900 });
+        await page.waitForTimeout(200);
+        const m = await page.evaluate(() => {
+          const band = document.querySelector(".tb-band-bottom"), s = document.querySelector(".tb-search").getBoundingClientRect(), p = document.querySelector(".tb-pills").getBoundingClientRect();
+          return { overflow: band.scrollWidth - band.clientWidth, doc: document.documentElement.scrollWidth - innerWidth, ownRow: s.top >= p.bottom - 1, sw: Math.round(s.width) };
+        });
+        c.expect(m.overflow <= 0 && m.doc <= 0, `${w}px: no horizontal overflow in the top bar`, m);
+        c.step(`${w}px: search ${m.ownRow ? "on its own row" : "beside the pills"} (${m.sw}px)`);
+      }
+      await page.context().close();
+
+      // Users / Audit log: '/' leaves form fields alone; the search opens the item on /dashboard.
+      const adm = await newPage(c, "admin1");
+      await login(adm, "admin1@test.local");
+      await adm.goto(`${APP}/users`);
+      await adm.getByText("Create User").waitFor({ timeout: 20000 });
+      const email = adm.locator('input[type="email"]').first();
+      await email.click();
+      await adm.keyboard.type("a/b");
+      c.expect((await email.inputValue()) === "a/b" && (await email.evaluate((e) => e === document.activeElement)), "'/' typed in a text field stays in the field (Users)");
+      await adm.goto(`${APP}/audit-log`);
+      await adm.locator("main select").first().waitFor({ timeout: 20000 });
+      await adm.locator("main select").first().focus();
+      await adm.keyboard.press("/");
+      c.expect(await adm.evaluate(() => document.activeElement?.tagName === "SELECT"), "'/' on a focused <select> doesn't steal focus (Audit log)");
+      const ce = await adm.evaluate(() => {
+        const d = document.createElement("div"); d.contentEditable = "true"; d.id = "e2e-ce"; document.querySelector("main").prepend(d); d.focus();
+        const e = new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }); d.dispatchEvent(e);
+        const r = { prevented: e.defaultPrevented, focus: document.activeElement === d }; d.remove(); return r;
+      });
+      c.expect(!ce.prevented && ce.focus, "'/' in a contenteditable is left alone", ce);
+      await adm.evaluate(() => document.activeElement?.blur());
+      await adm.keyboard.press("/");
+      await adm.keyboard.type("acao valve");
+      await adm.locator('[role="option"]').first().waitFor({ timeout: 5000 });
+      await adm.keyboard.press("Enter");
+      await adm.waitForURL(/\/dashboard\?.*item=/, { timeout: 20000 });
+      await modal(adm).waitFor({ timeout: 20000 });
+      c.expect(new URL(adm.url()).searchParams.get("item") === S.live, "from /audit-log the search opens /dashboard?item=<id>", adm.url());
+      await adm.keyboard.press("Escape");
+      await modal(adm).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+      await adm.goto(`${APP}/users`);
+      await adm.getByText("Create User").waitFor({ timeout: 20000 });
+      await tbSearch(adm).click();
+      await adm.keyboard.type("obj-hull");
+      await adm.locator('[role="option"]').first().click();
+      await adm.waitForURL(/\/dashboard\?.*item=/, { timeout: 20000 });
+      await modal(adm).waitFor({ timeout: 20000 });
+      c.expect(new URL(adm.url()).searchParams.get("item") === S.live, "from /users a click on a result opens the item", adm.url());
+      await adm.keyboard.press("Escape");
+      await modal(adm).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+
+      // Portuguese.
+      await adm.getByRole("button", { name: "PT", exact: true }).click();
+      await adm.waitForTimeout(500);
+      await tbSearch(adm).click();
+      await adm.keyboard.type("acao");
+      await adm.locator('[role="listbox"]').waitFor({ timeout: 5000 });
+      st = await searchState(adm);
+      c.expect(st.label === "Buscar itens" && /^Buscar itens \(nome, IFS, OS, zona…\)/.test(st.placeholder) && st.listbox?.label === "Buscar itens", "PT label, placeholder and listbox label", st);
+      c.expect(/arquivado/.test(st.opts[1]?.text || "") && /SAUDÁVEL|OK|ATENÇÃO|CRÍTICO|PENDENTE/i.test(st.opts[0]?.text || ""), "PT 'arquivado' tag and status", st.opts);
+      await tbSearch(adm).fill("");
+      await adm.keyboard.type("zzqqxx");
+      st = await searchState(adm);
+      c.expect(st.status === "Nenhum item encontrado.", "PT no-results text", st.status);
+      await shot(c, adm, "pt");
+      await adm.context().close();
+
+      // Phone 390x844.
+      const mob = await newPage(c, "insp1-mobile", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+      await login(mob, "insp1@test.local");
+      const lay = await mob.evaluate(() => {
+        const band = document.querySelector(".tb-band-bottom"), bar = band.parentElement;
+        const s = document.querySelector(".tb-search").getBoundingClientRect(), p = document.querySelector(".tb-pills").getBoundingClientRect();
+        const inp = document.querySelector(".tb-search input").getBoundingClientRect();
+        const cs = getComputedStyle(band);
+        return { ownRow: s.top >= p.bottom - 1, sLeft: Math.round(s.left), sRight: Math.round(s.right),
+          inner: Math.round(band.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)), sw: Math.round(s.width),
+          barOverflow: bar.scrollWidth - bar.clientWidth, bandOverflow: band.scrollWidth - band.clientWidth,
+          docOverflow: document.documentElement.scrollWidth - innerWidth, inputH: Math.round(inp.height),
+          fontSize: getComputedStyle(document.querySelector(".tb-search input")).fontSize };
+      });
+      c.expect(lay.ownRow && Math.abs(lay.sw - lay.inner) <= 1, "390px: search on its own full-width row", lay);
+      c.expect(lay.barOverflow <= 0 && lay.bandOverflow <= 0 && lay.docOverflow <= 0, "390px: no horizontal overflow (top bar, page)", lay);
+      c.expect(lay.fontSize === "16px", "390px: 16px font (no iOS zoom on focus)", lay.fontSize);
+      c.step(`NOTE: 390px search input height ${lay.inputH}px (44px touch-target guideline)`);
+      await tbSearch(mob).tap();
+      await mob.keyboard.type("acao");
+      await mob.locator('[role="option"]').first().waitFor({ timeout: 5000 });
+      const optm = await mob.evaluate(() => {
+        const lb = document.querySelector('#app-root [role="listbox"]').getBoundingClientRect();
+        const os = [...document.querySelectorAll('#app-root [role="option"]')].map((o) => {
+          const r = o.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return { h: Math.round(r.height), onTop: hit?.closest('[role="option"]') === o };
+        });
+        return { lbLeft: Math.round(lb.left), lbRight: Math.round(lb.right), os, docOverflow: document.documentElement.scrollWidth - innerWidth };
+      });
+      c.expect(optm.os.length === 2 && optm.os.every((o) => o.h >= 44), "390px: result rows >= 44px", optm.os);
+      c.expect(optm.os.every((o) => o.onTop), "390px: the list is drawn above the page content", optm.os);
+      c.expect(optm.lbLeft >= 0 && optm.lbRight <= 390 && optm.docOverflow <= 0, "390px: the list fits the screen", optm);
+      await shot(c, mob, "mobile-list");
+      await mob.locator('[role="option"]').first().tap();
+      await modal(mob).waitFor({ timeout: 5000 });
+      c.expect(q(mob).searchParams.get("item") === S.live, "390px: tapping a result opens the item", mob.url());
+      await mob.context().close();
+    } finally {
+      await unseedSearch();
+    }
+  });
+
+  await run("e2glyphs", "E2: risk matrix — shape per level in every cell, sr-only level, tooltip, translated legend, fonts, 390px", async (c) => {
+    const LV = { Low: "○", Medium: "◇", High: "△", Critical: "▲" };
+    const lvOf = (v) => (v >= 15 ? "Critical" : v >= 8 ? "High" : v >= 4 ? "Medium" : "Low");
+    const readMatrix = (page) => page.evaluate(() => {
+      const rows = [...document.querySelectorAll("main table tbody tr")];
+      return rows.map((tr) => [...tr.children].slice(1).map((td) => {
+        const box = td.firstElementChild, head = box.firstElementChild, sp = [...head.children];
+        const sr = head.querySelector(".sr-only");
+        const cs = sr ? getComputedStyle(sr) : null;
+        const hr = head.getBoundingClientRect(), br = box.getBoundingClientRect();
+        const g = sp[1]?.getBoundingClientRect(), n = sp[0]?.getBoundingClientRect();
+        return {
+          rpn: sp[0]?.textContent, glyph: sp[1]?.textContent, glyphHidden: sp[1]?.getAttribute("aria-hidden"),
+          sr: sr?.textContent, srHidden: cs ? cs.position === "absolute" && parseFloat(cs.width) <= 1 && (cs.clip !== "auto" || cs.clipPath !== "none") && cs.overflow === "hidden" : false,
+          title: head.getAttribute("title"), items: box.querySelectorAll("[role=button]").length,
+          fits: !!g && g.right <= br.right + 0.5 && n.right <= g.left, headW: Math.round(hr.width),
+        };
+      }));
+    });
+    const readLegend = (page) => page.evaluate(() => {
+      const t = document.querySelector("main table");
+      let el = t.parentElement.nextElementSibling;
+      return [...el.children].map((d) => ({ glyph: d.children[0]?.textContent, hidden: d.children[0]?.getAttribute("aria-hidden"), text: d.children[1]?.textContent }));
+    });
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    await gotoTab(page, "Risk Matrix");
+    await page.locator("main table tbody tr").first().waitFor({ timeout: 20000 });
+    const m = await readMatrix(page);
+    const bad = [], seen = {};
+    m.forEach((row, i) => row.forEach((cell, j) => {
+      const p = 5 - i, cc = j + 1, v = p * cc, lv = lvOf(v);
+      if (cell.items) seen[lv] = (seen[lv] || 0) + cell.items;
+      if (cell.rpn !== String(v) || cell.glyph !== LV[lv] || cell.glyphHidden !== "true" || cell.sr !== lv || !cell.srHidden || cell.title !== `${lv} · RPN ${v}`)
+        bad.push({ p, c: cc, cell });
+    }));
+    c.expect(m.length === 5 && m.every((r) => r.length === 5), "5x5 matrix");
+    c.expect(bad.length === 0, "every cell: RPN, level glyph (aria-hidden), sr-only level name (visually hidden), tooltip 'Level · RPN n'", bad.slice(0, 4));
+    c.step(`items per level: ${JSON.stringify(seen)}`);
+    c.expect(["Low", "Medium", "High", "Critical"].every((l) => seen[l] > 0), "all four levels have items (non-empty) and show their glyph", seen);
+    const lg = await readLegend(page);
+    c.expect(JSON.stringify(lg) === JSON.stringify([
+      { glyph: LV.Low, hidden: "true", text: "Low (RPN ≤ 3)" }, { glyph: LV.Medium, hidden: "true", text: "Medium (RPN 4–7)" },
+      { glyph: LV.High, hidden: "true", text: "High (RPN 8–14)" }, { glyph: LV.Critical, hidden: "true", text: "Critical (RPN ≥ 15)" }]), "legend: 4 entries, glyph + level + range (EN)", lg);
+    // Which font actually draws the glyphs (Inter / Plex are latin-subset webfonts).
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
+    await page.evaluate(() => {
+      document.querySelector("main table tbody tr td:nth-child(2) > div > div > span[aria-hidden]")?.setAttribute("data-e2e-g", "cell");
+      const t = document.querySelector("main table").parentElement.nextElementSibling;
+      t.querySelectorAll('span[aria-hidden="true"]').forEach((s, i) => s.setAttribute("data-e2e-g", "legend" + i));
+      document.querySelectorAll("main table tbody tr").forEach((tr, i) => tr.querySelectorAll('span[aria-hidden="true"]').forEach((s, j) => s.setAttribute("data-e2e-g", `c${i}${j}`)));
+    });
+    const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
+    const { nodeIds } = await cdp.send("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-e2e-g]" });
+    const fonts = {};
+    for (const nid of nodeIds) {
+      const { attributes } = await cdp.send("DOM.getAttributes", { nodeId: nid });
+      const tag = attributes[attributes.indexOf("data-e2e-g") + 1];
+      const { fonts: f } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId: nid });
+      fonts[tag] = f.map((x) => `${x.familyName}${x.isCustomFont ? "*" : ""}:${x.glyphCount}`).join(",");
+    }
+    const uniq = [...new Set(Object.values(fonts))];
+    c.step(`glyph fonts (family:glyphs, *=webfont): ${JSON.stringify(uniq)}`);
+    c.expect(Object.values(fonts).every((f) => f && !/LastResort|^$/.test(f) && /:\d+/.test(f)), "every glyph is drawn by a real font (no tofu)", fonts);
+    await shot(c, page, "matrix-en");
+
+    // Portuguese.
+    await page.getByRole("button", { name: "PT", exact: true }).click();
+    await page.waitForTimeout(500);
+    const lgPt = await readLegend(page);
+    c.expect(JSON.stringify(lgPt.map((l) => l.text)) === JSON.stringify(["Baixa (RPN ≤ 3)", "Média (RPN 4–7)", "Alta (RPN 8–14)", "Crítica (RPN ≥ 15)"]), "legend translated (PT)", lgPt);
+    const mPt = await readMatrix(page);
+    c.expect(mPt[0][4].sr === "Crítica" && mPt[0][4].title === "Crítica · RPN 25" && mPt[4][0].sr === "Baixa", "sr-only text and tooltip translated (PT)", [mPt[0][4], mPt[4][0]]);
+    await shot(c, page, "matrix-pt");
+    await page.context().close();
+
+    // Phone: narrow cells.
+    const mob = await newPage(c, "insp1-mobile", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+    await login(mob, "insp1@test.local");
+    await mob.goto(`${APP}/dashboard?tab=risk`);
+    await mob.locator("main table tbody tr").first().waitFor({ timeout: 20000 });
+    const mm = await readMatrix(mob);
+    const lay = await mob.evaluate(() => {
+      const t = document.querySelector("main table"), wrap = t.parentElement;
+      return { wrapOverflow: wrap.scrollWidth - wrap.clientWidth, docOverflow: document.documentElement.scrollWidth - innerWidth, mainOverflow: (() => { const m = document.querySelector("main"); return m.scrollWidth - m.clientWidth; })() };
+    });
+    const cramped = mm.flat().filter((x) => !x.fits);
+    c.step(`390px: cell header width ${Math.min(...mm.flat().map((x) => x.headW))}-${Math.max(...mm.flat().map((x) => x.headW))}px`);
+    c.expect(cramped.length === 0, "390px: RPN and glyph fit side by side in every cell", cramped.slice(0, 3));
+    c.expect(lay.wrapOverflow <= 0 && lay.docOverflow <= 0 && lay.mainOverflow <= 0, "390px: matrix causes no horizontal overflow", lay);
+    await shot(c, mob, "matrix-390");
+    await mob.context().close();
+  });
+
   await browser.close();
   await pool.end();
 
