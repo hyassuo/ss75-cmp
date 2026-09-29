@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendRecoveryEmail } from "@/lib/supabase/recoveryMail";
-import { rateLimit } from "@/lib/utils/rateLimit";
+import { rateLimitShared } from "@/lib/utils/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   // Tighter than the other admin routes — each call sends an email.
-  const rl = rateLimit(`users-reset:${guard.ctx.userId}`, 5, 60_000);
+  const rl = await rateLimitShared(`users-reset:${guard.ctx.userId}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },

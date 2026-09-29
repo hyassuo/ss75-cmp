@@ -7,7 +7,7 @@
 # the way PostgREST would (SET ROLE authenticated + JWT sub claim).
 #
 # Scenarios:
-#   fresh    supabase/migrations/20260928000000_baseline.sql + supabase/migrations/20260928000100_ifs_register.sql (run twice: idempotency)
+#   fresh    every file in supabase/migrations/, in order (run twice: idempotency)
 #   upgrade  fresh install, then every in-place upgrade file in README order,
 #            ending with the latest hardening round
 #
@@ -235,6 +235,20 @@ suite() {
   check "inspector adds a reading" "$(rows $I1 "INSERT INTO readings (item_id, reading_date, depth_mm) VALUES ('$N', current_date, 0.5) RETURNING 1")" "1"
   check "inspector sees the item history" "$(as $I1 "SELECT count(*) > 0 FROM history WHERE item_id = '$N'")" "t"
   check "audit rows snapshot unit and name" "$(su_sql "SELECT count(*) FROM history WHERE unit_id IS NULL OR item_ref IS NULL OR item_name IS NULL")" "0"
+
+  echo " shared rate limits"
+  svc() { "${PSQL[@]}" -d "$DB" -At -c "SET ROLE service_role;" -c "$1" 2>&1 | tail -1 | sed 's/^ERROR: *//'; }
+  check "authenticated can't call rate_limit_hit" "$(as $I1 "SELECT * FROM rate_limit_hit('k', 1, 60)")" "permission denied.*"
+  check "authenticated can't read rate_limits" "$(as $I1 "SELECT count(*) FROM rate_limits")" "permission denied.*"
+  check "anon can't call rate_limit_hit" "$("${PSQL[@]}" -d "$DB" -At -c "SET ROLE anon;" -c "SELECT * FROM rate_limit_hit('k', 1, 60)" 2>&1 | tail -1 | sed 's/^ERROR: *//')" "permission denied.*"
+  check "1st hit within the limit" "$(svc "SELECT allowed || ',' || retry_after FROM rate_limit_hit('t:$DB', 2, 60)")" "true,0"
+  check "2nd hit within the limit" "$(svc "SELECT allowed FROM rate_limit_hit('t:$DB', 2, 60)")" "t"
+  check "3rd hit refused with a retry time" "$(svc "SELECT NOT allowed AND retry_after BETWEEN 1 AND 60 FROM rate_limit_hit('t:$DB', 2, 60)")" "t"
+  check "keys are independent" "$(svc "SELECT allowed FROM rate_limit_hit('other:$DB', 2, 60)")" "t"
+  su_sql "UPDATE rate_limits SET window_start = now() - interval '61 seconds' WHERE key = 't:$DB'" >/dev/null
+  check "an expired window starts over" "$(svc "SELECT allowed FROM rate_limit_hit('t:$DB', 2, 60)")" "t"
+  check "the new window counts from 1" "$(su_sql "SELECT count FROM rate_limits WHERE key = 't:$DB'")" "1"
+  check "invalid arguments are rejected" "$("${PSQL[@]}" -d "$DB" -At -c "SET ROLE service_role;" -c "SELECT * FROM rate_limit_hit('k', 0, 60)" 2>&1 | grep -c 'invalid arguments')" "1"
 }
 
 scenario() { # scenario <name> <files...>
@@ -247,7 +261,10 @@ scenario() { # scenario <name> <files...>
   suite
 }
 
-scenario fresh supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql
+# Every migration, in file-name (= timestamp) order.
+MIGRATIONS=$(cd "$ROOT" && ls supabase/migrations/*.sql | sort)
+# shellcheck disable=SC2086 # word-split on purpose: one file per word
+scenario fresh $MIGRATIONS $MIGRATIONS
 echo " demo seed"
 REAL=$(as $I1 "INSERT INTO items (unit_id, zone_id, name, notes) VALUES ((SELECT id FROM units WHERE code = 'SS-75'), 'Z01', 'Imported', '[DEMO] imported by hand') RETURNING id")
 before=$(su_sql "SELECT count(*) FROM history WHERE item_id IS NULL")
@@ -260,7 +277,8 @@ check "rollback-v140 refuses to run under round 5" "$("${PSQL[@]}" -d "$DB" -f "
 scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql \
   supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
   supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql supabase/upgrades/hardening-5.sql \
-  supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql
+  supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql \
+  supabase/migrations/20260929000000_rate_limits.sql
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs

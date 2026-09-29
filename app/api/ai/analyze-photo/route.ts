@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readJson, requireUser, sameOrigin } from "@/lib/supabase/adminGuard";
-import { rateLimit } from "@/lib/utils/rateLimit";
+import { rateLimitShared } from "@/lib/utils/rateLimit";
 import { FREQUENCIES } from "@/lib/utils/constants";
 import {
   aiGenerate,
@@ -88,6 +88,11 @@ const MAX_BASE64_LENGTH = 14_000_000;
 // Vision calls are expensive; cap per admin per minute.
 const RATE_LIMIT = 10;
 const RATE_WINDOW_MS = 60_000;
+// Daily quotas (UTC days) on top of the per-minute burst limit: one person
+// can't spend the project's Gemini quota, and the whole app has a ceiling.
+const DAILY_PER_USER = 60;
+const DAILY_TOTAL = 500;
+const DAY_MS = 86_400_000;
 
 const SYSTEM = [
   "You are a corrosion assessment expert for offshore drilling units.",
@@ -197,7 +202,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const rl = rateLimit(`photo:${guard.ctx.userId}`, RATE_LIMIT, RATE_WINDOW_MS);
+  const rl = await rateLimitShared(
+    `photo:${guard.ctx.userId}`,
+    RATE_LIMIT,
+    RATE_WINDOW_MS
+  );
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },
@@ -229,6 +238,36 @@ export async function POST(request: Request) {
   const media: AiMediaType = ALLOWED.includes(mediaType as AiMediaType)
     ? (mediaType as AiMediaType)
     : "image/jpeg";
+
+  // Daily quotas, counted only for a request that will reach the model (a
+  // missing key, bad body or oversize image doesn't spend them). The
+  // per-user quota goes first so a user over it doesn't eat the app-wide
+  // one; the reverse (a user's count rising while only the app-wide quota
+  // refuses) is accepted — it lasts at most until midnight UTC.
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  const mine = await rateLimitShared(
+    `photo-day:${guard.ctx.userId}:${day}`,
+    DAILY_PER_USER,
+    DAY_MS
+  );
+  const all = mine.allowed
+    ? await rateLimitShared(`photo-day:all:${day}`, DAILY_TOTAL, DAY_MS)
+    : mine;
+  if (!all.allowed) {
+    // The keys carry the UTC date, so the quota reopens at the next UTC
+    // midnight, whatever the counter's own window says.
+    const nextMidnight = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + 1
+    );
+    const retryAfter = Math.max(1, Math.ceil((nextMidnight - now.getTime()) / 1000));
+    return NextResponse.json(
+      { error: "Daily photo-analysis limit reached. Try again tomorrow." },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+    );
+  }
 
   try {
     const text = await aiGenerate({

@@ -17,6 +17,7 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A5 | P3 | PITR (point-in-time recovery) | Se o plano do Supabase permitir. |
 | A6 | P1 | SMTP próprio para os e-mails de autenticação | Sem SMTP próprio o Supabase **só entrega e-mail para membros da equipe do projeto** (2 por hora, sem garantia) — reset de senha e confirmação de cadastro não chegam aos usuários. Supabase → Authentication → Emails → SMTP Settings (ex.: Resend, SendGrid, Amazon SES). |
 | A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
+| A8 | P1 | Aplicar as migrations novas no Supabase | SQL Editor, na ordem: `supabase/migrations/20260929000000_rate_limits.sql` (C4). Sem ela o app funciona, mas o limite de requisições volta a ser só por instância. |
 
 ## B. Decisões tomadas (29/09/2026)
 
@@ -31,8 +32,6 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| C3 | P2 | CSP permissivo | `next.config.mjs:12-16`: `'unsafe-eval'` e `'unsafe-inline'` em `script-src`, `https://*.supabase.co` genérico e Gemini no `connect-src` (só o servidor chama o Gemini). Usar nonce, a URL exata do projeto, e remover o Gemini. |
-| C4 | P2 | Rate limit em memória | `lib/utils/rateLimit.ts` conta por instância — na Vercel (serverless) não limita de verdade. Mover para Postgres/KV e criar cota diária de IA. |
 | C5 | P2 | Senhas fracas | Sem MFA e sem troca obrigatória no primeiro acesso. |
 | C6 | P3 | Usuário inativo lê tabelas de referência | Policies `units`, `zones`, `ifs_objects` usam `USING (true)`. Trocar por "usuário ativo". |
 | C7 | P3 | Links assinados de fotos valem 1 h | `components/items/EvidencePanel.tsx:101` (`3600`). Reduzir (ex.: 10 min) e renovar sob demanda. |
@@ -72,3 +71,5 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | C2 | Sessões de usuário desativado | Desativar bloqueia a conta de autenticação (sem renovar sessão nem entrar de novo); reativar libera. |
 | D1 | Taxa de corrosão | Só com ≥ 2 medições reais no mesmo ponto e ≥ 90 dias entre elas; por ponto vale a pior entre longo e curto prazo, e o item assume o pior ponto. Sem isso aparece "dados insuficientes", sem alerta. |
 | C8 | ~~Logout de usuário inativo é global~~ | Descartado: para uma conta desativada, encerrar as sessões em todos os aparelhos é o comportamento certo. |
+| C3 | CSP com nonce | Páginas com CSP por requisição (nonce + `'strict-dynamic'`, sem `unsafe-inline`/`unsafe-eval` para scripts, Supabase exato, sem Gemini); demais respostas com CSP bloqueado; página offline e service worker com políticas próprias. E2E roda com o CSP real. |
+| C4 | Limite de requisições compartilhado | Contadores no Postgres (`rate_limit_hit`), com reserva em memória se a função não existir; cotas diárias de IA (60 por usuário, 500 no total, por dia UTC). |

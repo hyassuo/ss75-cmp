@@ -83,8 +83,13 @@ export async function aiGenerate(req: AiRequest): Promise<string> {
     },
   };
 
+  // GEMINI_API_BASE exists for the end-to-end tests (a local stand-in);
+  // production leaves it unset.
+  const base = (
+    process.env.GEMINI_API_BASE || "https://generativelanguage.googleapis.com"
+  ).replace(/\/+$/, "");
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     {
       method: "POST",
       headers: {

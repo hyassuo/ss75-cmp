@@ -82,6 +82,9 @@ wait_http "http://127.0.0.1:$GW_PORT/__ctl/health"
 # --- 4. app (NEXT_PUBLIC_* are inlined at build time -> rebuild when they change)
 export NEXT_PUBLIC_SUPABASE_URL="$SUPABASE_URL_LOCAL" NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY"
 export SUPABASE_SERVICE_ROLE_KEY="$SERVICE_KEY" NEXT_PUBLIC_APP_URL="$APP_URL" NEXT_TELEMETRY_DISABLED=1
+# Gemini is the gateway's stand-in (/gemini): a fixed analysis, no network.
+export GEMINI_API_KEY="e2e-dummy-not-a-key"
+export GEMINI_API_BASE="http://127.0.0.1:$GW_PORT/gemini"
 STAMP="$ROOT/.next/.e2e-env"
 WANT="$SUPABASE_URL_LOCAL|$ANON_KEY|$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo nogit)"
 if [ "${SKIP_BUILD:-0}" != 1 ] || [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$WANT" ]; then

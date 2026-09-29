@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
-import { rateLimit } from "@/lib/utils/rateLimit";
+import { rateLimitShared } from "@/lib/utils/rateLimit";
 import type { UserRole } from "@/lib/types/domain";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  const rl = rateLimit(`users:${guard.ctx.userId}`, 30, 60_000);
+  const rl = await rateLimitShared(`users:${guard.ctx.userId}`, 30, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },
