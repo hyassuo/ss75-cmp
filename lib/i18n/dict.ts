@@ -1,6 +1,6 @@
 // i18n dictionary. Keys are flat dotted strings (header.title, sidebar.zones).
 // Portuguese translations use the terminology common in Brazilian offshore
-// O&G (Petrobras / Noble / ANP standards) — not literal Google Translate.
+// O&G (Petrobras / Noble / ANP standards), not literal Google Translate.
 //
 // Where a term has no clean Portuguese equivalent in the industry (RPN,
 // SECE, IFS, dropdown enum values stored in the DB, IBM Plex / etc.), the
@@ -17,7 +17,7 @@ export type Lang = "en" | "pt";
 type Value = string | ((...args: never[]) => string);
 type DictMap = Record<string, Value>;
 
-// Flat dict. Adding a key in EN without PT (or vice versa) is fine — the
+// Flat dict. Adding a key in EN without PT (or vice versa) is fine: the
 // hook falls back to EN if a PT value is missing, and to the key itself
 // as a last resort.
 const en = {
@@ -29,10 +29,6 @@ const en = {
   "search.none": "No items found.",
   "search.count": (n: number) => (n === 1 ? "1 item found." : `${n} items found.`),
   "search.archived": "archived",
-  "theme.label": (name: string) => `Theme: ${name}`,
-  "theme.system": "device",
-  "theme.light": "light",
-  "theme.dark": "dark",
   "header.departments": "Departments:",
   "status.healthy": "HEALTHY",
   "status.attention": "ATTENTION",
@@ -56,7 +52,7 @@ const en = {
   "nav.audit": "Audit Log",
   "nav.newItem": "+ New Item",
   "nav.addItem": "+ Item",
-  "nav.signOut": "⏻  Sign out",
+  "nav.signOut": "Sign out",
   "nav.signOutConfirm": "Sign out?",
 
   // Footer
@@ -74,7 +70,7 @@ const en = {
   "toast.evidenceSaved": "Evidence saved",
   "exp.xlsxFail": "XLSX export failed:",
   "exp.photosUnavailable":
-    "The report photos could not be loaded — the PDF is generated without them.",
+    "The report photos could not be loaded. The PDF is generated without them.",
   "common.delete": "Delete",
   "common.create": "Create",
   "common.add": "+ Add",
@@ -108,7 +104,7 @@ const en = {
   "integrity.CRITICAL": "CRITICAL",
   "integrity.NA": "N/A",
 
-  // Priority (display only — DB stores the EN enum)
+  // Priority (display only; the DB stores the EN enum)
   "priority.Critical": "Critical",
   "priority.High": "High",
   "priority.Medium": "Medium",
@@ -132,7 +128,7 @@ const en = {
   "alert.critRate": "critical corrosion rate",
   "alert.elevRate": "elevated corrosion rate",
 
-  // Item modal — section titles
+  // Item modal: section titles
   "sec.evidence": "INSPECTION EVIDENCE",
   "sec.identification": "IDENTIFICATION",
   "sec.ifs": "IFS OBJECT",
@@ -150,12 +146,12 @@ const en = {
   "modal.createItem": "Create Item",
   "modal.untitled": "Untitled",
   "modal.pendingAiReading":
-    "AI pit-depth estimate — saved as a reading when you save the item:",
+    "AI pit-depth estimate (saved as a reading when you save the item):",
   "modal.unsavedEvidence":
     "There is an unsaved evidence entry (photo/description). OK = continue and discard it. Cancel = go back and save it first.",
   "modal.nameRequired": "Item name is required.",
   "modal.saveFailed":
-    "Not saved — your changes are still here. Check the connection and try again.",
+    "Not saved. Your changes are still here. Check the connection and try again.",
   "modal.deleteFailed": "Could not delete:",
   "modal.deletedElsewhere": "This item was deleted by another user.",
   "modal.conflict":
@@ -176,12 +172,12 @@ const en = {
   "readings.delete": "Delete reading",
   "evidence.confirmDelete": "Delete this evidence and its photo?",
   "evidence.delete": "Delete evidence",
-  "evidence.batchLimit": (n: number) => `Up to ${n} photos at a time — only the first ${n} were kept.`,
+  "evidence.batchLimit": (n: number) => `Up to ${n} photos at a time: only the first ${n} were kept.`,
   "evidence.batchProgress": (i: number, n: number) => `Saving ${i} of ${n}…`,
   "evidence.morePhotos": (n: number) => `+${n} more`,
   "evidence.preparing": (n: number) => (n === 1 ? "Preparing the photo…" : `Preparing ${n} photos…`),
   "evidence.batchKept": (saved: number, n: number) =>
-    `(${saved} of ${n} saved — Save again for the other ${n - saved}.)`,
+    `(${saved} of ${n} saved. Save again for the other ${n - saved}.)`,
   "evidence.saveMany": (n: number) => `Save ${n} evidence records`,
   "toast.evidencesSaved": (n: number) => `${n} evidence records saved`,
   "evidence.saveFailed": "Evidence not saved:",
@@ -197,7 +193,7 @@ const en = {
   "common.dismiss": "Dismiss",
   "common.close": "Close",
   "modal.discardAiReading": "Discard AI reading",
-  "newItem.pickZone": "New item — choose a zone",
+  "newItem.pickZone": "New item: choose a zone",
   "audit.allActions": "All actions",
   "audit.allUsers": "All users",
   "ai.type": "Type",
@@ -212,7 +208,7 @@ const en = {
   "ifs.placeholder": "Type Object ID or description…",
   "ifs.clear": "Clear IFS object",
   "ifs.searching": "Searching IFS…",
-  "ifs.seceNote": "SECE — Safety & Environmental Critical Element",
+  "ifs.seceNote": "SECE (Safety & Environmental Critical Element)",
   "nav.main": "Main navigation",
   "nav.menu": "Menu",
   "navShort.dashboard": "Home",
@@ -257,9 +253,9 @@ const en = {
     "You'll be signed out in 2 minutes for inactivity. Unsaved item changes are kept on this device.",
   "idle.stay": "Stay signed in",
   "net.offline":
-    "Offline — changes can't be saved until the connection is back. Your typing is kept.",
+    "Offline: changes can't be saved until the connection is back. Your typing is kept.",
   "audit.truncated":
-    "Showing the most recent events only — narrow the date range to see older ones.",
+    "Showing the most recent events only. Narrow the date range to see older ones.",
   "audit.loadFailed": "Could not load the audit log:",
   "modal.archive": "Archive",
   "modal.unarchive": "Unarchive",
@@ -275,7 +271,7 @@ const en = {
   "f.actionType": "Action type",
   "f.actionStatus": "Action status",
   "f.actionDue": "Target date",
-  "f.actionDueSuggested": "suggested from priority — editable",
+  "f.actionDueSuggested": "suggested from priority, editable",
   "f.actionNote": "Action notes",
   "f.actionDoneHint":
     "Done ≠ resolved: confirm the item's condition on re-inspection before marking it resolved.",
@@ -300,7 +296,7 @@ const en = {
   // Assessment bands (informative only)
   "f.corrExtent": "Corrosion extent (%)",
   "f.materialLoss": "Material loss (%)",
-  "f.bandsInfo": "Informative only — does not affect priority.",
+  "f.bandsInfo": "Informative only; it does not affect priority.",
 
   // Line accessory
   "f.isAccessory": "Line accessory",
@@ -354,9 +350,9 @@ const en = {
   "f.noEvidence": "No evidence recorded yet",
   "f.calculating": "Calculating...",
   "f.setPC": "Set P + C",
-  "f.imageReady": "Image ready — click to run AI corrosion analysis.",
+  "f.imageReady": "Image ready. Click to run AI corrosion analysis.",
   "f.uploadFirst": "Upload an image to enable AI analysis.",
-  "f.analyse": "🔍 Analyse with AI",
+  "f.analyse": "Analyse with AI",
   "f.analysing": "Analysing...",
 
   // Probability descriptions (from MSC_2123.0_A)
@@ -379,18 +375,18 @@ const en = {
   // SECE display
   "sece.yes": "YES",
   "sece.no": "NO",
-  "sece.na": "—",
+  "sece.na": "-",
 
   // Rate hints
   "rate.insufficient":
-    "Corrosion rate: not enough data yet — needs 2 measurements at the same point, at least 90 days apart.",
+    "Corrosion rate: not enough data yet. It needs 2 measurements at the same point, at least 90 days apart.",
   "rate.critical": "CRITICAL - Immediate Action",
   "rate.severe": "Severe - Increase Monitoring",
   "rate.moderate": "Moderate - Monitor",
   "rate.stable": "Stable",
 
   // Risk matrix
-  "risk.title": "Risk Matrix — API 580 / DNV-RP-G101",
+  "risk.title": "Risk Matrix · API 580 / DNV-RP-G101",
   "risk.assessedOf": (with_: number, total: number) =>
     `${with_} of ${total} items assessed`,
   "risk.empty.title": "No items with risk assessment",
@@ -419,12 +415,12 @@ const en = {
   "exp.xlsx": "Export XLSX",
   "exp.pdf": "Export PDF",
   "exp.includePhotos":
-    "Include evidence photos in PDF (up to 4 per item — larger file, slower to generate)",
+    "Include evidence photos in PDF (up to 4 per item; larger file, slower to generate)",
   "exp.summary": "Summary Table",
   "exp.pdfFail": "PDF export failed.",
 
   // Generic select placeholder
-  "select.placeholder": "-- select --",
+  "select.placeholder": "Select…",
 
   // Status enum
   "statusOpt.OK": "OK",
@@ -499,10 +495,6 @@ const pt: Translations = {
   "search.none": "Nenhum item encontrado.",
   "search.count": (n: number) => (n === 1 ? "1 item encontrado." : `${n} itens encontrados.`),
   "search.archived": "arquivado",
-  "theme.label": (name: string) => `Tema: ${name}`,
-  "theme.system": "do aparelho",
-  "theme.light": "claro",
-  "theme.dark": "escuro",
   "header.departments": "Departamentos:",
   "status.healthy": "SAUDÁVEL",
   "status.attention": "ATENÇÃO",
@@ -526,7 +518,7 @@ const pt: Translations = {
   "nav.audit": "Auditoria",
   "nav.newItem": "+ Novo Item",
   "nav.addItem": "+ Item",
-  "nav.signOut": "⏻  Sair",
+  "nav.signOut": "Sair",
   "nav.signOutConfirm": "Encerrar sessão?",
 
   // Footer
@@ -544,7 +536,7 @@ const pt: Translations = {
   "toast.evidenceSaved": "Evidência salva",
   "exp.xlsxFail": "Falha ao exportar XLSX:",
   "exp.photosUnavailable":
-    "Não foi possível carregar as fotos do relatório — o PDF será gerado sem elas.",
+    "Não foi possível carregar as fotos do relatório. O PDF será gerado sem elas.",
   "common.delete": "Excluir",
   "common.create": "Criar",
   "common.add": "+ Adicionar",
@@ -578,7 +570,7 @@ const pt: Translations = {
   "integrity.DEGRADED": "DEGRADADO",
   "integrity.CRITICAL": "CRÍTICO",
 
-  // Priority (display labels — the underlying enum stays English)
+  // Priority (display labels; the underlying enum stays English)
   "priority.Critical": "Crítica",
   "priority.High": "Alta",
   "priority.Medium": "Média",
@@ -620,12 +612,12 @@ const pt: Translations = {
   "modal.createItem": "Criar Item",
   "modal.untitled": "Sem nome",
   "modal.pendingAiReading":
-    "Estimativa de profundidade (IA) — será salva como leitura ao salvar o item:",
+    "Estimativa de profundidade da IA (salva como leitura ao salvar o item):",
   "modal.unsavedEvidence":
     "Há uma evidência não salva (foto/descrição). OK = continuar e descartar. Cancelar = voltar e salvá-la primeiro.",
   "modal.nameRequired": "O nome do item é obrigatório.",
   "modal.saveFailed":
-    "Não salvo — suas alterações continuam aqui. Verifique a conexão e tente novamente.",
+    "Não salvo. Suas alterações continuam aqui. Verifique a conexão e tente novamente.",
   "modal.deleteFailed": "Não foi possível excluir:",
   "modal.deletedElsewhere": "Este item foi excluído por outro usuário.",
   "modal.conflict":
@@ -646,12 +638,12 @@ const pt: Translations = {
   "readings.delete": "Excluir leitura",
   "evidence.confirmDelete": "Excluir esta evidência e a foto?",
   "evidence.delete": "Excluir evidência",
-  "evidence.batchLimit": (n: number) => `Até ${n} fotos por vez — só as ${n} primeiras foram mantidas.`,
+  "evidence.batchLimit": (n: number) => `Até ${n} fotos por vez: só as ${n} primeiras foram mantidas.`,
   "evidence.batchProgress": (i: number, n: number) => `Salvando ${i} de ${n}…`,
   "evidence.morePhotos": (n: number) => `+${n} ${n === 1 ? "arquivo" : "arquivos"}`,
   "evidence.preparing": (n: number) => (n === 1 ? "Preparando a foto…" : `Preparando ${n} fotos…`),
   "evidence.batchKept": (saved: number, n: number) =>
-    `(${saved} de ${n} salvas — salve de novo para as outras ${n - saved}.)`,
+    `(${saved} de ${n} salvas. Salve de novo para as outras ${n - saved}.)`,
   "evidence.saveMany": (n: number) => `Salvar ${n} registros de evidência`,
   "toast.evidencesSaved": (n: number) => `${n} evidências salvas`,
   "evidence.saveFailed": "Evidência não salva:",
@@ -667,7 +659,7 @@ const pt: Translations = {
   "common.dismiss": "Fechar",
   "common.close": "Fechar",
   "modal.discardAiReading": "Descartar leitura da IA",
-  "newItem.pickZone": "Novo item — escolha a zona",
+  "newItem.pickZone": "Novo item: escolha a zona",
   "audit.allActions": "Todas as ações",
   "audit.allUsers": "Todos os usuários",
   "ai.type": "Tipo",
@@ -682,7 +674,7 @@ const pt: Translations = {
   "ifs.placeholder": "Digite o ID ou a descrição do objeto…",
   "ifs.clear": "Limpar objeto IFS",
   "ifs.searching": "Buscando no IFS…",
-  "ifs.seceNote": "SECE — Elemento Crítico de Segurança e Meio Ambiente",
+  "ifs.seceNote": "SECE (Elemento Crítico de Segurança e Meio Ambiente)",
   "nav.main": "Navegação principal",
   "nav.menu": "Menu",
   "navShort.dashboard": "Início",
@@ -727,9 +719,9 @@ const pt: Translations = {
     "Você será desconectado em 2 minutos por inatividade. Alterações não salvas de itens ficam guardadas neste aparelho.",
   "idle.stay": "Continuar conectado",
   "net.offline":
-    "Sem conexão — nada pode ser salvo até a rede voltar. O que você digitou fica guardado.",
+    "Sem conexão: nada pode ser salvo até a rede voltar. O que você digitou fica guardado.",
   "audit.truncated":
-    "Exibindo apenas os eventos mais recentes — reduza o período para ver os mais antigos.",
+    "Exibindo apenas os eventos mais recentes. Reduza o período para ver os mais antigos.",
   "audit.loadFailed": "Não foi possível carregar o log de auditoria:",
   "modal.archive": "Arquivar",
   "modal.unarchive": "Desarquivar",
@@ -745,7 +737,7 @@ const pt: Translations = {
   "f.actionType": "Tipo de tratativa",
   "f.actionStatus": "Status da tratativa",
   "f.actionDue": "Prazo",
-  "f.actionDueSuggested": "sugerido pela prioridade — editável",
+  "f.actionDueSuggested": "sugerido pela prioridade, editável",
   "f.actionNote": "Observações da tratativa",
   "f.actionDoneHint":
     "Executado ≠ resolvido: confirme a condição do item na reinspeção antes de marcá-lo como resolvido.",
@@ -770,7 +762,7 @@ const pt: Translations = {
   // Faixas informativas
   "f.corrExtent": "% de corrosão (extensão)",
   "f.materialLoss": "% de perda de material",
-  "f.bandsInfo": "Apenas informativo — não afeta a prioridade.",
+  "f.bandsInfo": "Apenas informativo: não afeta a prioridade.",
 
   // Acessório da linha
   "f.isAccessory": "Acessório da linha",
@@ -825,9 +817,9 @@ const pt: Translations = {
   "f.calculating": "Calculando...",
   "f.setPC": "Defina P + C",
   "f.imageReady":
-    "Imagem pronta — clique para executar a análise de corrosão por IA.",
+    "Imagem pronta. Clique para executar a análise de corrosão por IA.",
   "f.uploadFirst": "Anexe uma imagem para habilitar a análise por IA.",
-  "f.analyse": "🔍 Analisar com IA",
+  "f.analyse": "Analisar com IA",
   "f.analysing": "Analisando...",
 
   // Probability descriptions
@@ -853,14 +845,14 @@ const pt: Translations = {
 
   // Rate
   "rate.insufficient":
-    "Taxa de corrosão: dados insuficientes — são necessárias 2 medições no mesmo ponto, com pelo menos 90 dias entre elas.",
+    "Taxa de corrosão: dados insuficientes. São necessárias 2 medições no mesmo ponto, com pelo menos 90 dias entre elas.",
   "rate.critical": "CRÍTICA - Ação Imediata",
   "rate.severe": "Severa - Aumentar Monitoramento",
   "rate.moderate": "Moderada - Monitorar",
   "rate.stable": "Estável",
 
   // Risk matrix
-  "risk.title": "Matriz de Risco — API 580 / DNV-RP-G101",
+  "risk.title": "Matriz de Risco · API 580 / DNV-RP-G101",
   "risk.assessedOf": (with_: number, total: number) =>
     `${with_} de ${total} itens avaliados`,
   "risk.empty.title": "Nenhum item com avaliação de risco",
@@ -890,11 +882,11 @@ const pt: Translations = {
   "exp.xlsx": "Exportar XLSX",
   "exp.pdf": "Exportar PDF",
   "exp.includePhotos":
-    "Incluir fotos de evidência no PDF (até 4 por item — arquivo maior, geração mais lenta)",
+    "Incluir fotos de evidência no PDF (até 4 por item; arquivo maior, geração mais lenta)",
   "exp.summary": "Tabela Resumo",
   "exp.pdfFail": "Falha ao exportar PDF.",
 
-  "select.placeholder": "-- selecione --",
+  "select.placeholder": "Selecione…",
 
   "statusOpt.OK": "OK",
   "statusOpt.Attention": "Atenção",
@@ -969,7 +961,7 @@ export function t(lang: Lang, key: Key): string {
 }
 
 export function tPriority(lang: Lang, p: ItemPriority | null): string {
-  if (!p) return "—";
+  if (!p) return "-";
   return translate(lang, `priority.${p}` as Key) as string;
 }
 

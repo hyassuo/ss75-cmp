@@ -10,7 +10,7 @@ type Shown = { id: string; isNew: boolean };
 // The one place the item modal is rendered. It follows ?item= in the URL
 // (see ShellContext): opening pushes a history entry, so the phone's Back
 // button closes the modal. Back is routed through the modal's own
-// discard check — if the user declines, the entry is pushed back.
+// discard check: if the user declines, the entry is pushed back.
 export function ItemModalHost() {
   const {
     openItemId,
@@ -70,7 +70,7 @@ export function ItemModalHost() {
   if (!shown) return null;
   // "&new=1" in the URL is only a hint (it survives in history and in
   // copied links). Only a stub that is still unnamed and ours is treated as
-  // a new draft — Cancel on a *saved* item must never delete it.
+  // a new draft: Cancel on a *saved* item must never delete it.
   const isNew =
     shown.isNew &&
     !!item &&

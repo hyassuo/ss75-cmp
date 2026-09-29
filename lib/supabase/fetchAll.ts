@@ -1,5 +1,5 @@
 // PostgREST caps every response (Supabase default: 1000 rows) and silently
-// drops the rest — no error, no hint. Page through with .range() until a
+// drops the rest: no error, no hint. Page through with .range() until a
 // short page comes back. The caller's query MUST have a total order
 // (e.g. .order("created_at").order("id")) or rows can repeat/skip between
 // pages.
@@ -26,7 +26,7 @@ export interface FetchAllResult<T> {
 // round-trip on a high-latency link:
 //  - the first wave covers `expected` rows (a hint: a count the server
 //    already sent, the rows held before a refresh), else only the first
-//    page, which asks for the total — withCount: the caller adds
+//    page, which asks for the total: withCount: the caller adds
 //    { count: "exact" } to that select;
 //  - once the total is known, every remaining page goes out at once;
 //  - while the last page still comes back full (rows added meanwhile, or

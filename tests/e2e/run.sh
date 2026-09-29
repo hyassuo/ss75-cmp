@@ -21,7 +21,7 @@
 # Chromium for Playwright (`cd tests/e2e && npx playwright install chromium`).
 # Runs as root (server via `su postgres`) or as a normal user (CI).
 # Note: it builds the app into ./.next with the local stack's
-# NEXT_PUBLIC_* values — rebuild before deploying from the same checkout.
+# NEXT_PUBLIC_* values: rebuild before deploying from the same checkout.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 cd "$E2E_DIR"
@@ -63,7 +63,7 @@ echo "[1/5] postgres: fresh cluster at $PG_DIR (port $PG_PORT)"
 
 # --- 2. PostgREST
 echo "[2/5] postgrest on :$PGRST_PORT"
-# JWTs: the shared secret (HS256) and a per-run ES256 key, as a JWKS — the
+# JWTs: the shared secret (HS256) and a per-run ES256 key, as a JWKS: the
 # gateway signs with either (asymmetric signing keys, see gateway.mjs).
 node lib/jwt.mjs jwks "$STATE_DIR/jwt-es256.pem" > "$STATE_DIR/jwks.json"
 cat > "$STATE_DIR/pgrst.conf" <<CONF

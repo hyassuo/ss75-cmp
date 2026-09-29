@@ -4,11 +4,11 @@ export type ItemPriority = "Critical" | "High" | "Medium" | "Low";
 
 export type ItemStatus = "OK" | "Attention" | "Critical" | "Pending";
 
-// 'Overdue' is computed for display only — never stored.
+// 'Overdue' is computed for display only: never stored.
 export type EffectiveStatus = ItemStatus | "Overdue";
 
 // Tratativa (corrective-action cycle) + assessment bands + line accessory.
-// Canonical values are PORTUGUESE — a deliberate deviation from the
+// Canonical values are PORTUGUESE: a deliberate deviation from the
 // "DB stores English" convention: they come from the FM-116-OFF reference
 // method and are fixed by product decision. The dict provides EN labels.
 export type ActionType =
@@ -101,7 +101,7 @@ export interface AIAnalysis {
   // Short component identifier (e.g. "Handrail", "Pipeline", "Flange").
   componentName: string;
   // 1-5 on the unit's risk matrix. Priority is derived from probability ×
-  // consequence by calcPriority — never set directly by the AI.
+  // consequence by calcPriority: never set directly by the AI.
   probability: 1 | 2 | 3 | 4 | 5;
   consequence: 1 | 2 | 3 | 4 | 5;
   affectedAreaPct: number;
@@ -131,7 +131,7 @@ export interface Evidence {
 
 export interface HistoryEntry {
   id: string;
-  /** NULL once the item has been deleted — see item_ref / item_name. */
+  /** NULL once the item has been deleted: see item_ref / item_name. */
   item_id: string | null;
   /** Original item id, kept after the item is deleted. */
   item_ref: string | null;

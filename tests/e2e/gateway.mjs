@@ -34,7 +34,7 @@ const STORAGE_DIR = process.env.STORAGE_DIR;
 const LOG_FILE = process.env.GW_LOG || path.join(process.env.STATE_DIR || ".", "gateway.log");
 const ACCESS_TTL = Number(process.env.ACCESS_TTL || 3600);
 // Test-only: extra delay before answering every Supabase request (REST,
-// auth, storage — preflights included), to emulate the round-trip time of a
+// auth, storage, preflights included), to emulate the round-trip time of a
 // real deployment (browser <-> Supabase, Vercel function <-> Supabase) in
 // the perf harness (perf.mjs). 0 = off, the default for the E2E suite.
 const LATENCY_MS = Number(process.env.GW_LATENCY_MS || 0);
@@ -109,7 +109,7 @@ function bearer(req) {
 }
 
 // ------------------------------------------------------------ fault control
-// faults: [{method, prefix, status, times, skip, body}] — first match wins;
+// faults: [{method, prefix, status, times, skip, body}]: first match wins;
 // times counts down (-1 = until cleared); skip lets that many matching
 // requests through first (e.g. fail the 2nd upload of a batch).
 let faults = [];
@@ -285,7 +285,7 @@ async function handleAuth(req, res, sub, query) {
     }
     return send(res, 200, userJson(await userRow("id", a.u.id)));
   }
-  // resetPasswordForEmail (implicit flow only — the app sends it from the
+  // resetPasswordForEmail (implicit flow only: the app sends it from the
   // server): "sends" the email to the outbox (/__ctl/mail). Same answer
   // whether or not the address exists.
   if (req.method === "POST" && sub === "/recover") {
@@ -386,7 +386,7 @@ async function handleAuth(req, res, sub, query) {
 }
 
 // ------------------------------------------------------------------ storage
-// Run `fn(client)` inside a transaction as the JWT's role with its claims —
+// Run `fn(client)` inside a transaction as the JWT's role with its claims:
 // exactly how Supabase Storage lets RLS decide.
 async function asCaller(claims, fn) {
   const role = ["anon", "authenticated", "service_role"].includes(claims?.role) ? claims.role : "anon";
@@ -458,7 +458,7 @@ async function handleStorage(req, res, sub, query) {
     return storageErr(res, 404, 404, "not_found", `fake storage: ${req.method} ${sub} not implemented`);
   }
 
-  // GET /object/sign/{bucket}/{path}?token=  — signed download (no auth header)
+  // GET /object/sign/{bucket}/{path}?token=...: signed download (no auth header)
   if (req.method === "GET" && seg[1] === "sign") {
     const bucket = seg[2];
     const name = seg.slice(3).join("/");
@@ -582,7 +582,7 @@ async function handleStorage(req, res, sub, query) {
   }
 
   // GET /object/{bucket}/{path} | /object/authenticated/{bucket}/{path}
-  // — download as the caller (storage.from().download(); the PDF export's
+  // download as the caller (storage.from().download(); the PDF export's
   // photos): the object is served only if the caller's RLS can see its row.
   if (req.method === "GET" && seg.length >= 3) {
     const s = seg[1] === "authenticated" ? seg.slice(2) : seg.slice(1);
@@ -702,8 +702,8 @@ const server = http.createServer(async (req, res) => {
     if (url.startsWith("/__ctl")) return;
     // src: browsers send Origin on these cross-origin calls; the app's
     // server (proxy, layouts, API routes) does not. sub: the user of the
-    // valid JWT in the Authorization header (null: none, or the anon key)
-    // — C7 checks that photos are only fetched with a session.
+    // valid JWT in the Authorization header (null: none, or the anon key).
+    // C7 checks that photos are only fetched with a session.
     const h = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization || "");
     const sub = (h && verify(h[1], SECRET)?.sub) || null;
     record({ t: t0, method: req.method, url: req.url, status: res.statusCode, ms: Date.now() - t0, src: req.headers.origin ? "browser" : "server", sub });

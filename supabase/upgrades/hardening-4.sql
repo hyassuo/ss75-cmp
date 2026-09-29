@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CMP — SECURITY HARDENING ROUND 4 (run once in Supabase SQL Editor)
+-- SS-75 CMP: SECURITY HARDENING ROUND 4 (run once in Supabase SQL Editor)
 -- =============================================================================
 -- Idempotent. Apply after supabase/upgrades/hardening-3.sql.
 --
@@ -13,7 +13,7 @@
 --         - profiles_admin_all: "FOR ALL USING (role = admin)" let an admin
 --           SELECT / UPDATE / DELETE / INSERT profiles in ANY unit. Column
 --           grants still blocked role/active/unit_id changes, but SELECT,
---           DELETE, and full_name/dept UPDATE were not column-restricted —
+--           DELETE, and full_name/dept UPDATE were not column-restricted:
 --           so cross-unit enumeration, renaming and deletion were possible.
 --       Both admin branches are now scoped to the admin's own unit. Users
 --       keep visibility of their own profile. Single-unit (SS-75) deploys
@@ -33,8 +33,8 @@
 --       policy is now bound to the admin's own unit. Single-unit deploys are
 --       unaffected.
 --
--- FIX 3 (HIGH, multi-tenant) units_admin_all was "FOR ALL USING(role=admin)"
---       — an admin could rename or DELETE any unit row via direct PostgREST,
+-- FIX 3 (HIGH, multi-tenant) units_admin_all was "FOR ALL USING(role=admin)":
+--       an admin could rename or DELETE any unit row via direct PostgREST,
 --       and a unit delete cascades to that unit's profiles/items/etc. Scope
 --       it to the admin's own unit: they may touch only their own unit row,
 --       and can no longer create or remove other units.
@@ -46,7 +46,7 @@
 --       migration operations via the service role. Reads (zones_select) stay.
 -- =============================================================================
 
--- FIX 1 — profiles SELECT: admins see only their own unit ----------------------
+-- FIX 1: profiles SELECT: admins see only their own unit ----------------------
 DROP POLICY IF EXISTS "profiles_select_self_or_admin" ON public.profiles;
 CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
   FOR SELECT TO authenticated USING (
@@ -57,7 +57,7 @@ CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
     )
   );
 
--- FIX 1 — profiles ALL (admin): scope every operation to the admin's unit -----
+-- FIX 1: profiles ALL (admin): scope every operation to the admin's unit -----
 DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
 CREATE POLICY "profiles_admin_all" ON public.profiles
   FOR ALL TO authenticated
@@ -70,7 +70,7 @@ CREATE POLICY "profiles_admin_all" ON public.profiles
     AND unit_id = public.current_user_unit()
   );
 
--- FIX 2 — admin DELETE scoped to the admin's own unit ------------------------
+-- FIX 2: admin DELETE scoped to the admin's own unit ------------------------
 DROP POLICY IF EXISTS "items_delete_admin" ON public.items;
 CREATE POLICY "items_delete_admin" ON public.items
   FOR DELETE TO authenticated USING (
@@ -112,7 +112,7 @@ CREATE POLICY "evidence_delete_admin" ON storage.objects
     )
   );
 
--- FIX 3 — units: admin may touch only their own unit row ---------------------
+-- FIX 3: units: admin may touch only their own unit row ---------------------
 DROP POLICY IF EXISTS "units_admin_all" ON public.units;
 CREATE POLICY "units_admin_all" ON public.units
   FOR ALL TO authenticated
@@ -125,7 +125,7 @@ CREATE POLICY "units_admin_all" ON public.units
     AND id = public.current_user_unit()
   );
 
--- FIX 4 — zones: remove runtime write access (read-only reference data) -------
+-- FIX 4: zones: remove runtime write access (read-only reference data) -------
 -- Dropping the policy leaves zones with only zones_select_authenticated, so
 -- RLS denies INSERT/UPDATE/DELETE to all authenticated users. Manage zones
 -- via the service role / SQL editor.

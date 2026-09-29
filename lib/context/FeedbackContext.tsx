@@ -17,10 +17,10 @@ import { DS } from "@/lib/design/tokens";
 import { useLang } from "@/lib/context/LangContext";
 
 // App-wide user feedback:
-//   confirm() — a styled, translated, accessible replacement for
+//   confirm(): a styled, translated, accessible replacement for
 //               window.confirm (which is unstyled, English-titled and
 //               blocks the page); resolves to true / false.
-//   toast()   — short, non-blocking success/info message, announced to
+//   toast():   short, non-blocking success/info message, announced to
 //               screen readers.
 
 interface ConfirmOptions {
@@ -73,7 +73,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
   // A pending question is answered "no" when the page navigates (Back on
   // a phone closes the item modal the question was about) or the provider
-  // unmounts (idle sign-out) — never left open over a different screen or
+  // unmounts (idle sign-out): never left open over a different screen or
   // awaited forever.
   useEffect(() => {
     if (!pending) return;

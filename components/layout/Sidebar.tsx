@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { LogOut, Plus, ScrollText, Users, type LucideIcon } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { DS } from "@/lib/design/tokens";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { TAB_ICONS } from "@/components/layout/navIcons";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useNewItem } from "@/lib/context/NewItemContext";
@@ -14,28 +17,23 @@ import type { DictKey } from "@/lib/i18n/dict";
 import { useLang } from "@/lib/context/LangContext";
 import { useFeedback } from "@/lib/context/FeedbackContext";
 
-interface TabItem {
-  tab: MainTab;
-  icon: string;
-  i18n: DictKey;
-}
 interface LinkItem {
   href: string;
-  icon: string;
+  icon: LucideIcon;
   i18n: DictKey;
 }
 
-const TABS: TabItem[] = [
-  { tab: "dashboard", icon: "▦", i18n: "nav.dashboard" },
-  { tab: "zones", icon: "☰", i18n: "nav.zones" },
-  { tab: "risk", icon: "△", i18n: "nav.risk" },
-  { tab: "schedule", icon: "◷", i18n: "nav.schedule" },
-  { tab: "export", icon: "↗", i18n: "nav.export" },
+const TABS: Array<{ tab: MainTab; i18n: DictKey }> = [
+  { tab: "dashboard", i18n: "nav.dashboard" },
+  { tab: "zones", i18n: "nav.zones" },
+  { tab: "risk", i18n: "nav.risk" },
+  { tab: "schedule", i18n: "nav.schedule" },
+  { tab: "export", i18n: "nav.export" },
 ];
 
 const ADMIN_LINKS: LinkItem[] = [
-  { href: "/users", icon: "◉", i18n: "nav.users" },
-  { href: "/audit-log", icon: "≡", i18n: "nav.audit" },
+  { href: "/users", icon: Users, i18n: "nav.users" },
+  { href: "/audit-log", icon: ScrollText, i18n: "nav.audit" },
 ];
 
 export function Sidebar() {
@@ -80,7 +78,7 @@ export function Sidebar() {
   async function signOut() {
     if (!(await confirm(t("nav.signOutConfirm")))) return;
     const supabase = createClient();
-    // This device only — other devices keep their sessions.
+    // This device only: other devices keep their sessions.
     await supabase.auth.signOut({ scope: "local" });
     router.replace("/login");
     router.refresh();
@@ -166,7 +164,7 @@ export function Sidebar() {
               aria-current={active ? "page" : undefined}
               style={{ ...itemStyle(active), minHeight: 44 }}
             >
-              <span style={{ fontSize: DS.fs.lg, opacity: 0.85 }}>{nav.icon}</span>
+              <Icon icon={TAB_ICONS[nav.tab]} size="lg" />
               {!collapsed && <span>{label}</span>}
             </button>
           );
@@ -185,7 +183,7 @@ export function Sidebar() {
                 aria-current={active ? "page" : undefined}
                 style={{ ...itemStyle(active), minHeight: 44 }}
               >
-                <span style={{ fontSize: DS.fs.lg, opacity: 0.85 }}>{n.icon}</span>
+                <Icon icon={n.icon} size="lg" />
                 {!collapsed && <span>{label}</span>}
               </Link>
             );
@@ -213,7 +211,7 @@ export function Sidebar() {
                 whiteSpace: "nowrap",
               }}
             >
-              {collapsed ? "+" : t("nav.newItem")}
+              {collapsed ? <Icon icon={Plus} size="lg" /> : t("nav.newItem")}
             </Button>
           </div>
         )}
@@ -233,7 +231,7 @@ export function Sidebar() {
         <div
           title={
             collapsed
-              ? `${profile.role.toUpperCase()} — ${profile.full_name ?? ""}`
+              ? `${profile.role.toUpperCase()}: ${profile.full_name ?? ""}`
               : ""
           }
           style={{
@@ -292,7 +290,8 @@ export function Sidebar() {
             gap: 6,
           }}
         >
-          {collapsed ? "⏻" : t("nav.signOut")}
+          <Icon icon={LogOut} size={collapsed ? "md" : "sm"} />
+          {!collapsed && t("nav.signOut")}
         </button>
       </div>
     </nav>

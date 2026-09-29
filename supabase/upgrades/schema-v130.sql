@@ -1,19 +1,19 @@
 -- =============================================================================
--- SS-75 CMP — SCHEMA v1.3.0: drops_risk, structural, obs_source on items
+-- SS-75 CMP: SCHEMA v1.3.0: drops_risk, structural, obs_source on items
 -- =============================================================================
--- Run once in Supabase SQL Editor. Idempotent — safe to re-run.
+-- Run once in Supabase SQL Editor. Idempotent: safe to re-run.
 -- =============================================================================
 
--- 1) DROPS risk flag — contributes to priority weight (handoff: priority
+-- 1) DROPS risk flag: contributes to priority weight (handoff: priority
 --    uses it like SECE but with a smaller bump).
 ALTER TABLE public.items
   ADD COLUMN IF NOT EXISTS drops_risk boolean NOT NULL DEFAULT false;
 
--- 2) Structural-element flag — same idea: weighs into priority.
+-- 2) Structural-element flag: same idea: weighs into priority.
 ALTER TABLE public.items
   ADD COLUMN IF NOT EXISTS structural boolean NOT NULL DEFAULT false;
 
--- 3) Observation source — where the finding came from (free-text enum-ish,
+-- 3) Observation source: where the finding came from (free-text enum-ish,
 --    not constrained at the DB so it stays editable from the dashboard).
 ALTER TABLE public.items
   ADD COLUMN IF NOT EXISTS obs_source text;

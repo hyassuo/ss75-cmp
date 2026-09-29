@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Camera, ImageIcon, ScanSearch, X } from "lucide-react";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
 import { Spinner } from "@/components/ui/Spinner";
@@ -205,7 +207,7 @@ export function EvidencePanel({
   }
 
   // Uploads one photo (if any) and records the evidence row. On failure the
-  // blob just uploaded is removed again — unless the insert did land and
+  // blob just uploaded is removed again: unless the insert did land and
   // only its response was lost on the link: then the blob is in use.
   async function saveOne(
     f: File | null,
@@ -328,7 +330,7 @@ export function EvidencePanel({
           {t("f.addEvidenceTitle")}
         </div>
 
-        {/* Step 1 — attach */}
+        {/* Step 1: attach */}
         <div style={{ marginBottom: 12 }}>
           <Label>{t("f.step1")}</Label>
           {/* capture="environment" opens the rear camera straight away on
@@ -360,7 +362,8 @@ export function EvidencePanel({
               onClick={() => cameraRef.current?.click()}
               disabled={busy}
             >
-              📷 {t("f.takePhoto")}
+              <Icon icon={Camera} size="md" />
+              {t("f.takePhoto")}
             </Button>
             <Button
               variant="secondary"
@@ -368,7 +371,8 @@ export function EvidencePanel({
               onClick={() => fileRef.current?.click()}
               disabled={busy}
             >
-              🖼 {t("f.fromGallery")}
+              <Icon icon={ImageIcon} size="md" />
+              {t("f.fromGallery")}
             </Button>
           </div>
           {file && (
@@ -428,7 +432,7 @@ export function EvidencePanel({
           )}
         </div>
 
-        {/* Step 2 — AI (only when a photo is loaded) */}
+        {/* Step 2: AI (only when a photo is loaded) */}
         {b64 && (
           <div style={{ marginBottom: 12 }}>
             <Label>{t("f.step2")}</Label>
@@ -440,12 +444,13 @@ export function EvidencePanel({
               disabled={busy}
               loading={aiLoading}
             >
+              {!aiLoading && <Icon icon={ScanSearch} size="md" />}
               {aiLoading ? t("f.analysing") : t("f.analyse")}
             </Button>
           </div>
         )}
 
-        {/* Step 3 — date + description */}
+        {/* Step 3: date + description */}
         <div style={{ marginBottom: 12 }}>
           <Label>{t("f.step3")}</Label>
           <div style={{ marginBottom: 8 }}>
@@ -464,7 +469,7 @@ export function EvidencePanel({
           />
         </div>
 
-        {/* Step 4 — save */}
+        {/* Step 4: save */}
         <Button
           size="lg"
           fullWidth
@@ -599,16 +604,18 @@ export function EvidencePanel({
               onClick={() => void remove(ev.id)}
               aria-label={t("evidence.delete")}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
                 background: "none",
                 border: "none",
                 color: DS.red,
                 cursor: "pointer",
-                fontSize: DS.fs.xl,
                 padding: "0 4px",
                 flexShrink: 0,
               }}
             >
-              ×
+              <Icon icon={X} size="md" />
             </button>
           )}
         </div>

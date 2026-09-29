@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { S } from "@/lib/design/styles";
+import { TriangleAlert } from "lucide-react";
+import { Icon } from "@/components/ui/Icon";
 import { DS } from "@/lib/design/tokens";
 import { Button } from "@/components/ui/Button";
 
@@ -31,7 +33,9 @@ export default function AppError({
         borderLeft: "3px solid " + DS.red,
       }}
     >
-      <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>⚠</div>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: DS.red }}>
+        <Icon icon={TriangleAlert} size="xl" />
+      </div>
       <div
         style={{
           fontSize: DS.fs.xl,

@@ -16,7 +16,7 @@ type Phase = "checking" | "ready" | "invalid" | "saving" | "done";
 
 // Landing page of the reset email (sent by lib/supabase/recoveryMail.ts,
 // implicit flow): #access_token=…&refresh_token=…&type=recovery. Only such a
-// link opens the form — being signed in is not enough to change the
+// link opens the form: being signed in is not enough to change the
 // password here. The tokens are read and stripped from the URL before the
 // Supabase browser client is created (it is a singleton that inspects the
 // URL when first constructed), so nothing else consumes them.

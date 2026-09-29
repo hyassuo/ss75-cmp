@@ -7,7 +7,7 @@
 -- ── C6 ────────────────────────────────────────────────────────────────────────
 -- units, zones and ifs_objects were readable by any signed-in account,
 -- including one that is inactive (a pending sign-up, a deactivated user).
--- current_user_role() is NULL for those, so they now read nothing — like
+-- current_user_role() is NULL for those, so they now read nothing, like
 -- every other table. Wrapped in (SELECT …) so Postgres evaluates it once
 -- per query, not once per row (ifs_objects has ~11k rows). Any older SELECT policy on these tables (whatever its
 -- name, from earlier setup/upgrade files) is dropped first: permissive

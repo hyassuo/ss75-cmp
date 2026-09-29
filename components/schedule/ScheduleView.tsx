@@ -146,7 +146,7 @@ export function ScheduleView() {
     )
     .sort((a, b) => (a.next_insp || "").localeCompare(b.next_insp || ""));
   const noSched = allItems.filter((i) => !i.next_insp);
-  // Overdue tratativas live in their own section — a corrective-action
+  // Overdue tratativas live in their own section: a corrective-action
   // calendar, distinct from the inspection calendar the rows above track.
   const overdueActions = allItems
     .filter((i) => isActionOverdue(i, today()))

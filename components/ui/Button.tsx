@@ -7,7 +7,7 @@ export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary: the main action · accent: AI / camera · danger: destructive ·
-   *  secondary: bordered neutral · ghost: text only (close ×, links). */
+   *  secondary: bordered neutral · ghost: no fill or border (close X, links). */
   variant?: ButtonVariant;
   /** lg is 44 px tall everywhere; every size is 44 px on touch screens. */
   size?: ButtonSize;

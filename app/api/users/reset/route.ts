@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: guard.error }, { status: guard.status });
   }
 
-  // Tighter than the other admin routes — each call sends an email.
+  // Tighter than the other admin routes: each call sends an email.
   const rl = await rateLimitShared(`users-reset:${guard.ctx.userId}`, 5, 60_000);
   if (!rl.allowed) {
     return NextResponse.json(
@@ -34,8 +34,8 @@ export async function POST(request: Request) {
   }
 
   const admin = createServiceClient();
-  // Only send resets to users that actually exist in this system — prevents
-  // using the endpoint to fire Supabase emails at arbitrary addresses — and
+  // Only send resets to users that actually exist in this system (prevents
+  // using the endpoint to fire Supabase emails at arbitrary addresses) and
   // only to users in the requesting admin's own unit.
   const { data: target } = await admin
     .from("profiles")

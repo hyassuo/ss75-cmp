@@ -161,10 +161,10 @@ export function ZonesTab() {
             {activeItems.length > 0 &&
               (() => {
                 // Group cards by sub-área. Items whose subarea_id is unset
-                // (or points at another zone's sub-área — legacy data) fall
+                // (or points at another zone's sub-área: legacy data) fall
                 // into the trailing "no sub-area" group. When nothing in
                 // the zone uses sub-áreas, render the flat grid exactly as
-                // before — zero visual change for units not using them.
+                // before: zero visual change for units not using them.
                 const zoneSubs = subareasByZone(z.zid);
                 const bySub = new Map<string | null, typeof activeItems>();
                 for (const it of activeItems) {

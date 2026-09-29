@@ -47,7 +47,7 @@ describe("isActionOpen", () => {
     ).toBe(false);
   });
 
-  it("true otherwise — null status counts as open (implicit 'Sem planejamento')", () => {
+  it("true otherwise: null status counts as open (implicit 'Sem planejamento')", () => {
     expect(isActionOpen(makeItem({ action_type: "Monitorar" }))).toBe(true);
     expect(
       isActionOpen(

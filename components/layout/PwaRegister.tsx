@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-// Registers the PWA service worker. Production only — the SW's asset cache
+// Registers the PWA service worker. Production only: the SW's asset cache
 // fights HMR in dev. Registration failure is non-fatal: the app works
 // exactly as before without it.
 export function PwaRegister() {

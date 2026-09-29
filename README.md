@@ -1,4 +1,4 @@
-# SS-75 CMP — Corrosion Management Plan
+# SS-75 CMP: Corrosion Management Plan
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
 Next.js 16 (App Router, Turbopack, TypeScript strict) · React 19 ·
@@ -20,7 +20,7 @@ tokens (`lib/design/`) · Gemini for AI photo analysis. Node 22 (`.nvmrc`).
 
 `lib/ai/client.ts` calls the **Gemini** API. Set `GEMINI_API_KEY` and
 optionally `GEMINI_MODEL` (defaults to `gemini-2.5-flash`). AI output
-is advisory triage only — item criticality is driven by the
+is advisory triage only: item criticality is driven by the
 deterministic risk matrix (P×C, SECE, overdue) plus quantitative
 pit-depth readings.
 
@@ -50,7 +50,7 @@ With the [Supabase CLI](https://supabase.com/docs/guides/cli):
 `supabase link --project-ref <ref>` then `supabase db push` (applies
 `migrations/`), and load `seed/ifs-data.sql` in the SQL Editor. Without
 the CLI, paste the two migration files and then the seed into the SQL
-Editor, in that order — every file is idempotent.
+Editor, in that order: every file is idempotent.
 
 **Before opening the app to users:** in Supabase → Authentication, turn
 **off** public sign-ups and turn **on** email confirmation. The baseline
@@ -63,7 +63,7 @@ only delivers to members of the project's team (2/hour), so configure a
 custom SMTP server (Authentication → Emails → SMTP Settings). Under
 Authentication → URL Configuration set the *Site URL* to the app's address
 and add `https://<app>/auth/reset` to *Redirect URLs* (exact address, no
-wildcards) — reset links land there to set the new password.
+wildcards): reset links land there to set the new password.
 
 ### Existing database (created before the baseline)
 
@@ -81,17 +81,17 @@ then re-run `supabase/migrations/20260928000100_ifs_register.sql` (makes the
 IFS register read-only at runtime).
 
 - `hardening-5.sql` is security round 5 (authorship, an audit trail that
-  survives deletion, the storage-policy fix, the server-side draft sweep —
+  survives deletion, the storage-policy fix, the server-side draft sweep;
   details in its header). It depends on the v1.4 columns. If you ever
   re-run an older file (`security-fixes`, `hardening*`, `schema-v130/140`),
   re-run `hardening-5.sql` afterwards: older rounds redefine some objects
   with weaker versions.
-- `rollback-v140.sql` refuses to run under round 5 — restore a backup
+- `rollback-v140.sql` refuses to run under round 5: restore a backup
   instead.
 
 Then adopt the migration history once, so `supabase db push` only applies
 future migrations, and check for drift. List every migration the database
-already has — in production that includes the two of 29/09
+already has: in production that includes the two of 29/09
 (`20260929000000_rate_limits`, `20260929000100_active_reads_insert_audit`),
 which were applied by hand in the SQL Editor:
 
@@ -120,23 +120,23 @@ item modal copies when an Object is selected.
 
 - **Point-in-time recovery**: enable PITR in Supabase (paid add-on) for
   minute-level restores of the database.
-- **Daily off-site copy** — `.github/workflows/backup.yml` runs
+- **Daily off-site copy**: `.github/workflows/backup.yml` runs
   `scripts/backup.sh`: a restorable data dump (`data.sql`), a full
   custom-format dump (`database.dump`, forensic) and every file of the
   `evidence-photos` bucket, packed and encrypted with
   [age](https://age-encryption.org), kept as a workflow artifact for 30
   days. It is off until you set the repository variable
   `BACKUP_ENABLED=true` and the secrets `SUPABASE_DB_URL` (the **session
-  pooler** connection string — the direct `db.<ref>` host is IPv6-only and
+  pooler** connection string: the direct `db.<ref>` host is IPv6-only and
   GitHub runners have no IPv6), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-  and `BACKUP_AGE_RECIPIENT` (an age *public* key — keep the private key
+  and `BACKUP_AGE_RECIPIENT` (an age *public* key: keep the private key
   offline; it is the only way to restore).
 
 **Restore** (into a new or emptied project; rehearse it once):
 
 1. `age -d -i key.txt ss75-backup-….tar.gz.age | tar xz`
 2. Create the schema: `supabase link --project-ref <ref> && supabase db push`.
-3. `psql "<session pooler URL>" -f ss75-backup-…/data.sql` — data only,
+3. `psql "<session pooler URL>" -f ss75-backup-…/data.sql`: data only,
    loaded with triggers off (`session_replication_role = replica`), so
    authorship/audit triggers neither rewrite nor duplicate history.
 4. `SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… node scripts/restore-storage.mjs ss75-backup-…/storage`
@@ -147,8 +147,8 @@ item modal copies when an Object is selected.
 | Command | What it covers |
 |---------|----------------|
 | `npm test` | Vitest unit tests: domain logic (priority, dates across time zones, corrosion rate…), the item-form diff/rebase logic, CSV escaping, paging, redirects (`tests/*.test.ts`). |
-| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role — fresh install, the full upgrade chain, demo seed and rollback guard. |
-| `npm run test:e2e` | End-to-end suite (`tests/e2e/`): builds the app and drives it in Chromium (Playwright) against a local Supabase stand-in — see below. |
+| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role: fresh install, the full upgrade chain, demo seed and rollback guard. |
+| `npm run test:e2e` | End-to-end suite (`tests/e2e/`): builds the app and drives it in Chromium (Playwright) against a local Supabase stand-in: see below. |
 
 CI (`.github/workflows/ci.yml`, least-privilege, actions pinned by SHA)
 runs lint, typecheck, unit tests (also under four time zones), a
@@ -160,7 +160,7 @@ updates (`.github/dependabot.yml`).
 ### End-to-end tests (`tests/e2e/`)
 
 `npm run test:e2e` runs the production build of the app in Chromium against
-a throwaway local stack — no Supabase project, Docker or secrets needed:
+a throwaway local stack: no Supabase project, Docker or secrets needed:
 
 - **PostgreSQL** (`tests/sql/supabase-stub.sql` + `supabase/migrations/*.sql`,
   i.e. the real schema, triggers and RLS) plus the fixtures in
@@ -170,13 +170,13 @@ a throwaway local stack — no Supabase project, Docker or secrets needed:
   verified);
 - **`tests/e2e/gateway.mjs`**, playing the Supabase API: proxies `/rest/v1`,
   implements the parts of GoTrue (`/auth/v1`) and Storage (`/storage/v1`)
-  the app uses — Storage writes/reads/deletes `storage.objects` *as the
+  the app uses: Storage writes/reads/deletes `storage.objects` *as the
   caller*, so the real storage policies decide; GoTrue keeps per-user
   passwords and bans in `auth.users`, "sends" recovery emails to an outbox
   (`/__ctl/mail`) whose links redirect like the real `/verify`, signs
   sessions with the shared secret (HS256) or, switched per scenario
   (`/__ctl/jwt`), with an ES256 key published as a JWKS (asymmetric signing
-  keys; PostgREST trusts both) — and offers fault injection
+  keys; PostgREST trusts both), and offers fault injection
   (HTTP errors, dropped connections, "commit then lose the response",
   delays) for the offline/concurrency scenarios;
 - `next build` + `next start` with the local keys, then
@@ -205,13 +205,13 @@ normal user or as root. Useful variables: `ONLY=c,d1` (subset),
 `SKIP_BUILD=1`, `KEEP=1` (leave the stack up), `HEADED=1`, and
 `PG_PORT`/`PGRST_PORT`/`GW_PORT`/`APP_PORT`/`E2E_TMP` (see
 `tests/e2e/env.sh`). The run builds `.next` with the local stack's
-`NEXT_PUBLIC_*` values — rebuild before deploying from the same checkout.
+`NEXT_PUBLIC_*` values: rebuild before deploying from the same checkout.
 CI runs it on every pull request (`.github/workflows/e2e.yml`) and uploads
 `tests/e2e/artifacts/` when it fails.
 
 Load performance: `PERF=1 GW_LATENCY_MS=150 bash tests/e2e/run.sh` runs
-`tests/e2e/perf.mjs` instead of the scenarios — login page bytes and TTFB,
-sign-in → data on screen, opening the app, warm navigation — with every
+`tests/e2e/perf.mjs` instead of the scenarios (login page bytes and TTFB,
+sign-in → data on screen, opening the app, warm navigation), with every
 Supabase request delayed by `GW_LATENCY_MS` in the gateway (test-only, to
 make serial round-trips visible). Medians in the log, raw numbers in
 `artifacts/perf.json`.
@@ -241,7 +241,7 @@ click. A file that fails to load (offline, storage error, no answer within
 2 minutes) shows a message and a retry of its own. Only raster images
 (JPEG, PNG, WebP, GIF, AVIF, HEIC) and PDFs are ever shown or opened, under
 that type: a file stored as anything else (SVG, HTML…) gets no URL at all
-and reads "file type not allowed" — a `blob:` SVG/HTML document would run
+and reads "file type not allowed": a `blob:` SVG/HTML document would run
 in the app's own origin. The PDF export downloads with `no-store` too, so
 no photo stays in the browser's HTTP cache. The service worker never
 touches Supabase requests, so nothing lands in Cache Storage, and the
@@ -255,19 +255,19 @@ The app is installable (Add to Home Screen / Install app):
 
 - `app/manifest.ts` → served at `/manifest.webmanifest` (icons in
   `public/icons/`, generated from `app/icon.svg`).
-- `public/sw.js` — minimal service worker: network-first navigations with
+- `public/sw.js`, a minimal service worker: network-first navigations with
   a branded offline page (`public/offline.html`); cache-first only for
-  content-hashed build assets. **No page or API data is ever cached** —
+  content-hashed build assets. **No page or API data is ever cached**:
   auth'd content stays fresh and private. Bump `VERSION` inside `sw.js`
   to force-invalidate the asset cache on a deploy.
 - Registered by `components/layout/PwaRegister.tsx` (production only).
 - The proxy (`proxy.ts`) matcher excludes `sw.js`, `manifest.webmanifest` and
-  `offline.html` — they must load without a session.
+  `offline.html`: they must load without a session.
 
 ## Deploy
 
 Connected to Vercel via GitHub. The `main` branch is the production
-branch — every push to `main` triggers a Vercel build that goes
+branch: every push to `main` triggers a Vercel build that goes
 directly to Production. Set the same env vars in
 **Vercel → Project Settings → Environment Variables**.
 

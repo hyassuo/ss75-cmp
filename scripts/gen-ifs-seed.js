@@ -41,7 +41,7 @@ console.log("Valid rows:", items.length);
 console.log("SECE count:", items.filter((i) => i.sece).length);
 
 // Keep the first row per Object ID, but say so when duplicates disagree on
-// SECE — that flag drives risk priority, so a silent pick is dangerous.
+// SECE: that flag drives risk priority, so a silent pick is dangerous.
 const seen = new Map();
 const unique = items.filter((i) => {
   const prev = seen.get(i.id);
@@ -56,13 +56,13 @@ const unique = items.filter((i) => {
 });
 console.log("Unique IDs:", unique.length);
 if (unique.length === 0) {
-  console.error("No valid rows — refusing to write a seed that only truncates.");
+  console.error("No valid rows: refusing to write a seed that only truncates.");
   process.exit(1);
 }
 
 const out = [];
 out.push("-- =============================================================");
-out.push("-- SS-75 CMP — IFS Equipment Register seed (idempotent)");
+out.push("-- SS-75 CMP: IFS Equipment Register seed (idempotent)");
 out.push("-- =============================================================");
 out.push("-- Run AFTER supabase/migrations/20260928000100_ifs_register.sql. Safe to re-run: TRUNCATEs");
 out.push("-- the table first.");

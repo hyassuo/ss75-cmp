@@ -12,7 +12,7 @@ import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "@e965/xlsx";
 
-// Lets context.setOffline() reach service workers (Chromium) — only the
+// Lets context.setOffline() reach service workers (Chromium): only the
 // csp3 scenario allows a service worker; every other context blocks them.
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= "1";
 
@@ -176,6 +176,10 @@ function pdfTextRuns(buf) {
   }
   return runs;
 }
+// What the owner asked to be gone (E7): emoji / pictographic symbols (also
+// the text-style ones iOS paints in colour), the emoji variation selector,
+// the keycap mark, and the long dash.
+const SOBER_BAD = /[\p{Extended_Pictographic}\u{FE0F}\u{20E3}\u2014]/u;
 // The runs joined into visual lines (same page and baseline, left to right).
 function pdfLines(runs) {
   const by = new Map();
@@ -226,7 +230,7 @@ class Check {
       this.steps.push(`OK  ${msg}`);
       console.log(`   ✓ ${msg}`);
     } else {
-      const d = detail === undefined ? "" : ` — got: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`;
+      const d = detail === undefined ? "" : `; got: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`;
       this.failures.push(msg + d);
       console.log(`   ✗ ${msg}${d}`);
     }
@@ -237,7 +241,7 @@ class Check {
 async function newPage(chk, label, opts = {}) {
   // The app's real Content-Security-Policy is enforced (no bypassCSP):
   // every violation, in any page of the context (popups included), fails
-  // the scenario — see watchCsp and run().
+  // the scenario: see watchCsp and run().
   const ctx = await browser.newContext({
     serviceWorkers: "block",
     acceptDownloads: true,
@@ -354,7 +358,7 @@ async function login(page, email) {
 
 async function waitLoaded(page) {
   // DataContext finished loading when the skeleton (no text) is replaced by
-  // real content — works for every tab and language.
+  // real content: works for every tab and language.
   await page.waitForFunction(
     () => (document.querySelector("main.app-content")?.innerText || "").trim().length > 40,
     null,
@@ -487,7 +491,7 @@ async function main() {
     // 1) PostgREST answers 503 on PATCH
     await ctl.fault({ method: "PATCH", prefix: "/rest/v1/items", status: 503, times: -1 });
     await modal(page).getByRole("button", { name: "Save", exact: true }).click();
-    const alert = modal(page).getByText(/Not saved — your changes are still here/);
+    const alert = modal(page).getByText(/Not saved\. Your changes are still here\./);
     await alert.waitFor({ timeout: 15000 }).catch(() => {});
     c.expect(await modalOpen(page), "modal stays open after failed save");
     c.expect(await alert.isVisible(), "inline 'Not saved' error shown", await modal(page).locator('[role="alert"]').allInnerTexts());
@@ -835,6 +839,14 @@ async function main() {
     const cells = lines.flatMap((l) => l.split(","));
     const dangerous = cells.filter((x) => /^"?[=+@]/.test(x));
     c.expect(dangerous.length === 0, "no cell starts with = + @", dangerous.slice(0, 5));
+    // E7: evidence notes are stored by the DB triggers with a long dash;
+    // the CSV shows " - " (and nothing else in the E2E data has one).
+    const dashed = Number((await one("SELECT count(*) FROM history WHERE note LIKE '%' || chr(8212) || '%'")).count);
+    c.expect(dashed >= 2, `DB: ${dashed} trigger notes keep the long dash`, dashed);
+    c.expect(!csv.includes("\u2014"), "CSV: no long dash (trigger notes normalised)", lines.filter((l) => l.includes("\u2014")).slice(0, 3));
+    c.expect(lines.some((l) => /,"?Evidence added: \d{4}-\d{2}-\d{2} - E2E rust bloom photo"?,/.test(l)) &&
+      lines.some((l) => /,"?Evidence removed: \d{4}-\d{2}-\d{2} - E2E rust bloom photo"?,/.test(l)),
+      "CSV: 'Evidence added/removed: <date> - <description>'", lines.filter((l) => /Evidence (added|removed)/.test(l)).slice(0, 4));
     await adm.context().close();
   });
 
@@ -861,6 +873,18 @@ async function main() {
     c.expect(rows.length === dbCount, `Change Log has all ${dbCount} events (paged past 1000)`, rows.length);
     const items = XLSX.utils.sheet_to_json(wb.Sheets["Items"]);
     c.expect(items.length === Number((await one("SELECT count(*) FROM items")).count), "Items sheet has every item", items.length);
+    // E7: trigger-written evidence notes read "<date> - <description>"; no
+    // long dash or emoji in any header or cell of any sheet.
+    const evNotes = rows.filter((r) => /^evidence_(added|deleted)$/.test(r.Action)).map((r) => r.Note);
+    c.expect(evNotes.length >= 2 && evNotes.every((n) => /^Evidence (added|removed): \d{4}-\d{2}-\d{2}( - .+)?$/.test(n)),
+      `Change Log: ${evNotes.length} evidence notes as '<date> - <description>'`, evNotes.slice(0, 4));
+    const bad = [];
+    for (const name of wb.SheetNames) {
+      for (const row of XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" })) {
+        for (const v of row) if (typeof v === "string" && SOBER_BAD.test(v)) bad.push(`${name}: ${v.slice(0, 60)}`);
+      }
+    }
+    c.expect(bad.length === 0, "XLSX: no long dash or emoji in any sheet (headers and cells)", bad.slice(0, 5));
     await adm.context().close();
   });
 
@@ -936,7 +960,7 @@ async function main() {
     const ghost = await page.getByText("E2E Deleted Elsewhere Target", { exact: true }).count();
     await shot(c, page, "after-close");
     c.expect(ghost === 0, "deleted item no longer listed after closing the modal",
-      `card still listed (${ghost}) — the failed save put the stale copy back into the list`);
+      `card still listed (${ghost}): the failed save put the stale copy back into the list`);
     await page.context().close();
   });
 
@@ -1545,7 +1569,7 @@ async function main() {
       const riskOk = !/Something went wrong/.test(await main());
       await shot(c, page, "online-retry-risk");
       c.expect(riskOk, "back online: the failed tab recovers with 'Try again'",
-        "Risk Matrix stays on the error screen even after 'Try again' online (rejected lazy import is cached) — only a full reload helps");
+        "Risk Matrix stays on the error screen even after 'Try again' online (rejected lazy import is cached): only a full reload helps");
     }
     await page.context().close();
   });
@@ -2042,7 +2066,7 @@ async function main() {
     await fb.context().close();
   });
 
-  await run("r3", "C1: 'Forgot password?' — empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
+  await run("r3", "C1: 'Forgot password?': empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
     const page = await newPage(c, "anon");
     await page.goto(`${APP}/login`);
     const forgot = page.getByRole("button", { name: "Forgot password?" });
@@ -2256,7 +2280,7 @@ async function main() {
     const lcsp = cspOf(lr.headers());
     c.expect(!!nonceOf(lcsp) && /'strict-dynamic'/.test(lcsp), "/login response: CSP with a nonce + 'strict-dynamic'", lcsp);
     // What the proxy skips (API, images, their 404 pages) gets the
-    // locked-down static policy — exactly one CSP header, never none.
+    // locked-down static policy: exactly one CSP header, never none.
     for (const path of ["/api/does-not-exist", "/nope.png", "/icon.svg"]) {
       const res = await fetch(`${APP}${path}`);
       const policy = res.headers.get("content-security-policy") ?? "";
@@ -2275,7 +2299,7 @@ async function main() {
     c.expect(!!n1 && !!n2 && n1 !== n2, "a fresh nonce per response", { n1, n2 });
     c.expect(!/'unsafe-inline'|'unsafe-eval'/.test(ss), "script-src has no 'unsafe-inline' / 'unsafe-eval'", ss);
     c.expect(directive(csp1, "connect-src").includes(GW), "connect-src lists the project's Supabase origin", csp1);
-    // C7: photos are blob: URLs of authenticated downloads — no <img> may
+    // C7: photos are blob: URLs of authenticated downloads: no <img> may
     // load a storage URL, so img-src doesn't list Supabase at all.
     const imgSrc = directive(csp1, "img-src");
     c.expect(!imgSrc.includes(GW) && !/supabase/.test(imgSrc) && /\sblob:/.test(imgSrc), "img-src: blob: yes, the Supabase origin no", imgSrc);
@@ -2391,7 +2415,7 @@ async function main() {
     // C7: neither the thumbnail's nor the export's download may stay in the
     // browser's HTTP cache (it outlives the session, on disk). A
     // force-cache fetch of the same address is answered from that cache
-    // when a copy exists — it reaches the gateway only if none was kept.
+    // when a copy exists: it reaches the gateway only if none was kept.
     const evRow = await one("SELECT file_path FROM evidences WHERE item_id = $1 AND file_name = 'tiny.png' ORDER BY created_at DESC LIMIT 1", [ID.evidence]);
     const sess = await sessionFromCookies(page);
     const tProbe = Date.now();
@@ -2405,7 +2429,7 @@ async function main() {
     await sql("DELETE FROM evidences WHERE item_id = $1", [ID.evidence]).catch(() => {});
   });
 
-  await run("csp3", "C3: /offline.html directly — script-free CSP, no violation, 'Retry' reloads", async (c) => {
+  await run("csp3", "C3: /offline.html directly: script-free CSP, no violation, 'Retry' reloads", async (c) => {
     const page = await newPage(c, "anon");
     // A query string must survive 'Retry' (deep links like ?item=).
     const r = await page.goto(`${APP}/offline.html?keep=1`);
@@ -2558,7 +2582,7 @@ async function main() {
     };
     const AUDIT = "00000000-0000-0000-0000-0000000e2ec6"; // fixed ids e2e10..e2e13 belong to d1rate
     try {
-      // C6 — REST, as PostgREST sees the caller.
+      // C6: REST, as PostgREST sees the caller.
       const api = await apiAs(EMAIL);
       const before = [await count(api, "units"), await count(api, "zones"), await count(api, "ifs_objects")];
       c.expect(before[0] >= 1 && before[1] === 14 && before[2] >= 4, "active inspector reads units, 14 zones and IFS objects", before);
@@ -2572,7 +2596,7 @@ async function main() {
       await sql("UPDATE profiles SET active = true WHERE email = $1", [EMAIL]);
     }
 
-    // D2 — UI: add a reading and an evidence record, reopen, read History.
+    // D2: UI: add a reading and an evidence record, reopen, read History.
     await sql(`INSERT INTO items (id, unit_id, zone_id, name, status, notes, created_by)
                SELECT $1, id, 'Z13', 'E2E Audit Target', 'Attention', 'base note', $2 FROM units WHERE code = 'SS-75'
                `, [AUDIT, USERS.insp2]);
@@ -2598,6 +2622,10 @@ async function main() {
     const txt = await hist.innerText().catch(() => "");
     c.expect(/reading added · depth_mm/.test(txt) && /Reading added: 0\.700 mm/.test(txt), "History panel shows 'reading added · depth_mm' with its note", txt.slice(0, 400));
     c.expect(/evidence added/.test(txt) && /Evidence added: .*audit evidence \(no file\)/.test(txt), "History panel shows 'evidence added' with its note", txt.slice(0, 400));
+    // The trigger stores "<date> \u2014 <description>"; the panel shows " - " (E7).
+    const stored = await one("SELECT note FROM history WHERE item_id = $1 AND action = 'evidence_added'", [AUDIT]);
+    c.expect(/^Evidence added: \d{4}-\d{2}-\d{2} \u2014 audit evidence \(no file\)$/.test(stored?.note || ""), "DB: the trigger's note still has its long dash (database unchanged)", stored);
+    c.expect(/Evidence added: \d{4}-\d{2}-\d{2} - audit evidence \(no file\)/.test(txt) && !txt.includes("\u2014"), "History panel: 'Evidence added: <date> - <description>', no long dash anywhere", txt.slice(0, 400));
     c.expect(/by insp1@test\.local/.test(txt), "…attributed to insp1", txt.slice(0, 400));
     await shot(c, page, "history");
     await page.keyboard.press("Escape");
@@ -2633,7 +2661,7 @@ async function main() {
     };
   });
 
-  await run("e1search", "E1: top-bar item search — name/IFS/WO, accents, archived last, cap, keys, '/', Escape, mouse, no results, PT, users/audit, 390px", async (c) => {
+  await run("e1search", "E1: top-bar item search: name/IFS/WO, accents, archived last, cap, keys, '/', Escape, mouse, no results, PT, users/audit, 390px", async (c) => {
     await seedSearch();
     try {
       const page = await newPage(c, "insp1");
@@ -2889,10 +2917,29 @@ async function main() {
     }
   });
 
-  await run("e2glyphs", "E2: risk matrix — shape per level in every cell, sr-only level, tooltip, translated legend, fonts, 390px", async (c) => {
-    const LV = { Low: "○", Medium: "◇", High: "△", Critical: "▲" };
+  await run("e2glyphs", "E2: risk matrix: SVG shape per level in every cell and the legend, sr-only level, tooltip, translated legend, shapes painted, 390px", async (c) => {
+    // Level marker: lucide shape name (+ "-filled" when solid), from the SVG.
+    const LV = { Low: "circle", Medium: "diamond", High: "triangle", Critical: "triangle-filled" };
     const lvOf = (v) => (v >= 15 ? "Critical" : v >= 8 ? "High" : v >= 4 ? "Medium" : "Low");
-    const readMatrix = (page) => page.evaluate(() => {
+    // In the page: what a marker is, how it looks and whether it paints.
+    const shapeOf = (el) => {
+      if (!el || el.tagName.toLowerCase() !== "svg") return null;
+      const cls = [...el.classList].filter((x) => x.startsWith("lucide-")).map((x) => x.slice(7));
+      const geo = el.firstElementChild;
+      const bb = geo ? geo.getBBox() : { width: 0, height: 0 };
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      return {
+        shape: cls.length === 1 ? cls[0] + (el.getAttribute("fill") === "currentColor" ? "-filled" : "") : "?" + cls.join(","),
+        // Geometry + fill: equal markers draw the same thing, levels differ.
+        sig: el.innerHTML.replace(/\s+/g, " ") + "|" + el.getAttribute("fill"),
+        hidden: el.getAttribute("aria-hidden"),
+        painted: r.width >= 10 && r.height >= 10 && bb.width > 10 && bb.height > 10 && cs.visibility === "visible" && cs.display !== "none" && parseFloat(cs.opacity) === 1 && cs.stroke !== "none" && cs.stroke === cs.color,
+        text: el.textContent,
+      };
+    };
+    // String expressions run through the DevTools protocol (no eval under the page CSP).
+    const inPage = (page, fn) => page.evaluate(`(${fn})(${shapeOf})`);
+    const readMatrix = (page) => inPage(page, (shapeOf) => {
       const rows = [...document.querySelectorAll("main table tbody tr")];
       return rows.map((tr) => [...tr.children].slice(1).map((td) => {
         const box = td.firstElementChild, head = box.firstElementChild, sp = [...head.children];
@@ -2901,59 +2948,45 @@ async function main() {
         const hr = head.getBoundingClientRect(), br = box.getBoundingClientRect();
         const g = sp[1]?.getBoundingClientRect(), n = sp[0]?.getBoundingClientRect();
         return {
-          rpn: sp[0]?.textContent, glyph: sp[1]?.textContent, glyphHidden: sp[1]?.getAttribute("aria-hidden"),
+          rpn: sp[0]?.textContent, mark: shapeOf(sp[1]),
           sr: sr?.textContent, srHidden: cs ? cs.position === "absolute" && parseFloat(cs.width) <= 1 && (cs.clip !== "auto" || cs.clipPath !== "none") && cs.overflow === "hidden" : false,
           title: head.getAttribute("title"), items: box.querySelectorAll("[role=button]").length,
           fits: !!g && g.right <= br.right + 0.5 && n.right <= g.left, headW: Math.round(hr.width),
         };
       }));
     });
-    const readLegend = (page) => page.evaluate(() => {
+    const readLegend = (page) => inPage(page, (shapeOf) => {
       const t = document.querySelector("main table");
-      let el = t.parentElement.nextElementSibling;
-      return [...el.children].map((d) => ({ glyph: d.children[0]?.textContent, hidden: d.children[0]?.getAttribute("aria-hidden"), text: d.children[1]?.textContent }));
+      const el = t.parentElement.nextElementSibling;
+      return [...el.children].map((d) => ({ ...shapeOf(d.children[0]), text: d.children[1]?.textContent }));
     });
     const page = await newPage(c, "insp1");
     await login(page, "insp1@test.local");
     await gotoTab(page, "Risk Matrix");
     await page.locator("main table tbody tr").first().waitFor({ timeout: 20000 });
     const m = await readMatrix(page);
-    const bad = [], seen = {};
+    const bad = [], seen = {}, sigs = {};
     m.forEach((row, i) => row.forEach((cell, j) => {
       const p = 5 - i, cc = j + 1, v = p * cc, lv = lvOf(v);
       if (cell.items) seen[lv] = (seen[lv] || 0) + cell.items;
-      if (cell.rpn !== String(v) || cell.glyph !== LV[lv] || cell.glyphHidden !== "true" || cell.sr !== `${lv} risk` || !cell.srHidden || cell.title !== `${lv} risk · RPN ${v}`)
+      (sigs[lv] ||= new Set()).add(cell.mark?.sig);
+      if (cell.rpn !== String(v) || cell.mark?.shape !== LV[lv] || cell.mark.hidden !== "true" || !cell.mark.painted || cell.mark.text !== "" || cell.sr !== `${lv} risk` || !cell.srHidden || cell.title !== `${lv} risk · RPN ${v}`)
         bad.push({ p, c: cc, cell });
     }));
     c.expect(m.length === 5 && m.every((r) => r.length === 5), "5x5 matrix");
-    c.expect(bad.length === 0, "every cell: RPN, level glyph (aria-hidden), sr-only level name (visually hidden), tooltip 'Level · RPN n'", bad.slice(0, 4));
+    c.expect(bad.length === 0, "every cell: RPN, level shape (SVG, aria-hidden, painted in the level colour, no text), sr-only level name (visually hidden), tooltip 'Level · RPN n'", bad.slice(0, 4));
     c.step(`items per level: ${JSON.stringify(seen)}`);
-    c.expect(["Low", "Medium", "High", "Critical"].every((l) => seen[l] > 0), "all four levels have items (non-empty) and show their glyph", seen);
+    c.expect(["Low", "Medium", "High", "Critical"].every((l) => seen[l] > 0), "all four levels have items (non-empty) and show their shape", seen);
     const lg = await readLegend(page);
-    c.expect(JSON.stringify(lg) === JSON.stringify([
-      { glyph: LV.Low, hidden: "true", text: "Low risk (RPN ≤ 3)" }, { glyph: LV.Medium, hidden: "true", text: "Medium risk (RPN 4–7)" },
-      { glyph: LV.High, hidden: "true", text: "High risk (RPN 8–14)" }, { glyph: LV.Critical, hidden: "true", text: "Critical risk (RPN ≥ 15)" }]), "legend: 4 entries, glyph + level + range (EN)", lg);
-    // Which font actually draws the glyphs (Inter / Plex are latin-subset webfonts).
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send("DOM.enable"); await cdp.send("CSS.enable");
-    await page.evaluate(() => {
-      document.querySelector("main table tbody tr td:nth-child(2) > div > div > span[aria-hidden]")?.setAttribute("data-e2e-g", "cell");
-      const t = document.querySelector("main table").parentElement.nextElementSibling;
-      t.querySelectorAll('span[aria-hidden="true"]').forEach((s, i) => s.setAttribute("data-e2e-g", "legend" + i));
-      document.querySelectorAll("main table tbody tr").forEach((tr, i) => tr.querySelectorAll('span[aria-hidden="true"]').forEach((s, j) => s.setAttribute("data-e2e-g", `c${i}${j}`)));
-    });
-    const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
-    const { nodeIds } = await cdp.send("DOM.querySelectorAll", { nodeId: root.nodeId, selector: "[data-e2e-g]" });
-    const fonts = {};
-    for (const nid of nodeIds) {
-      const { attributes } = await cdp.send("DOM.getAttributes", { nodeId: nid });
-      const tag = attributes[attributes.indexOf("data-e2e-g") + 1];
-      const { fonts: f } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId: nid });
-      fonts[tag] = f.map((x) => `${x.familyName}${x.isCustomFont ? "*" : ""}:${x.glyphCount}`).join(",");
-    }
-    const uniq = [...new Set(Object.values(fonts))];
-    c.step(`glyph fonts (family:glyphs, *=webfont): ${JSON.stringify(uniq)}`);
-    c.expect(Object.values(fonts).every((f) => f && !/LastResort|^$/.test(f) && /:\d+/.test(f)), "every glyph is drawn by a real font (no tofu)", fonts);
+    c.expect(JSON.stringify(lg.map((l) => [l.shape, l.hidden, l.painted, l.text])) === JSON.stringify([
+      [LV.Low, "true", true, "Low risk (RPN ≤ 3)"], [LV.Medium, "true", true, "Medium risk (RPN 4–7)"],
+      [LV.High, "true", true, "High risk (RPN 8–14)"], [LV.Critical, "true", true, "Critical risk (RPN ≥ 15)"]]), "legend: 4 entries, painted shape + level + range (EN)", lg);
+    lg.forEach((l, i) => sigs[["Low", "Medium", "High", "Critical"][i]].add(l.sig));
+    const perLevel = Object.fromEntries(Object.entries(sigs).map(([k, v]) => [k, v.size]));
+    const distinct = new Set(Object.values(sigs).map((v) => [...v][0])).size;
+    c.expect(Object.values(perLevel).every((n) => n === 1) && Object.keys(perLevel).length === 4 && distinct === 4, "one shape per level (same drawing in every cell and the legend), four distinct shapes", perLevel);
+    const noText = await page.evaluate(() => /[\u2190-\u21ff\u2460-\u27bf\u{1f300}-\u{1faff}]/u.test(document.querySelector("main").innerText));
+    c.expect(!noText, "no arrow / geometric / emoji characters left in the Risk Matrix text");
     await shot(c, page, "matrix-en");
 
     // Portuguese.
@@ -2978,13 +3011,13 @@ async function main() {
     });
     const cramped = mm.flat().filter((x) => !x.fits);
     c.step(`390px: cell header width ${Math.min(...mm.flat().map((x) => x.headW))}-${Math.max(...mm.flat().map((x) => x.headW))}px`);
-    c.expect(cramped.length === 0, "390px: RPN and glyph fit side by side in every cell", cramped.slice(0, 3));
+    c.expect(cramped.length === 0 && mm.flat().every((x) => x.mark?.painted), "390px: RPN and shape fit side by side in every cell, shapes painted", cramped.slice(0, 3));
     c.expect(lay.wrapOverflow <= 0 && lay.docOverflow <= 0 && lay.mainOverflow <= 0, "390px: matrix causes no horizontal overflow", lay);
     await shot(c, mob, "matrix-390");
     await mob.context().close();
   });
 
-  await run("e3photos", "E3: several photos at once from the gallery — preview + '+N more', AI on the first only, one row each, progress, 10 limit, partial failure + retry, PT, 390px", async (c) => {
+  await run("e3photos", "E3: several photos at once from the gallery: preview + '+N more', AI on the first only, one row each, progress, 10 limit, partial failure + retry, PT, 390px", async (c) => {
     const unit = (await one("SELECT id FROM units WHERE code = 'SS-75'")).id;
     const IT = { en: "00000000-0000-0000-0000-0000000e2e14", pt: "00000000-0000-0000-0000-0000000e2e15" };
     for (const [id, name] of [[IT.en, "E2E Multi Photo Target"], [IT.pt, "E2E Multi Photo Mobile"]]) {
@@ -3085,7 +3118,7 @@ async function main() {
     await modal(page).getByText(/^\+9 more$/).waitFor({ timeout: 30000 }).catch(() => {});
     st = await seen(page);
     c.expect(st.some((x) => x.status === "Preparing 10 photos…" && x.picksDisabled), "'Preparing 10 photos…' (role=status) while compressing, picks disabled", st.map((x) => x.status));
-    const limit = modal(page).getByRole("alert").filter({ hasText: "Up to 10 photos at a time — only the first 10 were kept." });
+    const limit = modal(page).getByRole("alert").filter({ hasText: "Up to 10 photos at a time: only the first 10 were kept." });
     c.expect(await limit.isVisible().catch(() => false), "limit message shown (role=alert)");
     c.expect((await saveBtn.textContent()) === "Save 10 evidence records", "10 queued", await saveBtn.textContent());
     const row11 = await fileRow.innerText().catch(() => "");
@@ -3104,7 +3137,7 @@ async function main() {
     const err = modal(page).getByRole("alert").filter({ hasText: "Photo upload failed:" });
     await err.waitFor({ timeout: 15000 }).catch(() => {});
     const errText = await err.textContent().catch(() => "");
-    c.expect(/Injected fault 503/.test(errText) && /\(1 of 3 saved — Save again for the other 2\.\)$/.test(errText), "error says what failed and that 1 of 3 landed", errText);
+    c.expect(/Injected fault 503/.test(errText) && /\(1 of 3 saved\. Save again for the other 2\.\)$/.test(errText), "error says what failed and that 1 of 3 landed", errText);
     r = (await rows(IT.en)).filter((x) => x.description === "E3 partial batch");
     c.expect(r.length === 1 && r[0].file_name === "e3-p1.png", "only the first photo saved", r.map((x) => x.file_name));
     const kept = await fileRow.innerText().catch(() => "");
@@ -3135,7 +3168,7 @@ async function main() {
     await modal(mob).getByText(/^\+9 arquivos$/).waitFor({ timeout: 30000 }).catch(() => {});
     st = await seen(mob);
     c.expect(st.some((x) => x.status === "Preparando 10 fotos…"), "PT: 'Preparando 10 fotos…'", st.map((x) => x.status));
-    c.expect(await modal(mob).getByRole("alert").filter({ hasText: "Até 10 fotos por vez — só as 10 primeiras foram mantidas." }).isVisible().catch(() => false), "PT: limit message");
+    c.expect(await modal(mob).getByRole("alert").filter({ hasText: "Até 10 fotos por vez: só as 10 primeiras foram mantidas." }).isVisible().catch(() => false), "PT: limit message");
     const saveMob = modal(mob).getByRole("button", { name: /^Salvar (\d+ registros|registro) de evidência$/ });
     c.expect((await saveMob.textContent()) === "Salvar 10 registros de evidência", "PT: 'Salvar 10 registros de evidência'", await saveMob.textContent());
     const LONG = "e3-corroded-flange-bolt-portside-frame-112-close-up-before-cleaning.png";
@@ -3165,7 +3198,7 @@ async function main() {
     const errPt = modal(mob).getByRole("alert").filter({ hasText: "Falha no envio da foto:" });
     await errPt.waitFor({ timeout: 15000 }).catch(() => {});
     const errPtText = await errPt.textContent().catch(() => "");
-    c.expect(/\(1 de 3 salvas — salve de novo para as outras 2\.\)$/.test(errPtText), "PT: partial-failure note", errPtText);
+    c.expect(/\(1 de 3 salvas\. Salve de novo para as outras 2\.\)$/.test(errPtText), "PT: partial-failure note", errPtText);
     c.expect((await saveMob.textContent()) === "Salvar 2 registros de evidência", "PT: 2 left in the queue", await saveMob.textContent());
     await saveMob.click();
     c.expect(await toastSeen(mob, "2 evidências salvas", 15000), "PT: toast '2 evidências salvas'");
@@ -3179,20 +3212,26 @@ async function main() {
     await mob.context().close();
   });
 
-  await run("e4theme", "E4: dark theme — follows the device (no cookie), toggle device->light->dark->device (data-theme, cookie, colours, EN/PT labels), SSR with the cookie (no flash, no hydration error), print stays light, text contrast >= AA on every screen in dark, onAccent on accent fills, PDF keeps literal colours", async (c) => {
-    const LIGHT = { bg: "rgb(240, 244, 248)", text: "rgb(30, 45, 61)" };
-    const DARK = { bg: "rgb(14, 21, 29)", text: "rgb(228, 236, 244)", onAccent: "rgb(11, 21, 32)", blu: "rgb(134, 184, 255)" };
+  await run("e4theme", "E4: dark mode off for now: a device in dark mode and a leftover 'dark' cookie both get the light app (data-theme=light, color-scheme light, one light theme-color meta, light from the first paint, no hydration error), no theme switch in the top bar (EN/PT), print light; text contrast >= AA on every screen, onAccent on accent fills, PDF keeps literal colours", async (c) => {
+    const LIGHT = { bg: "rgb(240, 244, 248)", text: "rgb(30, 45, 61)", onAccent: "rgb(255, 255, 255)", blu: "rgb(26, 92, 181)" };
     const state = (page) => page.evaluate(() => ({
       theme: document.documentElement.dataset.theme ?? null,
       scheme: getComputedStyle(document.documentElement).colorScheme,
+      schemeMeta: document.querySelector('meta[name="color-scheme"]')?.content ?? null,
       body: getComputedStyle(document.body).backgroundColor,
       text: getComputedStyle(document.body).color,
       root: document.getElementById("app-root") ? getComputedStyle(document.getElementById("app-root")).backgroundColor : null,
       metas: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => `${m.getAttribute("media") || "*"}=${m.content}`),
     }));
+    // The light app: palette, native controls and browser UI colour.
+    const isLight = (s, app = true) => s.theme === "light" && s.body === LIGHT.bg && s.text === LIGHT.text && (!app || s.root === LIGHT.bg) &&
+      s.scheme === "light" && s.schemeMeta === "light" && JSON.stringify(s.metas) === JSON.stringify(["*=#2c3e52"]);
     const themeCookie = async (page) => (await page.context().cookies()).find((k) => k.name === "ss75-cmp.theme") || null;
-    const toggle = (page) => page.locator('button[aria-label^="Theme:"], button[aria-label^="Tema:"]').first();
-    const label = (page) => toggle(page).getAttribute("aria-label");
+    // Top-bar controls (accessible names) and anything that looks like a theme switch.
+    const topBar = (page) => page.evaluate(() => ({
+      buttons: [...document.querySelectorAll(".tb-band-top button")].map((b) => b.getAttribute("aria-label") || b.textContent.trim()),
+      themeish: [...document.querySelectorAll("button, [role=switch]")].filter((b) => /\b(theme|tema|dark|escuro)\b/i.test(`${b.getAttribute("aria-label") || ""} ${b.title || ""} ${b.textContent}`)).length,
+    }));
     const hydrationErrors = () => c.console.filter((m) => /hydrat|Minified React error #(418|419|421|422|423|425)|did not match/i.test(m));
 
     // Contrast of every visible text node (and filled form control) against
@@ -3275,80 +3314,52 @@ async function main() {
       await page.waitForTimeout(400); // DS.transition (0.18s) on cards
       const r = await contrast(page, scope);
       c.step(`${name}: ${r.n} text elements, min ${r.min}:1, ${r.skipped} exempt`);
-      c.expect(r.n > 0 && r.bad.length === 0, `dark ${name}: every visible text >= AA`, r.bad.slice(0, 8));
+      c.expect(r.n > 0 && r.bad.length === 0, `${name}: every visible text >= AA`, r.bad.slice(0, 8));
       return r;
     };
 
-    // ---- 1. device dark, no cookie -> dark palette, nothing stored
+    // ---- 1. device in dark mode, no cookie -> light app
     const page = await newPage(c, "admin1-dark", { colorScheme: "dark" });
     await login(page, "admin1@test.local");
     let s = await state(page);
-    c.expect(s.theme === null && s.body === DARK.bg && s.root === DARK.bg && s.text === DARK.text && s.scheme === "dark",
-      "device dark, no choice: dark background/text, color-scheme dark, no data-theme", s);
-    c.expect(!(await themeCookie(page)), "no theme cookie while following the device", await themeCookie(page));
-    c.expect(s.metas.includes("(prefers-color-scheme: dark)=#111b26") && s.metas.includes("*=#2c3e52"), "theme-color metas per device scheme", s.metas);
-    c.expect((await label(page)) === "Theme: device", "toggle label 'Theme: device'", await label(page));
+    c.expect(isLight(s), "device dark: light palette, color-scheme light (CSS + meta), data-theme=light, one light theme-color meta", s);
+    c.expect(!(await themeCookie(page)), "no theme cookie written", await themeCookie(page));
+    let tb = await topBar(page);
+    c.expect(JSON.stringify(tb.buttons) === JSON.stringify(["Menu", "EN", "PT"]) && tb.themeish === 0, "top bar: menu + EN/PT only, no theme switch anywhere", tb);
     await shot(c, page, "device-dark");
-
-    // ---- 2. the toggle cycles device -> light -> dark -> device
-    const steps = [
-      ["light", "Theme: light", LIGHT.bg, "light"],
-      ["dark", "Theme: dark", DARK.bg, "dark"],
-      [null, "Theme: device", DARK.bg, null],
-    ];
-    for (const [theme, lbl, bg, ck] of steps) {
-      await toggle(page).click();
-      s = await state(page); // no wait: must apply at once
-      const cookie = await themeCookie(page);
-      c.expect(s.theme === theme && s.body === bg && s.root === bg && (await label(page)) === lbl && (cookie?.value ?? null) === ck,
-        `click -> ${lbl}: data-theme=${theme}, background ${bg}, cookie ${ck}`, { s, cookie, label: await label(page) });
-      if (cookie) c.expect(cookie.path === "/" && cookie.sameSite === "Lax" && cookie.expires > Date.now() / 1000 + 300 * 86400, "cookie: path=/, SameSite=Lax, ~1 year", cookie);
-    }
     await page.getByRole("button", { name: "PT", exact: true }).click();
     await page.waitForTimeout(300);
-    const pt = [];
-    pt.push(await label(page));
-    for (let i = 0; i < 3; i++) { await toggle(page).click(); pt.push(await label(page)); }
-    c.expect(JSON.stringify(pt) === JSON.stringify(["Tema: do aparelho", "Tema: claro", "Tema: escuro", "Tema: do aparelho"]), "PT labels: do aparelho -> claro -> escuro -> do aparelho", pt);
-    c.expect((await toggle(page).getAttribute("title")) === (await label(page)), "title mirrors the aria-label");
+    tb = await topBar(page);
+    c.expect(tb.themeish === 0 && isLight(await state(page)), "PT: still light, no theme switch", tb);
     await page.getByRole("button", { name: "EN", exact: true }).click();
     await page.waitForTimeout(300);
 
-    // ---- 3. device light + dark cookie: the server renders data-theme (no flash)
-    const lp = await newPage(c, "insp1-light", { colorScheme: "light" });
-    await login(lp, "insp1@test.local");
-    s = await state(lp);
-    c.expect(s.theme === null && s.body === LIGHT.bg && s.text === LIGHT.text && s.scheme === "light", "device light, no choice: light palette", s);
-    await toggle(lp).click();
-    await toggle(lp).click();
-    c.expect((await themeCookie(lp))?.value === "dark" && (await state(lp)).body === DARK.bg, "picked dark on a light device");
-    const html = await (await lp.request.get(`${APP}/dashboard`)).text();
+    // ---- 2. a leftover 'dark' cookie (from v1.21.1) on the dark device: ignored
+    await page.context().addCookies([{ name: "ss75-cmp.theme", value: "dark", url: APP }]);
+    const html = await (await page.request.get(`${APP}/dashboard`)).text();
     const htmlTag = (html.match(/<html\b[^>]*>/) || [""])[0];
-    c.expect(/data-theme="dark"/.test(htmlTag), "server HTML: <html data-theme=\"dark\">", htmlTag);
-    c.expect(/<meta name="theme-color" content="#111b26"/.test(html) && !/media="\(prefers-color-scheme/.test(html), "server HTML: one dark theme-color meta", (html.match(/<meta name="theme-color"[^>]*>/g) || []));
-    c.expect(/aria-label="Theme: dark"/.test(html), "server HTML: toggle already labelled 'Theme: dark'");
+    c.expect(/data-theme="light"/.test(htmlTag), "server HTML with the dark cookie: <html data-theme=\"light\">", htmlTag);
+    c.expect(JSON.stringify(html.match(/<meta name="theme-color"[^>]*>/g)) === JSON.stringify(['<meta name="theme-color" content="#2c3e52"/>']) && /<meta name="color-scheme" content="light"\/>/.test(html),
+      "server HTML: one light theme-color meta (no media query), color-scheme light", [html.match(/<meta name="(theme-color|color-scheme)"[^>]*>/g)]);
+    c.expect(!/Theme:|Tema:/.test(html), "server HTML: no theme switch");
     c.console.length = 0;
-    // The very first paint: data-theme is in the HTML, the palette applies
-    // before any script runs.
-    await lp.reload({ waitUntil: "commit" });
-    await lp.waitForFunction(() => document.body, null, { timeout: 10000 });
-    const early = await lp.evaluate(() => ({ theme: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor }));
-    c.expect(early.theme === "dark" && early.body === DARK.bg, "dark from the first paint after reload", early);
-    await waitLoaded(lp);
-    await lp.waitForTimeout(1500);
-    c.expect((await label(lp)) === "Theme: dark", "toggle state after reload: dark", await label(lp));
+    // The very first paint is light: data-theme is in the HTML.
+    await page.reload({ waitUntil: "commit" });
+    await page.waitForFunction(() => document.body, null, { timeout: 10000 });
+    const early = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor }));
+    c.expect(early.theme === "light" && early.body === LIGHT.bg, "light from the first paint after reload (dark device + dark cookie)", early);
+    await waitLoaded(page);
+    await page.waitForTimeout(1500);
+    s = await state(page);
+    c.expect(isLight(s), "after hydration: still light", s);
     c.expect(hydrationErrors().length === 0, "no hydration error / warning in the console", hydrationErrors());
-    // Printing always uses the light palette.
-    await lp.emulateMedia({ media: "print" });
-    s = await state(lp);
-    c.expect(s.body === LIGHT.bg && s.text === LIGHT.text && s.scheme === "light", "print media: light palette even with the dark cookie", s);
-    await lp.emulateMedia({ media: "screen" });
-    await lp.context().close();
+    // Printing uses the light palette.
+    await page.emulateMedia({ media: "print" });
+    s = await state(page);
+    c.expect(s.body === LIGHT.bg && s.text === LIGHT.text && s.scheme === "light", "print media: light palette", s);
+    await page.emulateMedia({ media: "screen" });
 
-    // ---- 4. dark everywhere (admin: cookie dark on a dark device)
-    await toggle(page).click();
-    await toggle(page).click();
-    c.expect((await state(page)).theme === "dark", "admin: dark picked");
+    // ---- 3. every screen (dark device + dark cookie), light contrast sweep
     c.console.length = 0;
     await page.goto(`${APP}/dashboard`);
     await waitLoaded(page);
@@ -3356,7 +3367,7 @@ async function main() {
     await gotoTab(page, "Zones & Items");
     await page.waitForTimeout(800);
     await sweep(page, "zones");
-    // Item with readings (rate, table rows, delete ×) and the evidence
+    // Item with readings (rate, table rows, delete X) and the evidence
     // panel with a picked photo, then a saved record.
     await openItem(page, "E2E Rate Target");
     await sweep(page, "item modal (readings)", ".modal-overlay");
@@ -3364,10 +3375,10 @@ async function main() {
     fs.writeFileSync(pngPath, tinyPng({ tint: 90 }));
     await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
     await modal(page).locator('img[alt="Selected photo preview"]').waitFor({ timeout: 10000 }).catch(() => {});
-    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E4 dark evidence");
+    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E4 evidence");
     const saveEv = modal(page).getByRole("button", { name: "Save evidence record" });
     const saveCol = await saveEv.evaluate((b) => ({ color: getComputedStyle(b).color, bg: getComputedStyle(b).backgroundColor }));
-    c.expect(saveCol.color === DARK.onAccent && saveCol.bg === DARK.blu, "accent button (Save evidence) in dark: dark onAccent text on light blue", saveCol);
+    c.expect(saveCol.color === LIGHT.onAccent && saveCol.bg === LIGHT.blu, "primary button (Save evidence): onAccent text on blue", saveCol);
     await sweep(page, "evidence panel (photo picked)", ".modal-overlay");
     await shot(c, page, "evidence-picked");
     await saveEv.click();
@@ -3375,17 +3386,17 @@ async function main() {
     await toastEl.waitFor({ timeout: 15000 });
     await toastEl.evaluate((e) => e.setAttribute("data-e2e-toast", ""));
     const toastC = await contrast(page, "[data-e2e-toast]");
-    c.expect(toastC.n > 0 && toastC.bad.length === 0, `toast 'Evidence saved' readable in dark (min ${toastC.min})`, toastC.bad);
+    c.expect(toastC.n > 0 && toastC.bad.length === 0, `toast 'Evidence saved' readable (min ${toastC.min})`, toastC.bad);
     await modal(page).locator('img[alt="e4.png"]').waitFor({ timeout: 15000 }).catch(() => {});
     await sweep(page, "evidence panel (saved record)", ".modal-overlay");
     await shot(c, page, "evidence-saved");
-    // Confirmation dialog (danger button) over the modal: admin's ×.
+    // Confirmation dialog (danger button) over the modal: admin's X.
     page.__manualDialogs = true;
-    await modal(page).locator("button", { hasText: /^×$/ }).last().click();
+    await modal(page).getByRole("button", { name: "Delete evidence", exact: true }).last().click();
     await confirmDlg(page).waitFor({ timeout: 5000 });
     await sweep(page, "confirm dialog", '[role="alertdialog"]');
     const del = await confirmDlg(page).getByRole("button", { name: "Delete" }).evaluate((b) => getComputedStyle(b).color);
-    c.expect(del === DARK.onAccent, "danger confirm button uses onAccent", del);
+    c.expect(del === LIGHT.onAccent, "danger confirm button uses onAccent", del);
     await shot(c, page, "confirm");
     await confirmDlg(page).getByRole("button", { name: "Cancel" }).click();
     page.__manualDialogs = false;
@@ -3397,8 +3408,8 @@ async function main() {
       await sweep(page, name);
       await shot(c, page, name.replace(/ /g, "-"));
     }
-    // PDF export in dark: works, and the PDF paints literal colours (the
-    // renderer can't resolve CSS variables).
+    // PDF export: works, and the PDF paints literal colours (the renderer
+    // can't resolve CSS variables).
     await page.context().addInitScript(() => {
       const orig = URL.createObjectURL;
       URL.createObjectURL = function (b) {
@@ -3429,9 +3440,9 @@ async function main() {
       const fills = [...content.matchAll(/([\d.]+) ([\d.]+) ([\d.]+) (?:rg|scn)\b/g)].map((m) => m.slice(1, 4).map((v) => Math.round(Number(v) * 255)));
       const textColour = fills.some(([r, g, b]) => Math.abs(r - 30) <= 1 && Math.abs(g - 45) <= 1 && Math.abs(b - 61) <= 1);
       c.expect(buf.toString("latin1").startsWith("%PDF-") && textColour && !/var\(--ds/.test(content),
-        "PDF in dark mode: produced, body text #1e2d3d (literal light colours)", { size: buf.length, fills: fills.length });
+        "PDF: produced, body text #1e2d3d (literal colours)", { size: buf.length, fills: fills.length });
     } else {
-      c.expect(false, "PDF produced in dark mode", pdf);
+      c.expect(false, "PDF produced", pdf);
     }
     if (!popup.isClosed()) await popup.close().catch(() => {});
     c.expect(!(await toastSeen(page, /PDF export failed/, 500)), "no 'PDF export failed' toast");
@@ -3442,29 +3453,31 @@ async function main() {
       await sweep(page, name);
       await shot(c, page, name.replace(/ /g, "-"));
     }
-    c.expect(hydrationErrors().length === 0, "no hydration error while browsing in dark", hydrationErrors());
+    c.expect(hydrationErrors().length === 0, "no hydration error while browsing", hydrationErrors());
+    c.expect(isLight(await state(page), false), "admin pages / 404: light", await state(page));
     await page.context().close();
 
-    // ---- 5. signed-out login page with the dark cookie (light device)
-    const anon = await newPage(c, "anon-dark", { colorScheme: "light" });
+    // ---- 4. signed-out login page with the dark cookie on a dark device
+    const anon = await newPage(c, "anon-dark", { colorScheme: "dark" });
     await anon.context().addCookies([{ name: "ss75-cmp.theme", value: "dark", url: APP }]);
     await anon.goto(`${APP}/login`);
     await anon.getByRole("button", { name: /sign in/i }).waitFor();
     s = await state(anon);
-    c.expect(s.theme === "dark" && s.body === DARK.bg, "login page: dark from the cookie", s);
+    c.expect(isLight(s, false), "login page: light despite the dark cookie and device", s);
     await anon.locator('input[type="email"]').fill("someone@test.local");
     await sweep(anon, "login page");
     const sb = await anon.getByRole("button", { name: /sign in/i }).evaluate((b) => ({ color: getComputedStyle(b).color, bg: getComputedStyle(b).backgroundColor }));
-    c.expect(sb.color === DARK.onAccent && sb.bg === DARK.blu, "login 'Sign in' (accent) uses onAccent", sb);
+    c.expect(sb.color === LIGHT.onAccent && sb.bg === LIGHT.blu, "login 'Sign in' (primary) uses onAccent", sb);
     await shot(c, anon, "login");
     await anon.context().close();
 
-    // ---- 6. phone (390px), dark: bottom navigation incl. the '+' button
+    // ---- 5. phone (390px) in dark mode: light app, bottom navigation incl. the '+' button
     const mob = await newPage(c, "insp1-390", { colorScheme: "dark", viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     await login(mob, "insp1@test.local");
+    c.expect(isLight(await state(mob)), "390px, device dark: light app", await state(mob));
     await sweep(mob, "390px dashboard + bottom nav");
     const plus = await mob.locator("nav.bottom-nav button[aria-label='+ New Item']").evaluate((b) => ({ color: getComputedStyle(b).color, dot: getComputedStyle(b.querySelector("span")).backgroundColor }));
-    c.expect(plus.color === DARK.onAccent && plus.dot === DARK.blu, "bottom-nav '+' uses onAccent on the light-blue dot", plus);
+    c.expect(plus.color === LIGHT.onAccent && plus.dot === LIGHT.blu, "bottom-nav '+' uses onAccent on the blue dot", plus);
     await shot(c, mob, "390");
     await mob.context().close();
     await sql("DELETE FROM evidences WHERE item_id = $1", [ID.rate]).catch(() => {});
@@ -3525,8 +3538,8 @@ async function main() {
     return rows;
   }
   const exportCount = async (page) => {
-    const t = await page.getByText(/^Export — \d+ items$/).first().textContent();
-    return Number(t.match(/— (\d+) items/)[1]);
+    const t = await page.getByText(/^Export \(\d+ items\)$/).first().textContent();
+    return Number(t.match(/\((\d+) items\)/)[1]);
   };
 
   await run("f3archived", "F3: an archived item is left out of Dashboard, Zones, Risk Matrix, Schedule and the PDF, kept in CSV/XLSX (Archived=YES); admin Archive/Unarchive (warns before discarding edits); 'N archived' badge", async (c) => {
@@ -3664,7 +3677,7 @@ async function main() {
     }
   });
 
-  await run("f3ai", "F3: AI in the item modal — auto-apply fills only empty fields, 'Apply to Item Fields' overwrites; the pit-depth estimate is staged (Cancel: no reading; Save: one AI-tagged reading) and never drives the rate; unsaved-evidence confirm on Save; viewers get no AI", async (c) => {
+  await run("f3ai", "F3: AI in the item modal: auto-apply fills only empty fields, 'Apply to Item Fields' overwrites; the pit-depth estimate is staged (Cancel: no reading; Save: one AI-tagged reading) and never drives the rate; unsaved-evidence confirm on Save; viewers get no AI", async (c) => {
     const NAME = "E2E AI Target";
     await sql(
       `INSERT INTO items (id, unit_id, zone_id, name, status, notes, created_by, created_at)
@@ -3690,7 +3703,7 @@ async function main() {
         mech: await f.mech().inputValue(), prob: await f.prob().inputValue(), cons: await f.cons().inputValue(),
         freq: await f.freq().inputValue(), status: await f.status().inputValue(), priority: (await f.priority().innerText()).trim(),
       });
-      const staged = modal(page).getByText(/AI pit-depth estimate — saved as a reading when you save the item: 0\.4 mm/);
+      const staged = modal(page).getByText(/AI pit-depth estimate \(saved as a reading when you save the item\): 0\.4 mm/);
       const analyse = async () => {
         await modal(page).locator('input[type="file"]:not([capture])').setInputFiles({ name: "f3-ai.png", mimeType: "image/png", buffer: tinyPng({ tint: 40 }) });
         await modal(page).getByRole("button", { name: /Analyse with AI/ }).click();
@@ -3790,7 +3803,7 @@ async function main() {
       await login(page, "insp1@test.local");
       await openItem(page, NAME);
       const priority = async () => (await modal(page).locator('div:has(> label:text-is("Priority (auto)")) > div').innerText()).trim();
-      const seceBox = async () => (await modal(page).locator('div:has(> label:text-is("SECE — Safety & Environmental Critical Element")) > div > span').first().innerText()).trim();
+      const seceBox = async () => (await modal(page).locator('div:has(> label:text-is("SECE (Safety & Environmental Critical Element)")) > div > span').first().innerText()).trim();
       const combo = modal(page).locator('input[role="combobox"]');
       const pick = async (term, id) => {
         await combo.scrollIntoViewIfNeeded();
@@ -3820,7 +3833,7 @@ async function main() {
     }
   });
 
-  await run("f3pdf", "F3: PDF export — one row per item of the Export tab (zones flow across pages, per-zone counts match), header total, 'Photos: …' note", async (c) => {
+  await run("f3pdf", "F3: PDF export: one row per item of the Export tab (zones flow across pages, per-zone counts match), header total, 'Photos: …' note", async (c) => {
     const unit = await unitId();
     await sql(
       `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by, created_at)
@@ -3875,13 +3888,16 @@ async function main() {
       c.expect(note === `Photos: ${expPhotos} photos embedded` && expPhotos >= 1, `'Photos: ${expPhotos} photos embedded' note (nothing failed)`, note);
       c.expect(/\/Subtype\s*\/Image/.test(pdf.toString("latin1")), "the PDF embeds image(s)");
       c.expect(lines.some((l) => l.startsWith("E2E PDF Photo Target")), "the photo's item is listed");
+      // E7: the standard PDF font encodes a long dash as byte 0x97 (WinAnsi).
+      const dashRuns = runs.filter((r) => r.text.includes("\x97")).map((r) => r.text);
+      c.expect(dashRuns.length === 0 && lines.some((l) => l.includes("\xb7")), "PDF: no long dash (separators are '\u00b7')", dashRuns.slice(0, 3));
       await page.context().close();
     } finally {
       await dropItems([F3.pdf]);
     }
   });
 
-  await run("f3users", "F3: Users page — create (validation, duplicate -> generic error, success), role change, dept shown, deactivate/reactivate, delete (confirm); non-admins can't open /users", async (c) => {
+  await run("f3users", "F3: Users page: create (validation, duplicate -> generic error, success), role change, dept shown, deactivate/reactivate, delete (confirm); non-admins can't open /users", async (c) => {
     const EMAIL = "f3-new@test.local";
     const TEMP = "Temp-Passw0rd1";
     await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
@@ -4067,7 +4083,7 @@ async function main() {
     }
   });
 
-  await run("e5ui", "E5: Button/Notice — Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; × delete buttons named in EN/PT", async (c) => {
+  await run("e5ui", "E5: Button/Notice: Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; X delete buttons (icon only) named in EN/PT", async (c) => {
     const E5 = "00000000-0000-0000-0000-0000000e5a01";
     const NAME = "E2E E5 UI Target";
     await sql(
@@ -4136,8 +4152,10 @@ async function main() {
       }
       await page.waitForTimeout(1200);
     };
-    // aria-labels of the modal's × buttons (for failure details).
-    const xLabels = (page) => modal(page).locator("button", { hasText: /^×$/ }).evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")));
+    // aria-labels of the modal's icon-only X buttons (for failure details).
+    const xLabels = (page) => modal(page).locator("button:has(svg.lucide-x)").evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")));
+    // An icon-only X button: one X icon (SVG), no text.
+    const xOnly = async (b) => (await b.locator("svg.lucide-x").count()) === 1 && (await b.innerText()).trim() === "";
 
     try {
       // ---- 1. sign-in form: the button is a submit button, Enter submits,
@@ -4196,7 +4214,7 @@ async function main() {
       }
       await fp.context().close();
 
-      // ---- 3. desktop 1440 px: text sizes on every main screen; the ×
+      // ---- 3. desktop 1440 px: text sizes on every main screen; the X
       //      delete buttons have names.
       const desk = await newPage(c, "admin1-1440");
       await login(desk, "admin1@test.local");
@@ -4207,8 +4225,8 @@ async function main() {
         if (scope === ".modal-overlay") {
           const ev = modal(desk).getByRole("button", { name: "Delete evidence", exact: true });
           const rd = modal(desk).getByRole("button", { name: "Delete reading", exact: true });
-          c.expect((await ev.count()) === 1 && (await ev.innerText()).trim() === "×", "evidence × is named 'Delete evidence'", await xLabels(desk));
-          c.expect((await rd.count()) === 2 && (await rd.first().innerText()).trim() === "×", "each reading × is named 'Delete reading'", await xLabels(desk));
+          c.expect((await ev.count()) === 1 && (await xOnly(ev)), "evidence X is named 'Delete evidence'", await xLabels(desk));
+          c.expect((await rd.count()) === 2 && (await xOnly(rd.first())) && (await xOnly(rd.last())), "each reading X is named 'Delete reading'", await xLabels(desk));
           // Confirmation (Button + data-autofocus): the safe choice gets focus.
           desk.__manualDialogs = true;
           await rd.first().click();
@@ -4245,13 +4263,13 @@ async function main() {
       }
       c.expect(total >= 15, `Buttons measured on the phone screens: ${total}`);
 
-      // ---- 5. Portuguese: the × delete buttons are named in PT.
+      // ---- 5. Portuguese: the X delete buttons are named in PT.
       await mob.context().addCookies([{ name: "ss75-cmp.lang", value: "pt", url: APP }]);
       await visit(mob, `/dashboard?tab=zones&item=${E5}`, ".modal-overlay");
       const evPt = modal(mob).getByRole("button", { name: "Excluir evidência", exact: true });
       const rdPt = modal(mob).getByRole("button", { name: "Excluir leitura", exact: true });
-      c.expect((await evPt.count()) === 1, "PT: evidence × is named 'Excluir evidência'", await xLabels(mob));
-      c.expect((await rdPt.count()) === 2, "PT: each reading × is named 'Excluir leitura'", await xLabels(mob));
+      c.expect((await evPt.count()) === 1, "PT: evidence X is named 'Excluir evidência'", await xLabels(mob));
+      c.expect((await rdPt.count()) === 2, "PT: each reading X is named 'Excluir leitura'", await xLabels(mob));
       b = await buttonSizes(mob, ".modal-overlay");
       c.expect(b.list.length > 0 && b.list.every((x) => x.h >= 44), `PT 390 px item modal: all ${b.list.length} Buttons >= 44 px tall`, b.list.filter((x) => x.h < 44));
       await shot(c, mob, "pt-modal");
@@ -4259,6 +4277,181 @@ async function main() {
     } finally {
       await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot%'");
       await sql("DELETE FROM items WHERE id = $1", [E5]);
+    }
+  });
+
+  // ---------------------------------------------------- E7: sober visuals
+  await run("e7sober", "E7: no emoji / pictographic glyph and no long dash on any screen in EN and PT (text incl. sr-only, titles, labels, placeholders, toasts, dialogs, empty states, offline banner, error notice, login, reset, 404, offline page); every icon SVG is hidden from screen readers and every icon-only control has a name", async (c) => {
+    const E7 = "00000000-0000-0000-0000-0000000e7a01";
+    const EMPTY = { unit: "E2E-97", id: "00000000-0000-0000-0000-00000000f097", email: "empty97@test.local" };
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, notes, created_by, created_at)
+       VALUES ($1, $2, 'Z13', 'E2E E7 Sober Target', 'Attention', 4, 4, 'base note', $3, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [E7, await unitId(), USERS.insp2]
+    );
+    await sql("INSERT INTO readings (item_id, reading_date, depth_mm, location) VALUES ($1, current_date - 120, 1.0, 'P1'), ($1, current_date - 1, 1.2, 'P1')", [E7]);
+    await sql("INSERT INTO evidences (item_id, evidence_date, description, created_by) VALUES ($1, current_date - 1, 'E7 evidence note', $2)", [E7, USERS.insp2]);
+    // A unit with no items: the empty states.
+    await sql("INSERT INTO public.units (code, name) VALUES ($1, 'E2E empty unit') ON CONFLICT (code) DO NOTHING", [EMPTY.unit]);
+    await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [EMPTY.id, EMPTY.email]);
+    await sql("UPDATE public.profiles SET active = true, role = 'inspector', unit_id = (SELECT id FROM public.units WHERE code = $2) WHERE id = $1", [EMPTY.id, EMPTY.unit]);
+
+    // Every string the page exposes: text nodes (sr-only included), the
+    // document title, and the attributes people see or hear.
+    const scan = (page) => page.evaluate((src) => {
+      const re = new RegExp(src, "u");
+      const bad = [];
+      const add = (where, s) => { if (s && re.test(s)) bad.push(`${where}: "${s.trim().replace(/\s+/g, " ").slice(0, 70)}"`); };
+      add("title", document.title);
+      const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let n = 0;
+      for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+        if (["SCRIPT", "STYLE", "NOSCRIPT"].includes(t.parentElement?.tagName)) continue;
+        if (t.textContent.trim()) n++;
+        add(`<${t.parentElement?.tagName.toLowerCase()}>`, t.textContent);
+      }
+      for (const el of document.querySelectorAll("[aria-label], [title], [placeholder], [alt], [aria-description], [aria-valuetext]")) {
+        for (const a of ["aria-label", "title", "placeholder", "alt", "aria-description", "aria-valuetext"]) add(`@${a}`, el.getAttribute(a));
+      }
+      for (const el of document.querySelectorAll("input, textarea")) add("value", el.value);
+      for (const m of document.querySelectorAll("meta[content]")) add(`meta ${m.getAttribute("name") || m.getAttribute("property") || ""}`, m.content);
+      return { n, bad: bad.slice(0, 8) };
+    }, SOBER_BAD.source);
+    // Icons: every SVG inside a control is hidden from assistive tech (the
+    // name is on the control), and a control whose only content is an icon
+    // carries a name (aria-label / title / aria-labelledby).
+    const icons = (page) => page.evaluate(() => {
+      const svgs = [...document.querySelectorAll("svg.lucide")];
+      const exposed = svgs.filter((s) => s.getAttribute("aria-hidden") !== "true").map((s) => s.getAttribute("class"));
+      const unnamed = [...document.querySelectorAll('button, a[href], [role="button"], summary')]
+        .filter((b) => b.querySelector("svg"))
+        .filter((b) => !((b.getAttribute("aria-label") || "").trim() || (b.getAttribute("title") || "").trim() || b.getAttribute("aria-labelledby") || b.textContent.trim()))
+        .map((b) => b.outerHTML.slice(0, 90));
+      return { svgs: svgs.length, exposed: exposed.slice(0, 5), unnamed: unnamed.slice(0, 5) };
+    });
+    const check = async (page, lang, name, { minText = 3, iconsExpected = true } = {}) => {
+      await page.waitForTimeout(500);
+      const s = await scan(page);
+      c.expect(s.n >= minText && s.bad.length === 0, `${lang} ${name}: no emoji / pictograph / long dash (${s.n} text nodes)`, s.bad);
+      const i = await icons(page);
+      c.expect((!iconsExpected || i.svgs > 0) && i.exposed.length === 0 && i.unnamed.length === 0,
+        `${lang} ${name}: ${i.svgs} icon SVGs, all aria-hidden; no unnamed icon-only control`, i);
+    };
+    const SCREENS = [
+      ["dashboard", "/dashboard"],
+      ["zones", "/dashboard?tab=zones"],
+      ["item modal", `/dashboard?tab=zones&item=${E7}`],
+      ["risk matrix", "/dashboard?tab=risk"],
+      ["schedule", "/dashboard?tab=schedule"],
+      ["export", "/dashboard?tab=export"],
+      ["users", "/users"],
+      ["audit log", "/audit-log"],
+    ];
+
+    try {
+      for (const lang of ["EN", "PT"]) {
+        const pt = lang === "PT";
+        const cookie = [{ name: "ss75-cmp.lang", value: pt ? "pt" : "en", url: APP }];
+
+        // ---- signed out: login (and its error), reset without a link, offline page, 404
+        const anon = await newPage(c, `anon-${lang}`);
+        await anon.context().addCookies(cookie);
+        await anon.goto(`${APP}/login`);
+        await anon.locator('input[type="email"]').fill("insp1@test.local");
+        await anon.locator('input[type="password"]').fill("wrong-password-e7");
+        await anon.locator('input[type="password"]').press("Enter");
+        await anon.locator('form [role="alert"]').waitFor({ timeout: 10000 }).catch(() => {});
+        await check(anon, lang, "login + error", { iconsExpected: false });
+        await anon.goto(`${APP}/auth/reset`);
+        await anon.waitForTimeout(1500);
+        await check(anon, lang, "reset page without a link", { minText: 1, iconsExpected: false });
+        await anon.goto(`${APP}/offline.html`);
+        await check(anon, lang, "offline page", { iconsExpected: false });
+        await anon.goto(`${APP}/no-such-page`);
+        await check(anon, lang, "404", { minText: 2, iconsExpected: false });
+        await anon.context().close();
+
+        // ---- signed in (admin): every screen
+        const page = await newPage(c, `admin1-${lang}`);
+        await page.context().addCookies(cookie);
+        await login(page, "admin1@test.local");
+        for (const [name, url] of SCREENS) {
+          await page.goto(APP + url);
+          await waitLoaded(page).catch(() => {});
+          if (url === "/users") await page.getByText("admin1@test.local").first().waitFor({ timeout: 30000 }).catch(() => {});
+          if (url === "/audit-log") await page.getByText(/\(\d+\)/).first().waitFor({ timeout: 30000 }).catch(() => {});
+          if (name === "dashboard") {
+            // Open the alert bar so its rows (icon + text) are rendered.
+            const bar = page.locator('main button[aria-expanded="false"]').first();
+            if (await bar.count()) await bar.click().catch(() => {});
+          }
+          if (name === "risk matrix") await page.locator("main details > summary").first().click().catch(() => {});
+          if (name === "item modal") {
+            await modal(page).waitFor({ timeout: 30000 });
+            await modal(page).getByText(/Evidence added: \d{4}-\d{2}-\d{2} - E7 evidence note/).first().waitFor({ timeout: 15000 }).catch(() => {});
+            c.expect(await modal(page).getByText(/Evidence added: \d{4}-\d{2}-\d{2} - E7 evidence note/).first().isVisible().catch(() => false),
+              `${lang} item modal: the trigger's evidence note reads '<date> - <description>'`);
+          }
+          await check(page, lang, name);
+          if (name === "item modal") {
+            // A toast and a confirmation dialog over the modal.
+            await modal(page).getByLabel(pt ? "Profundidade de Pite (mm)" : "Pit Depth (mm)", { exact: true }).fill("0.9").catch(() => {});
+            await modal(page).getByRole("button", { name: pt ? "+ Leitura" : "+ Reading" }).click().catch(() => {});
+            await page.getByRole("status").filter({ hasText: pt ? /Leitura salva/ : /Reading saved/ }).first().waitFor({ timeout: 8000 }).catch(() => {});
+            await check(page, lang, "item modal + toast");
+            page.__manualDialogs = true;
+            await modal(page).getByRole("button", { name: pt ? "Excluir evidência" : "Delete evidence", exact: true }).first().click();
+            await confirmDlg(page).waitFor({ timeout: 5000 });
+            await check(page, lang, "confirm dialog");
+            await confirmDlg(page).getByRole("button").first().click();
+            page.__manualDialogs = false;
+            await page.keyboard.press("Escape");
+            await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+          }
+          await shot(c, page, `${lang.toLowerCase()}-${name.replace(/ /g, "-")}`);
+        }
+        // Offline banner, then an error notice (the audit log fails to load).
+        await page.goto(`${APP}/dashboard`);
+        await waitLoaded(page);
+        await page.context().setOffline(true);
+        await page.getByRole("status").filter({ hasText: pt ? /Sem conexão/ : /Offline/ }).first().waitFor({ timeout: 5000 }).catch(() => {});
+        await check(page, lang, "offline banner");
+        await page.context().setOffline(false);
+        await page.waitForTimeout(500);
+        await ctl.fault({ method: "GET", prefix: "/rest/v1/history", status: 400, times: -1, body: { code: "E2E", message: "history unavailable", details: null, hint: null } });
+        await page.goto(`${APP}/audit-log`);
+        await page.getByText(/history unavailable/).first().waitFor({ timeout: 15000 }).catch(() => {});
+        await check(page, lang, "audit log load error");
+        await ctl.clear();
+        // Sign-out confirmation.
+        page.__manualDialogs = true;
+        await page.goto(`${APP}/dashboard`);
+        await waitLoaded(page);
+        await page.getByRole("button", { name: pt ? /Sair/ : /Sign out/ }).first().click();
+        await confirmDlg(page).waitFor({ timeout: 5000 }).catch(() => {});
+        await check(page, lang, "sign-out confirmation");
+        await confirmDlg(page).getByRole("button").first().click().catch(() => {});
+        page.__manualDialogs = false;
+        await page.context().close();
+
+        // ---- a unit with no items: empty states on every tab
+        const empty = await newPage(c, `empty-${lang}`);
+        await empty.context().addCookies(cookie);
+        await login(empty, EMPTY.email);
+        for (const tab of ["dashboard", "zones", "risk", "schedule", "export"]) {
+          await empty.goto(`${APP}/dashboard?tab=${tab}`);
+          await waitLoaded(empty).catch(() => {});
+          await check(empty, lang, `empty unit: ${tab}`);
+        }
+        await shot(c, empty, `${lang.toLowerCase()}-empty`);
+        await empty.context().close();
+      }
+    } finally {
+      await ctl.clear();
+      await sql("DELETE FROM items WHERE id = $1", [E7]);
+      await sql("DELETE FROM auth.users WHERE id = $1", [EMPTY.id]).catch(() => {});
+      await sql("DELETE FROM public.profiles WHERE id = $1", [EMPTY.id]).catch(() => {});
+      await sql("DELETE FROM public.units WHERE code = $1", [EMPTY.unit]).catch(() => {});
     }
   });
 
@@ -4331,7 +4524,7 @@ async function main() {
   // Same browser, two users of different units, one after the other within
   // the sign-in preload's 30 s window (a shared tablet offshore): the
   // second user must never see the first one's data, not even for a frame.
-  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser — only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
+  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser: only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
     const OTHER = { id: "00000000-0000-0000-0000-00000000f001", email: "other1@test.local", item: "00000000-0000-0000-0000-0000000e2ef1" };
     await sql("INSERT INTO public.units (code, name) VALUES ('E2E-99', 'E2E other unit') ON CONFLICT (code) DO NOTHING");
     await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [OTHER.id, OTHER.email]);
@@ -4404,8 +4597,8 @@ async function main() {
 
   // Asymmetric JWT signing keys (backlog A11): the gateway signs new
   // sessions with ES256 and publishes the key in its JWKS, so getClaims()
-  // verifies locally — the path production takes once A11 is done.
-  await run("f6jwt", "F6/A11: ES256 sessions — pages check the JWT locally (no Auth call), an expired-but-refreshable session is refreshed; forged, expired, unknown-alg and 'none' tokens -> /login?next= from the proxy; a deactivated user (token still valid) ends on /login, no redirect loop", async (c) => {
+  // verifies locally: the path production takes once A11 is done.
+  await run("f6jwt", "F6/A11: ES256 sessions: pages check the JWT locally (no Auth call), an expired-but-refreshable session is refreshed; forged, expired, unknown-alg and 'none' tokens -> /login?next= from the proxy; a deactivated user (token still valid) ends on /login, no redirect loop", async (c) => {
     const EMAIL = "insp2@test.local";
     const now = () => Math.floor(Date.now() / 1000);
     const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
@@ -4515,7 +4708,7 @@ async function main() {
   // downloaded with the user's JWT and shown from an in-memory blob: URL,
   // revoked when the item closes. Runs with the service worker allowed, so
   // "nothing in Cache Storage" is checked against the real one.
-  await run("c7photos", "C7: photos only inside the session — no signed URLs, blob: thumbnails from authenticated downloads, per-photo error + retry, new tab from memory (image and PDF), revoked on close, nothing in Cache Storage, fresh after sign-out/in", async (c) => {
+  await run("c7photos", "C7: photos only inside the session: no signed URLs, blob: thumbnails from authenticated downloads, per-photo error + retry, new tab from memory (image and PDF), revoked on close, nothing in Cache Storage, fresh after sign-out/in", async (c) => {
     const ITEM = "00000000-0000-0000-0000-0000000ec701";
     const NAME = "E2E C7 Photo Target";
     await sql(
@@ -4695,7 +4888,7 @@ async function main() {
         return out;
       });
       c.step(`Cache Storage: ${cached.length} entries`);
-      c.expect(cached.length > 0 && !cached.some((u) => u.includes("/storage/v1/") || u.startsWith(GW) || u.startsWith("blob:")), "Cache Storage has app assets only — no Supabase / storage / blob: entry", cached.filter((u) => !u.startsWith(APP)));
+      c.expect(cached.length > 0 && !cached.some((u) => u.includes("/storage/v1/") || u.startsWith(GW) || u.startsWith("blob:")), "Cache Storage has app assets only: no Supabase / storage / blob: entry", cached.filter((u) => !u.startsWith(APP)));
 
       // ---- 8. sign out and back in: nothing stale, photos downloaded afresh
       await openItem(page, NAME);
@@ -4732,7 +4925,7 @@ async function main() {
   });
 
   // A file whose stored type is a document (SVG, HTML) must never become a
-  // blob: document in the app's origin — neither as a thumbnail (which
+  // blob: document in the app's origin: neither as a thumbnail (which
   // "Open image in new tab" would navigate to) nor in the tab the app
   // opens. The bucket's allowed_mime_types normally refuses these; here it
   // is lifted, as on a bucket created before that list existed (the
@@ -4819,7 +5012,7 @@ async function main() {
 
       const created = (await page.evaluate(() => window.__c7.created)) || [];
       const bad = created.filter((x) => !/^(image\/(png|jpeg|webp|gif|avif|heic|heif)|application\/pdf)$/.test(x.type || ""));
-      c.expect(created.length > 0 && bad.length === 0, "every object URL the app made has an image/PDF type — none of SVG, HTML or unknown type", created);
+      c.expect(created.length > 0 && bad.length === 0, "every object URL the app made has an image/PDF type: none of SVG, HTML or unknown type", created);
       const docs = [];
       for (const p of pages) {
         if (p.isClosed()) continue;

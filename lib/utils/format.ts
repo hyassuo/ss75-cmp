@@ -7,7 +7,7 @@ const MONTHS_EN_SHORT = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-// Brazilian long-form date — matches iOS native date input rendering.
+// Brazilian long-form date: matches iOS native date input rendering.
 export function fmt(d: string | null | undefined): string {
   if (!d) return "-";
   const parts = d.split("-");

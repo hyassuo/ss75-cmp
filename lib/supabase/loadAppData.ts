@@ -47,7 +47,7 @@ export async function loadAppData(
   const sweptAny = Array.isArray(gone) && gone.length > 0;
   // A row deleted by the sweep between two page reads shifts the later
   // pages' offsets: the row after the boundary would be skipped. Rare (an
-  // old draft actually swept, more than one page) — read the items again.
+  // old draft actually swept, more than one page): read the items again.
   if (sweptAny && !itemRes.error && itemRes.data.length >= PAGE_SIZE) {
     itemRes = await items(itemRes.data.length);
   }
@@ -69,14 +69,14 @@ export async function loadAppData(
 
 // How many items the last load on this device returned: the sign-in
 // preload's `expectedItems` (the server's count only comes with the page).
-// A per-device hint — missing or wrong, it only costs pages fetched one at
+// A per-device hint: missing or wrong, it only costs pages fetched one at
 // a time.
 const COUNT_KEY = "ss75-cmp.itemCount";
 function rememberItemCount(n: number) {
   try {
     window.localStorage.setItem(COUNT_KEY, String(n));
   } catch {
-    // storage unavailable — no hint next time
+    // storage unavailable: no hint next time
   }
 }
 function rememberedItemCount(): number | null {

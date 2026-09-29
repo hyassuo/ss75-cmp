@@ -14,7 +14,7 @@ export type FileState =
   // Stored with a type the app never shows (SVG, HTML, unknown…).
   | { status: "blocked" };
 
-// The only types a file is shown as — raster images and PDF. The type comes
+// The only types a file is shown as: raster images and PDF. The type comes
 // from the storage response, i.e. from whoever uploaded the file: a
 // blob: URL of an SVG or HTML file would be a document in the app's own
 // origin (script, a fake sign-in form) when opened in a tab, so anything
@@ -191,12 +191,12 @@ export class EvidenceFileStore {
 
 // How long the object URL behind a tab the user opened stays valid. The
 // tab has read the bytes long before; revoking only means a reload of that
-// tab finds nothing — the photo is not kept anywhere once the app lets go.
+// tab finds nothing: the photo is not kept anywhere once the app lets go.
 export const OPENED_TAB_URL_TTL_MS = 60_000;
 
 /**
  * Shows `blob` in `win` (a tab opened inside the click, so no popup
- * blocker interferes) through its own object URL — not the thumbnail's,
+ * blocker interferes) through its own object URL: not the thumbnail's,
  * which closing the item revokes while the tab may still be loading.
  */
 export function showBlobInTab(win: Window, blob: Blob) {

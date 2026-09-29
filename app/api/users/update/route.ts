@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     target.role === "admin" &&
     ((role && role !== "admin") || active === false);
   if (losesAdmin) {
-    // Count active admins within the same unit — don't let a unit lose its
+    // Count active admins within the same unit: don't let a unit lose its
     // last admin (a global count would wrongly allow it when another unit
     // still has admins).
     let q = admin

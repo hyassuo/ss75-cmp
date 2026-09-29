@@ -1,18 +1,18 @@
 -- =============================================================================
--- SS-75 CMP — SCHEMA v1.4.0: sub-áreas, tratativas, faixas %, acessório de linha
+-- SS-75 CMP: SCHEMA v1.4.0: sub-áreas, tratativas, faixas %, acessório de linha
 -- =============================================================================
--- Run once in Supabase SQL Editor. Idempotent — safe to re-run.
+-- Run once in Supabase SQL Editor. Idempotent: safe to re-run.
 -- Purely ADDITIVE and backward compatible with the running app: apply this
 -- BEFORE deploying the app build that uses the new fields.
--- Rollback path: supabase/upgrades/rollback-v140.sql (take a data snapshot first —
+-- Rollback path: supabase/upgrades/rollback-v140.sql (take a data snapshot first:
 -- supabase/ops/backup-snapshot.sql).
 -- =============================================================================
 
 
 -- =============================================================================
--- SECTION 1 — SUBAREAS CATALOG (compartments inside a DROPS zone)
+-- SECTION 1: SUBAREAS CATALOG (compartments inside a DROPS zone)
 -- =============================================================================
--- Managed list (admins) so names stay consistent — the free-text reference
+-- Managed list (admins) so names stay consistent: the free-text reference
 -- spreadsheet degraded into "SALA DE BOMBA/BOMBAS", "MOONPOOL/MOON POOL".
 
 CREATE TABLE IF NOT EXISTS public.subareas (
@@ -53,11 +53,11 @@ CREATE TRIGGER trg_subareas_author
 
 
 -- =============================================================================
--- SECTION 2 — NEW COLUMNS ON ITEMS (all additive, nullable/defaulted)
+-- SECTION 2: NEW COLUMNS ON ITEMS (all additive, nullable/defaulted)
 -- =============================================================================
 -- Canonical values for the enum-ish text columns are PORTUGUESE (they come
 -- from the FM-116-OFF reference method); the UI dict provides EN labels.
--- No CHECK constraints (v130 precedent — the UI constants are the source
+-- No CHECK constraints (v130 precedent: the UI constants are the source
 -- of allowed values, and the columns stay editable from the dashboard).
 
 -- Sub-área (compartment). ON DELETE SET NULL: removing a catalog entry
@@ -94,7 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_items_action_due
 
 
 -- =============================================================================
--- SECTION 3 — INTEGRITY GUARD: subarea must match the item's unit AND zone
+-- SECTION 3: INTEGRITY GUARD: subarea must match the item's unit AND zone
 -- =============================================================================
 -- The FK alone would accept another unit's/zone's subarea via a crafted
 -- direct PostgREST call (items_update WITH CHECK doesn't cover it).
@@ -124,9 +124,9 @@ CREATE TRIGGER trg_items_validate_subarea
 
 
 -- =============================================================================
--- SECTION 4 — AUDIT TRIGGER: v1.3.0 body + the new v1.4.0 fields
+-- SECTION 4: AUDIT TRIGGER: v1.3.0 body + the new v1.4.0 fields
 -- =============================================================================
--- action_note is deliberately NOT audited (same precedent as `notes` —
+-- action_note is deliberately NOT audited (same precedent as `notes`:
 -- free-text churn would flood the History panel).
 
 CREATE OR REPLACE FUNCTION public.audit_item_changes()

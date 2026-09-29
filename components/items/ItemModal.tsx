@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { Circle, CircleCheck, X } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Section } from "@/components/ui/Section";
 import { Input } from "@/components/ui/Input";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { EvidencePanel } from "@/components/items/EvidencePanel";
 import { ReadingsPanel } from "@/components/items/ReadingsPanel";
 import { HistoryPanel } from "@/components/items/HistoryPanel";
@@ -73,7 +75,7 @@ export function ItemModal(props: Props) {
   const live = allItems.find((i) => i.id === props.itemId);
   // If the item disappears while open (deleted elsewhere, picked up by a
   // background refresh), keep showing the user's form instead of silently
-  // unmounting it — the save will report what happened.
+  // unmounting it: the save will report what happened.
   const last = useRef(live);
   if (live) last.current = live;
   const item = live ?? last.current;
@@ -113,7 +115,7 @@ function ItemModalInner({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   // Edits left unsaved by a previous session (dropped link, idle logout,
-  // closed tab), offered back — read synchronously so the mirroring effect
+  // closed tab), offered back: read synchronously so the mirroring effect
   // below can't clear the stored copy before the user decides.
   const [restorable, setRestorable] = useState<ItemDraft<Form> | null>(() => {
     if (profile.role === "viewer") return null;
@@ -125,7 +127,7 @@ function ItemModalInner({
   const titleId = useId();
 
   const [nameError, setNameError] = useState(false);
-  // AI pit-depth estimate staged in the form — persisted only on Save, so
+  // AI pit-depth estimate staged in the form: persisted only on Save, so
   // cancelling the modal never leaves an orphan reading in the DB.
   const [pendingAiReading, setPendingAiReading] = useState<number | null>(null);
   // True while the evidence entry form holds an unsaved photo/description.
@@ -140,7 +142,7 @@ function ItemModalInner({
   const dirty = !sameForm(f, initial) || pendingAiReading !== null;
 
   // Mirror unsaved edits to local storage (debounced). While a previous
-  // draft is on offer, leave it alone until the user decides — or starts
+  // draft is on offer, leave it alone until the user decides: or starts
   // typing, which means they chose to start over.
   useEffect(() => {
     if (isReadOnly) return;
@@ -216,7 +218,7 @@ function ItemModalInner({
   function onFreqOrLast(next: Partial<Form>) {
     setF((x) => {
       const merged = { ...x, ...next };
-      // No schedule without a last date and a periodic frequency — never
+      // No schedule without a last date and a periodic frequency: never
       // keep a stale next date that nobody can edit away.
       const ni = calcNextInspection(merged.last_insp, merged.freq_insp);
       const withNi = { ...merged, next_insp: ni };
@@ -232,7 +234,7 @@ function ItemModalInner({
     });
   }
 
-  // Informative bands — a plain merge today. This is the seam for a future
+  // Informative bands: a plain merge today. This is the seam for a future
   // suggestRiskFromBands(corr, loss): route the patch through
   // recalcPriority instead of setF to also propose P×C.
   function onBandChange(next: Partial<Form>) {
@@ -252,7 +254,7 @@ function ItemModalInner({
   }
 
   // force=false (auto-apply after analysis): fill only fields the user
-  // hasn't set — never clobber manual input. force=true (the explicit
+  // hasn't set: never clobber manual input. force=true (the explicit
   // "Apply to Item Fields" button): overwrite, that click IS user intent.
   function applyAI(r: AIAnalysis, force = false) {
     setF((x) => {
@@ -273,7 +275,7 @@ function ItemModalInner({
       ) {
         next.mechanism = mechMap[r.corrosionType];
       }
-      // Only fill the name when the user hasn't typed one — don't overwrite
+      // Only fill the name when the user hasn't typed one: don't overwrite
       // a manual entry (even on force). "Unknown" from the AI is ignored.
       if (
         !next.name.trim() &&
@@ -282,7 +284,7 @@ function ItemModalInner({
       ) {
         next.name = r.componentName;
       }
-      // Suggested inspection frequency — accept an exact matrix value after
+      // Suggested inspection frequency: accept an exact matrix value after
       // trimming whitespace. The model occasionally adds trailing spaces or
       // returns a near-match that strict === would reject.
       const freq =
@@ -298,7 +300,7 @@ function ItemModalInner({
         if (ni) next.next_insp = ni;
       }
       // Set the inputs to the risk matrix and let calcPriority derive the
-      // priority — the AI never chooses the priority directly. Coerce to
+      // priority: the AI never chooses the priority directly. Coerce to
       // number first: Gemini's JSON mode sometimes returns numerics as
       // strings ("3") despite the integer schema, and the Select compares
       // string vs string, so we'd end up with no selection rendered.
@@ -331,7 +333,7 @@ function ItemModalInner({
       next.priority = p;
       // Status maps from the AI's recommended action: urgent → Critical,
       // anything else nudging us to act → Attention. Auto-apply only
-      // escalates from the untouched default (Pending) — x.status is the
+      // escalates from the untouched default (Pending): x.status is the
       // value BEFORE this apply.
       if (force || x.status === "Pending") {
         if (r.immediateAction === "Urgent Treatment Required") {
@@ -361,7 +363,7 @@ function ItemModalInner({
     const trimmedName = form.name.trim();
     if (!trimmedName) {
       setNameError(true);
-      // The field is at the top of a long form — take the user to it.
+      // The field is at the top of a long form: take the user to it.
       nameRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
       nameRef.current?.focus({ preventScroll: true });
       return;
@@ -479,7 +481,7 @@ function ItemModalInner({
   async function confirmDiscardOnce(): Promise<boolean> {
     if (isNew) {
       // Readings and photos are stored the moment they're added, so
-      // discarding a new item deletes them too — say so first.
+      // discarding a new item deletes them too: say so first.
       const attached = item.readings.length + item.evidences.length > 0;
       if (
         (dirty || evidenceDirty || attached) &&
@@ -493,8 +495,8 @@ function ItemModalInner({
       }
       if (!gone) {
         const r = await deleteItem(item.id, { discardDraft: true });
-        // Offline with an empty stub: close anyway — the server sweep
-        // removes untouched stubs later. With photos/readings attached the
+        // Offline with an empty stub: close anyway (the server sweep
+        // removes untouched stubs later). With photos/readings attached the
         // user must know they're still there.
         if (!r.ok && attached) {
           setSaveError(t("modal.deleteFailed") + " " + r.error);
@@ -537,7 +539,7 @@ function ItemModalInner({
   const blank = t("select.placeholder");
   const zoneOpts = [...zones]
     .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0))
-    .map((z) => ({ v: z.zid, l: `${z.zid} — ${z.name}` }));
+    .map((z) => ({ v: z.zid, l: `${z.zid} · ${z.name}` }));
   const mechOpts = [{ v: "", l: blank }].concat(
     MECHANISMS.map((m) => ({ v: m, l: t(`mech.${m}` as DictKey) || m }))
   );
@@ -592,10 +594,12 @@ function ItemModalInner({
           onClick={() => void cancel()}
           aria-label={t("common.close")}
           style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
             background: "none",
             border: "1px solid " + DS.bord,
             color: DS.text3,
-            fontSize: DS.fs.h3,
             cursor: "pointer",
             borderRadius: 7,
             minWidth: 44,
@@ -603,7 +607,7 @@ function ItemModalInner({
             flexShrink: 0,
           }}
         >
-          ×
+          <Icon icon={X} size="lg" />
         </button>
       </div>
 
@@ -668,7 +672,7 @@ function ItemModalInner({
             label={t("f.zone")}
             value={f.zone_id}
             onChange={(v) =>
-              // Changing the zone always clears the sub-área — a sub-área
+              // Changing the zone always clears the sub-área: a sub-área
               // belongs to exactly one zone (DB trigger is the backstop).
               setF((x) => ({ ...x, zone_id: v, subarea_id: "" }))
             }
@@ -741,7 +745,7 @@ function ItemModalInner({
                 aria-label={t("common.cancel")}
                 style={{ padding: "0 12px" }}
               >
-                ×
+                <Icon icon={X} size="md" />
               </Button>
             </div>
           )}
@@ -806,15 +810,17 @@ function ItemModalInner({
               onClick={() => setPendingAiReading(null)}
               aria-label={t("modal.discardAiReading")}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
                 background: "none",
                 border: "none",
                 color: DS.blu,
                 cursor: "pointer",
-                fontSize: DS.fs.lg,
                 padding: "0 2px",
               }}
             >
-              ×
+              <Icon icon={X} size="md" />
             </button>
           </Notice>
         )}
@@ -873,7 +879,7 @@ function ItemModalInner({
               aria-label={t("common.dismiss")}
               style={bannerBtn(DS.red)}
             >
-              ×
+              <Icon icon={X} size="md" />
             </Button>
           </Notice>
         )}
@@ -916,9 +922,7 @@ function ItemModalInner({
                   : undefined
               }
             >
-              <span style={{ fontSize: DS.fs.lg }}>
-                {f.status === "OK" && f.resolved_at ? "✓" : "○"}
-              </span>
+              <Icon icon={f.status === "OK" && f.resolved_at ? CircleCheck : Circle} size="md" />
               {f.status === "OK" && f.resolved_at
                 ? t("modal.resolved") : t("modal.markResolved")}
             </Button>

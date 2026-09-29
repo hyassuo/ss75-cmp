@@ -1,21 +1,24 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
+import { TAB_ICONS } from "@/components/layout/navIcons";
 import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useNewItem } from "@/lib/context/NewItemContext";
 import { useLang } from "@/lib/context/LangContext";
 import type { DictKey } from "@/lib/i18n/dict";
 
-const TABS: Array<{ tab: MainTab; icon: string; i18n: DictKey }> = [
-  { tab: "dashboard", icon: "▦", i18n: "navShort.dashboard" },
-  { tab: "zones", icon: "☰", i18n: "navShort.zones" },
-  { tab: "risk", icon: "△", i18n: "navShort.risk" },
-  { tab: "schedule", icon: "◷", i18n: "navShort.schedule" },
-  { tab: "export", icon: "↗", i18n: "navShort.export" },
+const TABS: Array<{ tab: MainTab; i18n: DictKey }> = [
+  { tab: "dashboard", i18n: "navShort.dashboard" },
+  { tab: "zones", i18n: "navShort.zones" },
+  { tab: "risk", i18n: "navShort.risk" },
+  { tab: "schedule", i18n: "navShort.schedule" },
+  { tab: "export", i18n: "navShort.export" },
 ];
 
-// Phone navigation (≤768px, see globals.css): thumb-reachable tabs with
+// Phone navigation (768px and below, see globals.css): thumb-reachable tabs with
 // labels, 56px tall. The sidebar becomes an overlay drawer behind the
 // hamburger for the admin pages and sign-out.
 export function BottomNav() {
@@ -66,9 +69,7 @@ export function BottomNav() {
             aria-current={active ? "page" : undefined}
             style={item(active)}
           >
-            <span aria-hidden="true" style={{ fontSize: DS.fs.xl, lineHeight: 1 }}>
-              {n.icon}
-            </span>
+            <Icon icon={TAB_ICONS[n.tab]} size="lg" />
             <span
               style={{
                 maxWidth: "100%",
@@ -99,11 +100,9 @@ export function BottomNav() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: DS.fs.h2,
-              lineHeight: 1,
             }}
           >
-            +
+            <Icon icon={Plus} size="lg" />
           </span>
         </button>
       )}

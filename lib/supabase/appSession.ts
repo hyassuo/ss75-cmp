@@ -14,7 +14,7 @@ export interface AppSession {
 // cookie session: an expired token is refreshed once, not per caller).
 const requestClient = cache(createClient);
 
-// The `sub` claim of a JWT, NOT verified — only used to start the profile
+// The `sub` claim of a JWT, NOT verified: only used to start the profile
 // query early; the result counts only if it matches the verified id.
 function unverifiedSub(jwt: string): string | null {
   try {
@@ -36,7 +36,7 @@ function unverifiedSub(jwt: string): string | null {
 // project's public keys (JWKS, cached per server instance) when Supabase
 // signs with asymmetric keys; with the legacy shared secret (HS256) it
 // asks GoTrue (/auth/v1/user), exactly like getUser(). The asymmetric path
-// cannot see a ban or a revoked session before the token expires — the
+// cannot see a ban or a revoked session before the token expires: the
 // layout's profile.active check and RLS (inactive = no rows) cover a
 // deactivated user either way.
 export const getAppSession = cache(async (): Promise<AppSession> => {

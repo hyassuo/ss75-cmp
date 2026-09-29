@@ -14,9 +14,9 @@ import type {
   MaterialLossBand,
 } from "@/lib/types/domain";
 
-// Pure form logic of the item modal: item ⇄ form mapping, the diff that is
+// Pure form logic of the item modal: item/form mapping both ways, the diff that is
 // actually saved, and the rebase used for drafts and conflicts. Kept free
-// of React so it can be unit-tested (tests/itemForm.test.ts) — this is the
+// of React so it can be unit-tested (tests/itemForm.test.ts): this is the
 // code that decides what gets written over whose changes.
 
 export type SetField = <K extends keyof Form>(k: K, v: Form[K]) => void;
@@ -73,7 +73,7 @@ export function formFromItem(item: ItemWithRelations, isNew: boolean): Form {
     prob: item.prob ?? null,
     cons: item.cons ?? null,
     // Today's priority (overdue escalation included), not the stored
-    // snapshot — the modal must agree with the cards and the matrix.
+    // snapshot: the modal must agree with the cards and the matrix.
     priority: effectivePriority(item),
     status: item.status ?? "Pending",
     sece: item.sece ?? false,

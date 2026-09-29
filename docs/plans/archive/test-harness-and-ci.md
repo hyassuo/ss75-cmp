@@ -4,7 +4,7 @@
 **Why first:** the repo has zero tests, zero CI, and `main` deploys straight to
 production on every push. The git history (v1.7.0 → v1.8.9 is almost entirely
 "fix the previous fix" releases) shows what that costs. Every other plan in
-this series lists tests as part of its acceptance criteria — this plan is the
+this series lists tests as part of its acceptance criteria: this plan is the
 multiplier that makes them verifiable.
 
 ## Goal
@@ -22,9 +22,9 @@ No behavior of the app changes. This plan only adds files and two
 | File | Action |
 |---|---|
 | `package.json` | add `test` + `typecheck` scripts, `vitest` devDependency |
-| `package-lock.json` | updated automatically by `npm install` — commit it |
+| `package-lock.json` | updated automatically by `npm install`: commit it |
 | `vitest.config.ts` | **new** |
-| `tests/helpers.ts` | **new** — item/reading fixtures |
+| `tests/helpers.ts` | **new**: item/reading fixtures |
 | `tests/calcPriority.test.ts` | **new** |
 | `tests/calcNextInspection.test.ts` | **new** |
 | `tests/calcRate.test.ts` | **new** |
@@ -34,7 +34,7 @@ No behavior of the app changes. This plan only adds files and two
 | `tests/format.test.ts` | **new** |
 | `.github/workflows/ci.yml` | **new** |
 
-Do NOT touch any file under `app/`, `components/`, or `lib/` — this plan is
+Do NOT touch any file under `app/`, `components/`, or `lib/`: this plan is
 purely additive.
 
 ## Steps (in order)
@@ -77,7 +77,7 @@ export default defineConfig({
 ### 4. Create `tests/helpers.ts`
 
 A factory that returns a complete `ItemWithRelations` (all fields required by
-`lib/types/domain.ts` — copy the field list from the `Item` interface there):
+`lib/types/domain.ts`: copy the field list from the `Item` interface there):
 
 ```ts
 import type { ItemWithRelations, Reading } from "@/lib/types/domain";
@@ -143,7 +143,7 @@ would require a tsconfig change). Start each test file with
 
 The assertions below are the spec. Use dates that are unambiguously in the
 past (`"2000-01-01"`) or future (`"2999-01-01"`) so tests pass regardless of
-the machine's timezone — see Edge cases.
+the machine's timezone: see Edge cases.
 
 **`tests/calcPriority.test.ts`** (`lib/domain/calcPriority.ts`)
 - `calcPriority(null, 3, false, null)` → `null`; same for cons null.
@@ -163,19 +163,19 @@ the machine's timezone — see Edge cases.
 - `(null, "Annual")` → `null`; `("2026-01-15", null)` → `null`.
 - `("2026-01-15", "Per operation")` → `null`; same for `"As required"`.
 - `("2026-01-15", "Weekly")` → `"2026-01-22"`.
-- `("2026-01-15", "Monthly")` → `"2026-02-14"` (fixed 30 days — this is
+- `("2026-01-15", "Monthly")` → `"2026-02-14"` (fixed 30 days: this is
   current intended behavior, not calendar months).
 - `("2024-02-28", "Annual")` → `"2025-02-27"` (365 fixed days across a leap
-  year — characterization test, documents the known drift).
+  year: characterization test, documents the known drift).
 
 **`tests/calcRate.test.ts`** (`lib/domain/calcRate.ts`)
 - `calcRate(null)` / `calcRate([])` / single reading → `null`.
 - Two readings exactly 365 days apart (`"2025-01-01"` depth 1.0,
   `"2026-01-01"` depth 2.0) → `1` (use `toBeCloseTo(1, 5)`).
 - Two readings on the same date → `null` (days <= 0 guard).
-- Decreasing depth → `0` (current clamp behavior — characterization).
+- Decreasing depth → `0` (current clamp behavior: characterization).
 - Three readings where the middle one is an outlier: rate uses ONLY first and
-  last (endpoint slope) — assert the middle reading has no effect.
+  last (endpoint slope): assert the middle reading has no effect.
 
 **`tests/effectiveStatus.test.ts`** (`lib/domain/effectiveStatus.ts`)
 - status `"OK"`, next_insp `"2000-01-01"` → `"Overdue"`.
@@ -237,7 +237,7 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          # Placeholders — build only needs syntactically valid values.
+          # Placeholders: build only needs syntactically valid values.
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
           SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
@@ -277,7 +277,7 @@ All four must pass. Commit `package.json`, `package-lock.json`,
    tsc doesn't know that).
 4. **`npm ci` requires a clean lockfile.** If `package-lock.json` isn't
    committed after `npm install --save-dev vitest`, CI fails on `npm ci`, not
-   on your tests — a confusing failure. Commit the lockfile.
+   on your tests: a confusing failure. Commit the lockfile.
 5. **The build needs placeholder env vars.** `createBrowserClient` requires a
    syntactically valid URL during prerender of `/login`. Empty strings crash
    the build; the placeholder HTTPS URL works. Never put real keys in the
@@ -285,7 +285,7 @@ All four must pass. Commit `package.json`, `package-lock.json`,
 6. **`calcRate` uses `toBeCloseTo`, not `toBe`.** `(1.0 / 365) * 365`
    accumulates float error; exact equality is flaky.
 7. **Fixture completeness.** `Item` has 24 fields and TypeScript strict mode
-   is on — a partial object literal fails compilation. Copy the field list
+   is on: a partial object literal fails compilation. Copy the field list
    from `lib/types/domain.ts:110-139` exactly; don't guess.
 
 ## Acceptance criteria

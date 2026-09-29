@@ -1,11 +1,13 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { ClipboardList } from "lucide-react";
 import { S } from "@/lib/design/styles";
 import { DS, tint } from "@/lib/design/tokens";
 import { Badge } from "@/components/ui/Badge";
 import { Gauge } from "@/components/ui/Gauge";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useData } from "@/lib/context/DataContext";
 import { useShell } from "@/lib/context/ShellContext";
 import { useLang } from "@/lib/context/LangContext";
@@ -24,7 +26,7 @@ export function Dashboard() {
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
-  // Archived items are excluded from every KPI — same rule as AlertBar and
+  // Archived items are excluded from every KPI: same rule as AlertBar and
   // the Zones tab, so all surfaces agree.
   const allItems = visibleZones
     .flatMap((z) => itemsByZone(z.zid))
@@ -36,7 +38,9 @@ export function Dashboard() {
       <div
         style={{ ...S.card, textAlign: "center", padding: "48px 24px" }}
       >
-        <div style={{ fontSize: DS.fs.h1, marginBottom: 12 }}>⊕</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: DS.text3 }}>
+          <Icon icon={ClipboardList} size="xl" />
+        </div>
         <div
           style={{
             fontSize: DS.fs.xl,
@@ -309,7 +313,7 @@ export function Dashboard() {
             );
           })}
         </div>
-        {/* No "needs 2+ items" footnote anymore — zoneScore now handles
+        {/* No "needs 2+ items" footnote anymore: zoneScore now handles
             single-item zones, so the asterisk legend is no longer needed. */}
       </div>
 

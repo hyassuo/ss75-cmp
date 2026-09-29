@@ -2,7 +2,7 @@ name: Backup
 
 # Daily encrypted backup of the database and the evidence photos, kept as
 # a workflow artifact (30 days). Off until the repository variable
-# BACKUP_ENABLED is "true" and the four secrets below are set — see
+# BACKUP_ENABLED is "true" and the four secrets below are set: see
 # README "Backups".
 on:
   schedule:

@@ -21,13 +21,13 @@ import type { EffectiveStatus, ItemPriority, ItemStatus } from "@/lib/types/doma
 
 const STORAGE_KEY = "ss75-cmp.lang";
 // Also mirrored to a cookie so the server renders the right language (and
-// <html lang>) on the first paint — see lib/i18n/serverLang.ts.
+// <html lang>) on the first paint: see lib/i18n/serverLang.ts.
 export const LANG_COOKIE = "ss75-cmp.lang";
 
 interface LangState {
   lang: Lang;
   setLang: (l: Lang) => void;
-  // Generic translator — returns either the string or the function value
+  // Generic translator: returns either the string or the function value
   // (callers using a function value pass arguments themselves).
   raw: <K extends DictKey>(key: K) => ReturnType<typeof translate>;
   // String-only helper. Looks up `key`; if the dict entry is a function it
@@ -70,7 +70,7 @@ export function LangProvider({
         persist(stored);
       }
     } catch {
-      // Storage disabled (private mode) — just stick with the EN default.
+      // Storage disabled (private mode): just stick with the EN default.
     }
   }, [initialLang]);
 

@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     email_confirm: true,
   });
   if (error || !created.user) {
-    // Log the real GoTrue reason server-side only — raw auth/DB strings are
+    // Log the real GoTrue reason server-side only: raw auth/DB strings are
     // internal detail, not client copy.
     console.error("[users/create]", error);
     return NextResponse.json({ error: "Could not create user" }, { status: 400 });

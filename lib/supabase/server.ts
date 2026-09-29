@@ -18,14 +18,14 @@ export async function createClient() {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
               // Strip maxAge/expires so the session ends when the browser
-              // closes — required by the session-policy decision.
+              // closes: required by the session-policy decision.
               const sessionOpts = { ...options };
               delete sessionOpts.maxAge;
               delete sessionOpts.expires;
               cookieStore.set(name, value, sessionOpts);
             });
           } catch {
-            // Called from a Server Component — the proxy refreshes the session.
+            // Called from a Server Component: the proxy refreshes the session.
           }
         },
       },

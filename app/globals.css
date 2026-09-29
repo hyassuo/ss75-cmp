@@ -395,8 +395,10 @@ video {
 
 /* Design tokens (lib/design/tokens.ts reads them through var()).
    Light is the default; dark follows the device unless the user picked a
-   theme (data-theme on <html>, from the ss75-cmp.theme cookie). The two
-   dark blocks below must stay identical (tests/theme.test.ts checks it).
+   theme (data-theme on <html>, from the ss75-cmp.theme cookie). Dark mode
+   is currently OFF (DARK_MODE_ENABLED in lib/theme/theme.ts): <html> always
+   has data-theme="light", so neither dark block below can apply. They are
+   kept for re-enabling and must stay identical (tests/theme.test.ts).
    Dark is screen-only: printing always uses the light palette. */
 :root {
   color-scheme: light;

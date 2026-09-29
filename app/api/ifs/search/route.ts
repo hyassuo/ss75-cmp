@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     return NextResponse.json([]);
   }
   // Whitelist sanitisation. PostgREST .or() parses commas, parens, dots and
-  // colons as syntax — anything outside [A-Za-z0-9 _-./] for an IFS lookup
+  // colons as syntax: anything outside [A-Za-z0-9 _-./] for an IFS lookup
   // would either be junk or attempt to break out of the ILIKE pattern.
   const term = query
     .slice(0, MAX_QUERY_LENGTH)

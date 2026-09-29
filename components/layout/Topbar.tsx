@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Menu, TriangleAlert } from "lucide-react";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { fmtShort, today, isOverdue } from "@/lib/utils/format";
 import { SYSTEMS } from "@/lib/utils/constants";
 import { useShell } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
 import { ItemSearch } from "@/components/layout/ItemSearch";
-import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 // Subtle band tones for the two-tone header (dark in both themes).
 const TOP_BAND = DS.sbBg;
@@ -63,7 +64,7 @@ export function Topbar() {
     >
       {/* ── Top band: title block ─────────────────────────────────────────── */}
       <div className="tb-band-top" style={{ background: TOP_BAND }}>
-        {/* Row 1 — hamburger + title + status */}
+        {/* Row 1: hamburger + title + status */}
         <div className="tb-row1">
           <div className="tb-left">
             <button
@@ -87,11 +88,7 @@ export function Topbar() {
                 flexShrink: 0,
               }}
             >
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <div style={{ width: 13, height: 2, background: "currentColor", borderRadius: 1 }} />
-                <div style={{ width: 13, height: 2, background: "currentColor", borderRadius: 1 }} />
-                <div style={{ width: 13, height: 2, background: "currentColor", borderRadius: 1 }} />
-              </div>
+              <Icon icon={Menu} size="lg" />
             </button>
             <div
               className="tb-title"
@@ -108,7 +105,6 @@ export function Topbar() {
               flexShrink: 0,
             }}
           >
-            <ThemeToggle />
             {/* Language toggle (EN | PT) */}
             <div
               role="group"
@@ -169,17 +165,8 @@ export function Topbar() {
                 }}
               />
               {!healthy && (
-                <span
-                  className="tb-chip-extra"
-                  aria-hidden
-                  style={{
-                    fontSize: DS.fs.md,
-                    lineHeight: 1,
-                    color: chipColor,
-                    fontWeight: 800,
-                  }}
-                >
-                  ⚡
+                <span className="tb-chip-extra" style={{ color: chipColor }}>
+                  <Icon icon={TriangleAlert} size="sm" />
                 </span>
               )}
               <span
@@ -198,7 +185,7 @@ export function Topbar() {
           </div>
         </div>
 
-        {/* Row 2 — subtitle + short date */}
+        {/* Row 2: subtitle + short date */}
         <div className="tb-row2">
           <div
             className="tb-sub"

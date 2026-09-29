@@ -13,6 +13,7 @@ import { addDays } from "@/lib/utils/format";
 import { useLang } from "@/lib/context/LangContext";
 import { download } from "@/lib/utils/download";
 import { latestNameByRef } from "@/lib/utils/historyNames";
+import { historyNote } from "@/lib/utils/historyNote";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
@@ -73,7 +74,7 @@ export function AuditLogTable() {
             (r.item_ref ? names.get(r.item_ref) : undefined) ??
             r.item_name ??
             r.item_ref ??
-            "—",
+            "-",
         }))
       );
       setTruncated(res.truncated);
@@ -124,7 +125,7 @@ export function AuditLogTable() {
           r.field_changed,
           r.prev_value,
           r.new_value,
-          r.note,
+          historyNote(r.note),
           r.by_user_email,
         ], csvSep)
       ),
@@ -309,7 +310,7 @@ export function AuditLogTable() {
                       color: DS.text3,
                     }}
                   >
-                    {(r.prev_value ?? "—") + " → " + (r.new_value ?? "—")}
+                    {(r.prev_value ?? "-") + " → " + (r.new_value ?? "-")}
                   </td>
                   <td
                     style={{

@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CMP — ROLLBACK of supabase/upgrades/schema-v140.sql (run once in SQL Editor)
+-- SS-75 CMP: ROLLBACK of supabase/upgrades/schema-v140.sql (run once in SQL Editor)
 -- =============================================================================
 -- Idempotent. Returns the database to the exact pre-v140 state:
 --   1) drops the subarea integrity trigger + function

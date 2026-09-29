@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { DS } from "@/lib/design/tokens";
 
 // Shared inline style atoms. Only the entries actually consumed across
-// components live here — page/modal containers moved to globals.css class
+// components live here: page/modal containers moved to globals.css class
 // rules so they can carry responsive @media tweaks.
 export const S: Record<string, CSSProperties> = {
   card: {

@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CMP — SECURITY HARDENING ROUND 2 (run once in Supabase SQL Editor)
+-- SS-75 CMP: SECURITY HARDENING ROUND 2 (run once in Supabase SQL Editor)
 -- =============================================================================
 -- Idempotent. Apply after supabase/migrations/20260928000000_baseline.sql / supabase/upgrades/security-fixes.sql.
 --

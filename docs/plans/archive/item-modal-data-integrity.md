@@ -1,4 +1,4 @@
-# PLAN: ItemModal data integrity — AI overwrites, dual save paths, lost input
+# PLAN: ItemModal data integrity: AI overwrites, dual save paths, lost input
 
 **Rank: 3 of 5.** Do after `PLAN-domain-correctness.md`. Independent of the
 export and security plans.
@@ -12,7 +12,7 @@ updating findings). It currently has five confirmed data-integrity traps:
    `EvidencePanel.runAI()` auto-calls `onAIApply(result)`
    (`components/items/EvidencePanel.tsx:131`), and `applyAI`
    (`components/items/ItemModal.tsx:169-243`) overwrites `mechanism`, `prob`,
-   `cons`, `status`, and `freq_insp` **unconditionally** — even values the
+   `cons`, `status`, and `freq_insp` **unconditionally**: even values the
    user just set by hand. Only `name` is guarded.
 2. **AI writes to the database before the user saves.** `applyAI` calls
    `addReading(...)` immediately (`ItemModal.tsx:235-242`). Cancelling the
@@ -22,10 +22,10 @@ updating findings). It currently has five confirmed data-integrity traps:
    evidence form (photo attached, description typed) and drop it.
 4. **Selecting an IFS object does not recompute priority.** The `onSelect`
    handler (`ItemModal.tsx:465-472`) sets `sece` via plain `setF`, but SECE
-   is a ×1.5 multiplier in `calcPriority` — the displayed priority goes
+   is a ×1.5 multiplier in `calcPriority`: the displayed priority goes
    stale until some other field changes.
 5. **A failed photo upload is swallowed.** `EvidencePanel.add()` does
-   `if (!error) filePath = path;` (`EvidencePanel.tsx:150`) — on failure it
+   `if (!error) filePath = path;` (`EvidencePanel.tsx:150`): on failure it
    silently saves an evidence row with no file.
 
 Also completes the half-built archive feature: the `archived` column exists
@@ -43,7 +43,7 @@ Nothing else. Do not touch `lib/domain/*` or DataContext.
 
 ## Steps (in order)
 
-### 1. `applyAI` — fill-only-empty by default, overwrite only on explicit Apply
+### 1. `applyAI`: fill-only-empty by default, overwrite only on explicit Apply
 
 Change the signature (`ItemModal.tsx:169`):
 
@@ -62,7 +62,7 @@ tables/coercions exactly as they are; only add the conditions):
 - prob: `if ((force || next.prob == null) && Number.isFinite(prob) && prob >= 1 && prob <= 5)`
 - cons: same with `next.cons == null`.
 - status: wrap the whole immediateAction→status mapping in
-  `if (force || x.status === "Pending")` — note `x.status`, the value before
+  `if (force || x.status === "Pending")`: note `x.status`, the value before
   this apply, not `next.status`.
 - Leave the final `calcPriority(next…)` recompute unconditional.
 
@@ -71,7 +71,7 @@ Call sites:
   `onAIApply: (r: AIAnalysis, force?: boolean) => void;`
 - `runAI()` auto-apply (`EvidencePanel.tsx:131`): `onAIApply(result, false);`
 - `AIResultCard` button (`EvidencePanel.tsx:343-346`):
-  `onAIApply(aiResult, true);` — the explicit "Apply to Item Fields" click IS
+  `onAIApply(aiResult, true);`: the explicit "Apply to Item Fields" click IS
   user intent to overwrite.
 - `ItemModal.tsx:417`: `onAIApply={applyAI}` still typechecks (extra optional
   param).
@@ -147,7 +147,7 @@ with the component).
    ```ts
    const [evidenceDirty, setEvidenceDirty] = useState(false);
    ```
-   Pass `onDirtyChange={setEvidenceDirty}` to `<EvidencePanel …/>` — pass the
+   Pass `onDirtyChange={setEvidenceDirty}` to `<EvidencePanel …/>`: pass the
    setter itself (stable identity; an inline arrow would re-fire the effect
    every render).
 4. At the TOP of `save()` and `cancel()`:
@@ -211,7 +211,7 @@ onSelect={(o) =>
    }
    filePath = path;
    ```
-   (User keeps their photo/description and can retry — nothing is silently
+   (User keeps their photo/description and can retry: nothing is silently
    half-saved.)
 3. Render it right below the "Save evidence record" button, copying the
    existing `aiErr` red-box JSX (`EvidencePanel.tsx:325-339`) with
@@ -240,17 +240,17 @@ Mark-Resolved button, add:
 ```
 
 Note: archived items are hidden from the Zones grid, so "Unarchive" is
-reachable only until the modal closes — acceptable for now; recovery is via
+reachable only until the modal closes: acceptable for now; recovery is via
 SQL or a future archived-items list.
 
-### 8. Dictionary keys — `lib/i18n/dict.ts`
+### 8. Dictionary keys: `lib/i18n/dict.ts`
 
 Add to BOTH the `en` and `pt` objects (find the `"modal.*"` cluster and
 append there). Exact strings:
 
 | Key | en | pt |
 |---|---|---|
-| `modal.pendingAiReading` | `AI pit-depth estimate — will be saved as a reading when you save the item:` | `Estimativa de profundidade (IA) — será salva como leitura ao salvar o item:` |
+| `modal.pendingAiReading` | `AI pit-depth estimate: will be saved as a reading when you save the item:` | `Estimativa de profundidade (IA): será salva como leitura ao salvar o item:` |
 | `modal.unsavedEvidence` | `There is an unsaved evidence entry (photo/description). OK = continue and discard it. Cancel = go back and save it first.` | `Há uma evidência não salva (foto/descrição). OK = continuar e descartar. Cancelar = voltar e salvá-la primeiro.` |
 | `modal.nameRequired` | `Item name is required.` | `O nome do item é obrigatório.` |
 | `modal.archive` | `Archive` | `Arquivar` |
@@ -258,7 +258,7 @@ append there). Exact strings:
 | `f.uploadFailed` (in the `f.*` cluster) | `Photo upload failed:` | `Falha no envio da foto:` |
 
 The dict is `Record<Key, string | fn>` with the `Key` union derived from the
-`en` object — adding to `en` extends the type; adding the same keys to `pt`
+`en` object: adding to `en` extends the type; adding the same keys to `pt`
 keeps parity (`translate` falls back to EN if you miss one, but don't).
 
 ## Edge cases a weaker model would miss
@@ -275,7 +275,7 @@ keeps parity (`translate` falls back to EN if you miss one, but don't).
    inline recreates the callback every render, which re-runs the
    EvidencePanel effect every render. Pass `setEvidenceDirty` itself.
 4. **Re-check `item.readings.length === 0` at save time**, not only at
-   apply time — the user may have added a manual reading between AI apply and
+   apply time: the user may have added a manual reading between AI apply and
    Save; the AI estimate must not duplicate it.
 5. **Double-apply is now safe by construction**: auto-apply (force=false)
    then card-click (force=true) just overwrites the staged number; nothing is
@@ -283,7 +283,7 @@ keeps parity (`translate` falls back to EN if you miss one, but don't).
 6. **The viewer role.** All new controls (pending-reading discard, archive
    button) that sit inside the `<fieldset disabled={isReadOnly}>` are
    auto-disabled for viewers. The archive button is in the footer OUTSIDE the
-   fieldset — that's why it needs the explicit `isAdmin` guard (it has one).
+   fieldset: that's why it needs the explicit `isAdmin` guard (it has one).
 7. **`save()` early-returns must not leave `saving` stuck.** Put the
    evidence-dirty and name guards BEFORE `setSaving(true)` (as specified), or
    reset `saving` on every return path.
@@ -294,7 +294,7 @@ keeps parity (`translate` falls back to EN if you miss one, but don't).
    `deleteItem`), which cascades to any evidence already saved via the panel.
    The unsaved-evidence confirm therefore fires for the *unsaved form*; the
    deliberate destruction of already-saved evidence on new-item cancel is
-   existing, intended behavior — do not "fix" it here.
+   existing, intended behavior: do not "fix" it here.
 
 ## Acceptance criteria
 
@@ -324,7 +324,7 @@ Manual flow (run `npm run dev` with real env):
 
 ## Out of scope
 
-- Modal accessibility (focus trap, Escape-to-close, aria-labels) — worthy,
+- Modal accessibility (focus trap, Escape-to-close, aria-labels): worthy,
   separate change.
 - Merging the evidence/readings save paths into one transactional save.
 - An "Archived items" browse/restore view.

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown, CircleAlert, Clock } from "lucide-react";
 import { DS } from "@/lib/design/tokens";
+import { Icon } from "@/components/ui/Icon";
 import { fmt, isOverdue, daysUntil, today } from "@/lib/utils/format";
 import {
   calcRate,
@@ -222,9 +224,7 @@ export function AlertBar() {
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: DS.fs.base,
               color: DS.red,
-              fontWeight: 800,
               background: DS.sur,
               border: "1px solid " + DS.redBord,
               borderRadius: 6,
@@ -232,7 +232,7 @@ export function AlertBar() {
               transition: "transform 0.15s ease",
             }}
           >
-            ▾
+            <Icon icon={ChevronDown} size="md" />
           </span>
         </div>
       </button>
@@ -265,20 +265,12 @@ export function AlertBar() {
               <span
                 style={{
                   flexShrink: 0,
-                  width: 18,
-                  height: 18,
-                  borderRadius: "50%",
                   display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: DS.fs.xs,
-                  fontWeight: 800,
-                  marginTop: 1,
-                  background: isDanger ? DS.red : DS.ora,
-                  color: DS.onAccent,
+                  marginTop: 2,
+                  color: isDanger ? DS.red : DS.ora,
                 }}
               >
-                {isDanger ? "!" : "~"}
+                <Icon icon={isDanger ? CircleAlert : Clock} size="md" />
               </span>
               <span
                 style={{

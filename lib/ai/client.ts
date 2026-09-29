@@ -34,7 +34,7 @@ export interface AiRequest {
   maxTokens: number;
   json?: boolean;
   // When set with json:true, Gemini is required to emit JSON matching this
-  // schema — keys with required: [...] cannot be omitted, types are
+  // schema: keys with required: [...] cannot be omitted, types are
   // enforced. Massively reduces "the model ignored half the fields" bugs.
   jsonSchema?: AiJsonSchema;
   image?: { base64: string; mediaType: AiMediaType };
@@ -75,7 +75,7 @@ export async function aiGenerate(req: AiRequest): Promise<string> {
       maxOutputTokens: req.maxTokens,
       temperature: 0,
       // 2.5-flash enables "thinking" by default and burns the token budget
-      // on reasoning before emitting output — for our structured triage we
+      // on reasoning before emitting output: for our structured triage we
       // just want the JSON, so disable it.
       thinkingConfig: { thinkingBudget: 0 },
       ...(req.json ? { responseMimeType: "application/json" } : {}),
