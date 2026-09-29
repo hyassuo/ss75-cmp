@@ -204,4 +204,26 @@ describe("fetchAll in parallel", () => {
     );
     expect(r.data.map((x) => x.id)).toEqual(Array.from({ length: 1001 }, (_, i) => i));
   });
+
+  it("a `max` between page boundaries: no page past it, rows cut at it", async () => {
+    const p = slowPager(5000);
+    const r = await fetchAll(p.page, { max: 2500 });
+    expect(r.data).toEqual(Array.from({ length: 2500 }, (_, i) => i));
+    expect(r.truncated).toBe(true);
+    expect(p.calls.map((c) => c[0])).toEqual([0, 1000, 2000]);
+  });
+
+  it("an `expected` below the total: the rest goes out in one wave once the count is in", async () => {
+    const p = slowPager(4500);
+    const r = await fetchAll(p.page, { expected: 1500 });
+    expect(r.data).toHaveLength(4500);
+    expect(p.calls.map((c) => c[0])).toEqual([0, 1000, 2000, 3000, 4000]);
+    expect(p.peak()).toBe(3);
+  });
+
+  it("an error on the first page returns no rows", async () => {
+    const p = slowPager(3500, { fail: 0 });
+    const r = await fetchAll(p.page, { expected: 3500 });
+    expect(r).toEqual({ data: [], error: "boom", truncated: false });
+  });
 });

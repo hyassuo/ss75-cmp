@@ -1,5 +1,5 @@
 import type { createClient } from "@/lib/supabase/client";
-import { fetchAll } from "@/lib/supabase/fetchAll";
+import { fetchAll, PAGE_SIZE } from "@/lib/supabase/fetchAll";
 import type { ItemWithRelations, Subarea, Zone } from "@/lib/types/domain";
 
 type Client = ReturnType<typeof createClient>;
@@ -15,7 +15,7 @@ export type AppDataResult =
 //     createItem inserts a stub row immediately so the modal has an id for
 //     photo uploads; that row stays in the DB if the user gets kicked by
 //     IdleLogout or closes the tab without Cancel. The server decides what
-//     is an abandoned draft (untouched stub of this user, 30+ min old, no
+//     is an abandoned draft (untouched stub of this user, 24 h+ old, no
 //     readings/photos), deletes it and reports the ids; they are dropped
 //     from the items read alongside (which may or may not still hold them).
 //   expectedItems: rows the item query should return (fetchAll `expected`),
@@ -24,9 +24,7 @@ export async function loadAppData(
   supabase: Client,
   opts: { sweep: boolean; expectedItems?: number | null }
 ): Promise<AppDataResult> {
-  const [zoneRes, subareaRes, itemRes, swept] = await Promise.all([
-    supabase.from("zones").select("*").order("display_order"),
-    supabase.from("subareas").select("*").order("display_order").order("name"),
+  const items = (expected: number | null | undefined) =>
     // Paged: PostgREST silently caps a response at 1000 rows.
     fetchAll<ItemWithRelations>(
       (from, to, withCount) =>
@@ -36,24 +34,36 @@ export async function loadAppData(
           .order("created_at")
           .order("id")
           .range(from, to),
-      { expected: opts.expectedItems ?? undefined }
-    ),
+      { expected: expected ?? undefined }
+    );
+  const [zoneRes, subareaRes, firstItemRes, swept] = await Promise.all([
+    supabase.from("zones").select("*").order("display_order"),
+    supabase.from("subareas").select("*").order("display_order").order("name"),
+    items(opts.expectedItems),
     opts.sweep ? supabase.rpc("discard_my_abandoned_drafts") : null,
   ]);
+  let itemRes = firstItemRes;
+  const gone = swept?.data;
+  const sweptAny = Array.isArray(gone) && gone.length > 0;
+  // A row deleted by the sweep between two page reads shifts the later
+  // pages' offsets: the row after the boundary would be skipped. Rare (an
+  // old draft actually swept, more than one page) — read the items again.
+  if (sweptAny && !itemRes.error && itemRes.data.length >= PAGE_SIZE) {
+    itemRes = await items(itemRes.data.length);
+  }
   const error = zoneRes.error?.message || subareaRes.error?.message || itemRes.error;
   if (error) return { ok: false, error };
-  let items = itemRes.data;
-  const gone = swept?.data;
-  if (Array.isArray(gone) && gone.length) {
+  let rows = itemRes.data;
+  if (sweptAny) {
     const ids = new Set(gone as string[]);
-    items = items.filter((i) => !ids.has(i.id));
+    rows = rows.filter((i) => !ids.has(i.id));
   }
-  rememberItemCount(items.length);
+  rememberItemCount(rows.length);
   return {
     ok: true,
     zones: (zoneRes.data as Zone[]) ?? [],
     subareas: (subareaRes.data as Subarea[]) ?? [],
-    items,
+    items: rows,
   };
 }
 
@@ -87,11 +97,17 @@ const PRELOAD_TTL_MS = 30_000;
 let preloaded: { userId: string; at: number; result: Promise<AppDataResult> } | null = null;
 
 export function preloadAppData(supabase: Client, userId: string) {
-  preloaded = {
+  const entry = {
     userId,
     at: Date.now(),
     result: loadAppData(supabase, { sweep: true, expectedItems: rememberedItemCount() }),
   };
+  preloaded = entry;
+  // Not taken in time (e.g. the layout turned the user away): drop it, so
+  // this user's rows don't stay in memory after they leave the device.
+  setTimeout(() => {
+    if (preloaded === entry) preloaded = null;
+  }, PRELOAD_TTL_MS);
 }
 
 export function takePreloadedAppData(userId: string): Promise<AppDataResult> | null {
