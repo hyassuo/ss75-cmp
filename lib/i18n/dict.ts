@@ -24,6 +24,10 @@ const en = {
   // Header
   "header.title": "Corrosion Management Plan",
   "header.subtitle": "Noble Courage SS-75",
+  "search.label": "Search items",
+  "search.placeholder": "Search items (name, IFS, WO, zone…)  /",
+  "search.none": "No items found.",
+  "search.archived": "archived",
   "header.departments": "Departments:",
   "status.healthy": "HEALTHY",
   "status.attention": "ATTENTION",
@@ -462,6 +466,10 @@ type Translations = Partial<Record<Key, Value>>;
 const pt: Translations = {
   // Header
   "header.title": "Plano de Gerenciamento de Corrosão",
+  "search.label": "Buscar itens",
+  "search.placeholder": "Buscar itens (nome, IFS, OS, zona…)  /",
+  "search.none": "Nenhum item encontrado.",
+  "search.archived": "arquivado",
   "header.departments": "Departamentos:",
   "status.healthy": "SAUDÁVEL",
   "status.attention": "ATENÇÃO",
