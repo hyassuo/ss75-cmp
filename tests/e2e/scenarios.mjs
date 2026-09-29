@@ -12,6 +12,10 @@ import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "@e965/xlsx";
 
+// Lets context.setOffline() reach service workers (Chromium) — only the
+// csp3 scenario allows a service worker; every other context blocks them.
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= "1";
+
 const APP = process.env.APP_URL;
 const GW = process.env.SUPABASE_URL_LOCAL;
 const PASSWORD = process.env.E2E_PASSWORD;
@@ -164,6 +168,8 @@ class Check {
     this.dialogs = [];
     this.native = [];
     this.shots = [];
+    this.csp = []; // securitypolicyviolation events
+    this.cspConsole = []; // "Refused to …" console reports
     this.t0 = Date.now();
   }
   step(msg) {
@@ -184,8 +190,10 @@ class Check {
 }
 
 async function newPage(chk, label, opts = {}) {
+  // The app's real Content-Security-Policy is enforced (no bypassCSP):
+  // every violation, in any page of the context (popups included), fails
+  // the scenario — see watchCsp and run().
   const ctx = await browser.newContext({
-    bypassCSP: true, // app CSP only allows https://*.supabase.co
     serviceWorkers: "block",
     acceptDownloads: true,
     viewport: { width: 1440, height: 1000 },
@@ -193,6 +201,7 @@ async function newPage(chk, label, opts = {}) {
     timezoneId: "America/Sao_Paulo",
     ...opts,
   });
+  await watchCsp(ctx, chk, label);
   const page = await ctx.newPage();
   page.__label = label;
   page.__dialogPolicy = []; // queue of true/false answers; default accept
@@ -221,6 +230,38 @@ async function newPage(chk, label, opts = {}) {
   });
   void autoRespond(page, chk, label);
   return page;
+}
+
+// CSP violations: a securitypolicyviolation listener installed before any
+// page script (init script -> binding) plus Chromium's console report
+// ("Refused to ... because it violates the following Content Security
+// Policy directive") as a backstop for documents the init script misses
+// (e.g. a popup's initial about:blank).
+async function watchCsp(ctx, chk, label) {
+  await ctx.exposeBinding("__e2eCspViolation", ({ page }, v) => {
+    const where = page ? page.url() : "?";
+    chk.csp.push(`[${label}] ${v.directive} blocked ${v.blocked || "(inline)"} on ${v.doc || where}` +
+      (v.src ? ` (${v.src}:${v.line})` : "") + (v.sample ? ` sample="${v.sample}"` : ""));
+  });
+  await ctx.addInitScript(() => {
+    document.addEventListener("securitypolicyviolation", (e) => {
+      try {
+        window.__e2eCspViolation({
+          directive: e.effectiveDirective || e.violatedDirective,
+          blocked: e.blockedURI, doc: e.documentURI, src: e.sourceFile,
+          line: e.lineNumber, sample: e.sample,
+        });
+      } catch {}
+    }, true);
+  });
+  ctx.on("console", (m) => {
+    const t = m.text();
+    if (/Content[- ]Security[- ]Policy/i.test(t) || /^Refused to /.test(t)) {
+      // data: URIs can be huge: keep the head and the directive at the end.
+      const short = t.replace(/(data:[^,'"\s]*,)[^'"\s]{40,}/g, (_, h) => `${h}…`);
+      chk.cspConsole.push(`[${label}] ${m.type()}: ${short}`);
+    }
+  });
 }
 
 // Answers the app's confirmation dialog (role=alertdialog) the way the old
@@ -330,6 +371,10 @@ async function run(id, title, fn) {
     console.log(`   ✗ exception: ${e.stack}`);
   }
   if (chk.native.length) chk.failures.push(`native browser dialog(s) shown: ${chk.native.join("; ")}`);
+  // Bindings/console events of closing pages may still be in flight.
+  await new Promise((r) => setTimeout(r, 200));
+  for (const v of [...new Set(chk.csp)]) chk.failures.push(`CSP violation: ${v}`);
+  for (const v of [...new Set(chk.cspConsole)]) chk.failures.push(`CSP console: ${v}`);
   chk.status = chk.failures.length ? "FAIL" : "PASS";
   chk.ms = Date.now() - chk.t0;
   console.log(`   => ${chk.status} (${chk.ms} ms)`);
@@ -2137,13 +2182,211 @@ async function main() {
     }
   });
 
+  // ------------------------------------------------- C3: Content-Security-Policy
+  // Every scenario above already runs under the enforced CSP and fails on
+  // any violation; these check the policy itself, the PDF export (wasm,
+  // photos, blob: tab) and the static offline page / service worker.
+
+  const cspOf = (h) => h["content-security-policy"] || "";
+  const directive = (csp, name) => (csp.split(";").map((d) => d.trim()).find((d) => d.startsWith(name + " ")) || "");
+  const nonceOf = (csp) => (directive(csp, "script-src").match(/'nonce-([^']+)'/) || [])[1] || null;
+
+  await run("csp1", "C3: pages get a per-request nonce CSP; every server-rendered script carries it; all tabs render with no violation", async (c) => {
+    const page = await newPage(c, "admin1");
+    const lr = await page.goto(`${APP}/login`);
+    const lcsp = cspOf(lr.headers());
+    c.expect(!!nonceOf(lcsp) && /'strict-dynamic'/.test(lcsp), "/login response: CSP with a nonce + 'strict-dynamic'", lcsp);
+    await login(page, "admin1@test.local");
+    const r1 = await page.request.get(`${APP}/dashboard`);
+    const r2 = await page.request.get(`${APP}/dashboard`);
+    const csp1 = cspOf(r1.headers()), csp2 = cspOf(r2.headers());
+    const n1 = nonceOf(csp1), n2 = nonceOf(csp2);
+    c.step(`CSP: ${csp1}`);
+    const ss = directive(csp1, "script-src");
+    c.expect(!!n1 && !!n2 && n1 !== n2, "a fresh nonce per response", { n1, n2 });
+    c.expect(!/'unsafe-inline'|'unsafe-eval'/.test(ss), "script-src has no 'unsafe-inline' / 'unsafe-eval'", ss);
+    c.expect(directive(csp1, "connect-src").includes(GW) && directive(csp1, "img-src").includes(GW), "connect-src / img-src list the project's Supabase origin", csp1);
+    const html = await r1.text();
+    const scripts = [...html.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
+    const bad = scripts.filter((t) => !t.includes(`nonce="${n1}"`));
+    c.step(`${scripts.length} <script> tags in the SSR HTML`);
+    c.expect(scripts.length > 0 && bad.length === 0, "every <script> in the HTML carries the response's nonce", bad.slice(0, 5));
+    const preloads = [...html.matchAll(/<link\b[^>]*rel="(?:preload|modulepreload)"[^>]*as="script"[^>]*>/g)].map((m) => m[0]);
+    const badPre = preloads.filter((t) => !t.includes(`nonce="${n1}"`));
+    c.step(`${preloads.length} script preloads; without nonce: ${badPre.length}`);
+    // Anonymous responses: the auth redirect and the static offline page.
+    const red = await fetch(`${APP}/dashboard`, { redirect: "manual" });
+    c.expect(red.status === 307 && !!nonceOf(red.headers.get("content-security-policy") || ""), "auth redirect (307) also carries the CSP", { status: red.status, csp: red.headers.get("content-security-policy") });
+    const off = await fetch(`${APP}/offline.html`);
+    const offCsp = off.headers.get("content-security-policy") || "";
+    c.expect(/script-src 'none'/.test(offCsp), "/offline.html gets its own script-free CSP", offCsp);
+    for (const u of ["/api/does-not-exist", "/nope.png"]) {
+      const r = await fetch(`${APP}${u}`);
+      const ct = r.headers.get("content-type") || "";
+      c.step(`${u} -> ${r.status} ${ct.split(";")[0]}; CSP: ${r.headers.get("content-security-policy") ? "yes" : "NONE"}`);
+    }
+    // Client-side: every tab (chunks loaded by the nonced bootstrap under
+    // 'strict-dynamic') and an item modal; the init-script listener fails
+    // the scenario on any violation.
+    for (const t of ["Zones & Items", "Risk Matrix", "Schedule", "Export", "Dashboard"]) {
+      await gotoTab(page, t);
+      await page.waitForTimeout(1200);
+      await waitLoaded(page).catch(() => {});
+    }
+    await openItem(page, "E2E Evidence Target");
+    await page.keyboard.press("Escape");
+    // Admin pages (links, not tabs), the reset page, a 404 and an RSC
+    // (client-side) navigation back to the dashboard.
+    for (const u of ["/users", "/audit-log", "/auth/reset", "/no-such-page"]) {
+      const r = await page.goto(`${APP}${u}`);
+      c.expect(!!nonceOf(cspOf(r.headers())), `${u} (${r.status()}) has the nonce CSP`, cspOf(r.headers()));
+      await page.waitForTimeout(1500);
+    }
+    await page.goto(`${APP}/users`);
+    await page.locator('a[href="/dashboard"], a[href^="/dashboard?"]').first().click().catch(() => {});
+    await page.waitForURL(/\/dashboard/, { timeout: 15000 }).catch(() => {});
+    await page.goto(`${APP}/dashboard`);
+    await waitLoaded(page);
+    const nonceDom = await page.evaluate(() => [...document.scripts].filter((s) => !s.nonce && !s.src.includes("/_next/static/")).length);
+    c.expect(nonceDom === 0, "no inline script without a nonce in the live DOM", nonceDom);
+    await shot(c, page, "dashboard");
+    c.expect(c.csp.length === 0 && c.cspConsole.length === 0, "no CSP violation while browsing every tab", [...c.csp, ...c.cspConsole].slice(0, 5));
+    await page.context().close();
+  });
+
+  await run("csp2", "C3: PDF export with a photo under the real CSP (wasm layout, signed-URL download, blob: tab)", async (c) => {
+    const page = await newPage(c, "insp1");
+    const info = [];
+    page.context().on("console", (m) => { if (/\[pdf\]/.test(m.text())) info.push(m.text()); });
+    // Keep the PDF blob the app hands to URL.createObjectURL for inspection.
+    await page.context().addInitScript(() => {
+      const orig = URL.createObjectURL;
+      URL.createObjectURL = function (b) {
+        if (b && b.type === "application/pdf") window.__e2ePdf = b;
+        return orig.call(URL, b);
+      };
+    });
+    await login(page, "insp1@test.local");
+    await openItem(page, "E2E Evidence Target");
+    const pngPath = path.join(ART, "..", ".state", "tiny.png");
+    fs.writeFileSync(pngPath, tinyPng());
+    await modal(page).locator('input[type="file"]:not([capture])').setInputFiles(pngPath);
+    const prev = modal(page).locator('img[src^="blob:"]');
+    await prev.first().waitFor({ timeout: 10000 }).catch(() => {});
+    c.expect(await prev.first().evaluate((el) => el.complete && el.naturalWidth === 32).catch(() => false), "blob: preview of the picked photo renders");
+    await modal(page).locator('div:has(> label:text-is("Finding / Description")) > textarea').fill("E2E CSP photo");
+    await modal(page).getByRole("button", { name: "Save evidence record" }).click();
+    c.expect(await toastSeen(page, "Evidence saved", 10000), "evidence saved");
+    const img = modal(page).locator('img[alt="tiny.png"]');
+    await img.waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(await img.evaluate((el) => el.complete && el.naturalWidth === 32).catch(() => false), "signed Supabase storage URL image loads (img-src)");
+    await page.keyboard.press("Escape");
+    await modal(page).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+    await gotoTab(page, "Export");
+    const pbtn = page.getByRole("button", { name: /Export PDF/ }).first();
+    await pbtn.waitFor({ timeout: 15000 });
+    const [popup] = await Promise.all([page.waitForEvent("popup", { timeout: 15000 }), pbtn.click()]);
+    const dlP = popup.waitForEvent("download", { timeout: 240000 }).catch(() => null);
+    const pdfInfo = await page.waitForFunction(() => window.__e2ePdf, null, { timeout: 240000, polling: 500 })
+      .then(() => page.evaluate(async () => {
+        const b = window.__e2ePdf;
+        const u8 = new Uint8Array(await b.arrayBuffer());
+        let bin = ""; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+        return { size: b.size, b64: btoa(bin) };
+      }))
+      .catch((e) => ({ error: e.message.split("\n")[0] }));
+    if (pdfInfo.b64) {
+      const buf = Buffer.from(pdfInfo.b64, "base64");
+      fs.writeFileSync(path.join(ART, "csp2-export.pdf"), buf);
+      const txt = buf.toString("latin1");
+      c.expect(txt.startsWith("%PDF-"), "PDF blob produced (%PDF- header)", { size: pdfInfo.size });
+      c.expect(/\/Subtype\s*\/Image/.test(txt), "the PDF embeds an image (the evidence photo)");
+    } else {
+      c.expect(false, "PDF blob produced", pdfInfo);
+    }
+    c.step(`console: ${info.join(" | ")}`);
+    c.expect(info.some((t) => /rendering \d+ items, [1-9]\d* photos/.test(t)), "at least one photo loaded into the PDF", info);
+    // Headless Chromium has no PDF viewer: the tab's navigation to the
+    // blob: URL becomes a download (headed: the tab shows the PDF).
+    const dl = await Promise.race([dlP, new Promise((r) => setTimeout(() => r(null), 15000))]);
+    const popUrl = popup.isClosed() ? "(closed)" : popup.url();
+    c.step(`popup url: ${popUrl}; download: ${dl ? dl.url().slice(0, 60) : "none"}`);
+    c.expect((dl && dl.url().startsWith("blob:")) || popUrl.startsWith("blob:"), "the export tab was sent to the blob: PDF (viewer or download)", { popUrl, dl: dl && dl.url() });
+    c.expect(!(await toastSeen(page, /PDF export failed/, 500)), "no 'PDF export failed' toast");
+    await page.waitForTimeout(1500);
+    await shot(c, page, "exported");
+    await page.context().close();
+    await sql("DELETE FROM evidences WHERE item_id = $1", [ID.evidence]).catch(() => {});
+  });
+
+  await run("csp3", "C3: /offline.html directly — script-free CSP, no violation, 'Retry' reloads", async (c) => {
+    const page = await newPage(c, "anon");
+    const r = await page.goto(`${APP}/offline.html`);
+    const h = r.headers();
+    c.step(`CSP: ${cspOf(h)}`);
+    c.expect(/script-src 'none'/.test(cspOf(h)) && !/nonce-/.test(cspOf(h)), "offline CSP (script-src 'none')", cspOf(h));
+    await page.getByRole("heading", { name: "Sem conexão" }).waitFor({ timeout: 5000 });
+    await page.evaluate(() => { window.__e2eMarker = 1; }).catch(() => {}); // script-src 'none' doesn't bind evaluate
+    const nav = page.waitForEvent("framenavigated", { timeout: 10000 });
+    await page.getByRole("button", { name: /Retry/ }).click();
+    await nav;
+    await page.getByRole("heading", { name: "Sem conexão" }).waitFor({ timeout: 5000 });
+    const marker = await page.evaluate(() => window.__e2eMarker ?? null);
+    c.expect(marker === null, "'Retry' reloaded the page (a fresh document)", marker);
+    c.step(`after retry: ${page.url()}`);
+    c.expect(new URL(page.url()).pathname === "/offline.html", "reloaded the same path", page.url());
+    await shot(c, page, "offline");
+    await page.context().close();
+
+    // Served by the service worker as the navigation fallback: SW
+    // registration under worker-src 'self', the cached copy keeps its CSP,
+    // and 'Retry' reloads the URL the user was on.
+    const sw = await newPage(c, "anon-sw", { serviceWorkers: "allow" });
+    await sw.goto(`${APP}/login`);
+    const reg = await sw.evaluate(() => Promise.race([
+      navigator.serviceWorker.ready.then((r) => (r.active ? r.active.state : "no-active")),
+      new Promise((res) => setTimeout(() => res("timeout"), 15000)),
+    ]));
+    c.expect(reg === "activated" || reg === "activating", "service worker registered and active", reg);
+    await sw.reload();
+    const controlled = await sw.evaluate(() => !!navigator.serviceWorker.controller);
+    c.expect(controlled, "page controlled by the service worker");
+    const cached = await sw.evaluate(async () => {
+      const r = await caches.match("/offline.html");
+      return r ? { csp: r.headers.get("content-security-policy") || "", html: (await r.text()).includes('<form method="get">') } : null;
+    });
+    c.expect(!!cached && /script-src 'none'/.test(cached.csp) && cached.html, "SW precached /offline.html with its script-free CSP", cached);
+    // Offline, including the SW's own fetch (see the env flag at the top).
+    const target = `${APP}/login?next=%2Fzones`;
+    await sw.context().setOffline(true);
+    const res = await sw.goto(target).catch((e) => ({ err: e.message.split("\n")[0] }));
+    if (res && res.err) {
+      c.step(`offline navigation not served by the SW in this browser: ${res.err}`);
+    } else {
+      const shown = await sw.getByRole("heading", { name: "Sem conexão" }).isVisible().catch(() => false);
+      c.expect(shown, "offline fallback page served by the SW", await sw.locator("body").innerText().catch(() => ""));
+      c.expect(/script-src 'none'/.test(cspOf(res.headers())), "fallback response keeps the offline CSP", cspOf(res.headers()));
+      await shot(c, sw, "sw-offline");
+      await sw.context().setOffline(false);
+      await Promise.all([sw.waitForEvent("framenavigated", { timeout: 15000 }), sw.getByRole("button", { name: /Retry/ }).click()]);
+      await sw.locator('input[type="email"]').waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await sw.locator('input[type="email"]').isVisible(), "'Retry' back online loads the app page", sw.url());
+      const u = new URL(sw.url());
+      c.step(`after retry: ${sw.url()}`);
+      c.expect(u.pathname === "/login", "retry stays on the path the user was on", sw.url());
+      if (u.searchParams.get("next") !== "/zones") c.step(`NOTE: the GET form dropped the query string (was ?next=%2Fzones, now '${u.search}')`);
+    }
+    await sw.context().setOffline(false);
+    await sw.context().close();
+  });
+
   await browser.close();
   await pool.end();
 
   // --------------------------------------------------------------- report
   const out = results.map((r) => ({
     id: r.id, title: r.title, status: r.status, ms: r.ms, failures: r.failures,
-    steps: r.steps, dialogs: r.dialogs, console: r.console, network: r.network, screenshots: r.shots,
+    steps: r.steps, dialogs: r.dialogs, csp: r.csp, cspConsole: r.cspConsole, console: r.console, network: r.network, screenshots: r.shots,
   }));
   fs.writeFileSync(path.join(ART, "results.json"), JSON.stringify(out, null, 2));
   console.log("\n================ SUMMARY");
