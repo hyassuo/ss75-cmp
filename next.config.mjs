@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs";
 
-// Pages get a per-request, nonce-based Content-Security-Policy from the
-// middleware (lib/security/csp.ts). The only HTML served around it is the
-// static offline page, which needs no script at all.
+// Content-Security-Policy, three layers:
+//  - every response starts with lockedCsp (below): API JSON, images, the
+//    favicon and their 404 pages need no script, style or connection;
+//  - pages replace it with the per-request nonce policy set by the
+//    middleware (lib/security/csp.ts) — middleware headers win over these;
+//  - the static offline page replaces it with offlineCsp (no script at all;
+//    the later matching rule wins);
+//  - the service worker gets swCsp: a worker script's CSP governs the
+//    worker itself, and it must fetch/cache same-origin pages and assets.
 const offlineCsp = [
   "default-src 'self'",
   "script-src 'none'",
@@ -13,6 +19,10 @@ const offlineCsp = [
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
+
+const swCsp = "default-src 'self'";
+
+const lockedCsp = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
 
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -26,6 +36,7 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
+  { key: "Content-Security-Policy", value: lockedCsp },
 ];
 
 // Only the version reaches the client bundle (importing package.json in a
@@ -44,6 +55,10 @@ const nextConfig = {
       {
         source: "/offline.html",
         headers: [{ key: "Content-Security-Policy", value: offlineCsp }],
+      },
+      {
+        source: "/sw.js",
+        headers: [{ key: "Content-Security-Policy", value: swCsp }],
       },
     ];
   },

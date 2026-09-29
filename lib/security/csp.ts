@@ -30,8 +30,10 @@ export function pageCsp(nonce: string): string {
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: ${supabase}`,
     "font-src 'self' data:",
-    `connect-src 'self' ${supabase}${dev ? " ws:" : ""}`,
-    "worker-src 'self'",
+    // data:: the PDF layout engine fetch()es its inlined WebAssembly.
+    `connect-src 'self' data: ${supabase}${dev ? " ws:" : ""}`,
+    // blob:: the PDF export's PNG decoder (fflate) inflates in a blob worker.
+    "worker-src 'self' blob:",
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

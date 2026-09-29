@@ -2196,6 +2196,16 @@ async function main() {
     const lr = await page.goto(`${APP}/login`);
     const lcsp = cspOf(lr.headers());
     c.expect(!!nonceOf(lcsp) && /'strict-dynamic'/.test(lcsp), "/login response: CSP with a nonce + 'strict-dynamic'", lcsp);
+    // What the middleware skips (API, images, their 404 pages) gets the
+    // locked-down static policy — exactly one CSP header, never none.
+    for (const path of ["/api/does-not-exist", "/nope.png", "/icon.svg"]) {
+      const res = await fetch(`${APP}${path}`);
+      const policy = res.headers.get("content-security-policy") ?? "";
+      c.expect(/^default-src 'none'/.test(policy), `${path}: locked CSP`, policy);
+    }
+    // The service worker's own CSP must let it fetch the app (same origin).
+    const swPolicy = (await fetch(`${APP}/sw.js`)).headers.get("content-security-policy");
+    c.expect(swPolicy === "default-src 'self'", "/sw.js: same-origin CSP", swPolicy);
     await login(page, "admin1@test.local");
     const r1 = await page.request.get(`${APP}/dashboard`);
     const r2 = await page.request.get(`${APP}/dashboard`);
@@ -2321,20 +2331,22 @@ async function main() {
 
   await run("csp3", "C3: /offline.html directly — script-free CSP, no violation, 'Retry' reloads", async (c) => {
     const page = await newPage(c, "anon");
-    const r = await page.goto(`${APP}/offline.html`);
+    // A query string must survive 'Retry' (deep links like ?item=).
+    const r = await page.goto(`${APP}/offline.html?keep=1`);
     const h = r.headers();
     c.step(`CSP: ${cspOf(h)}`);
     c.expect(/script-src 'none'/.test(cspOf(h)) && !/nonce-/.test(cspOf(h)), "offline CSP (script-src 'none')", cspOf(h));
     await page.getByRole("heading", { name: "Sem conexão" }).waitFor({ timeout: 5000 });
     await page.evaluate(() => { window.__e2eMarker = 1; }).catch(() => {}); // script-src 'none' doesn't bind evaluate
     const nav = page.waitForEvent("framenavigated", { timeout: 10000 });
-    await page.getByRole("button", { name: /Retry/ }).click();
+    await page.getByRole("link", { name: /Retry/ }).click();
     await nav;
     await page.getByRole("heading", { name: "Sem conexão" }).waitFor({ timeout: 5000 });
     const marker = await page.evaluate(() => window.__e2eMarker ?? null);
     c.expect(marker === null, "'Retry' reloaded the page (a fresh document)", marker);
     c.step(`after retry: ${page.url()}`);
     c.expect(new URL(page.url()).pathname === "/offline.html", "reloaded the same path", page.url());
+    c.expect(new URL(page.url()).search === "?keep=1", "kept the query string", page.url());
     await shot(c, page, "offline");
     await page.context().close();
 
@@ -2353,7 +2365,7 @@ async function main() {
     c.expect(controlled, "page controlled by the service worker");
     const cached = await sw.evaluate(async () => {
       const r = await caches.match("/offline.html");
-      return r ? { csp: r.headers.get("content-security-policy") || "", html: (await r.text()).includes('<form method="get">') } : null;
+      return r ? { csp: r.headers.get("content-security-policy") || "", html: (await r.text()).includes('<a class="retry" href="">') } : null;
     });
     c.expect(!!cached && /script-src 'none'/.test(cached.csp) && cached.html, "SW precached /offline.html with its script-free CSP", cached);
     // Offline, including the SW's own fetch (see the env flag at the top).
@@ -2368,7 +2380,7 @@ async function main() {
       c.expect(/script-src 'none'/.test(cspOf(res.headers())), "fallback response keeps the offline CSP", cspOf(res.headers()));
       await shot(c, sw, "sw-offline");
       await sw.context().setOffline(false);
-      await Promise.all([sw.waitForEvent("framenavigated", { timeout: 15000 }), sw.getByRole("button", { name: /Retry/ }).click()]);
+      await Promise.all([sw.waitForEvent("framenavigated", { timeout: 15000 }), sw.getByRole("link", { name: /Retry/ }).click()]);
       await sw.locator('input[type="email"]').waitFor({ timeout: 15000 }).catch(() => {});
       c.expect(await sw.locator('input[type="email"]').isVisible(), "'Retry' back online loads the app page", sw.url());
       const u = new URL(sw.url());
