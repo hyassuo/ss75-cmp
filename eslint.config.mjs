@@ -35,5 +35,17 @@ export default defineConfig([
     files: ["scripts/**/*.js"],
     rules: { "@typescript-eslint/no-require-imports": "off" },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  // Flat config doesn't read .gitignore: mirror its generated/output dirs
+  // (node_modules is ignored by default at any depth).
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "coverage/**",
+    ".vercel/**",
+    "next-env.d.ts",
+    "tests/e2e/.bin/**",
+    "tests/e2e/.state/**",
+    "tests/e2e/artifacts/**",
+  ]),
 ]);

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import type { Database } from "@/lib/types/database.types";
 
 export async function createClient() {
-  // Next 15: cookies() is async and must be awaited before use.
+  // cookies() is async (Next 15+; Next 16 removed the sync fallback).
   const cookieStore = await cookies();
 
   return createServerClient<Database>(

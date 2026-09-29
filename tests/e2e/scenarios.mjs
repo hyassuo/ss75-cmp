@@ -1785,7 +1785,8 @@ async function main() {
   await run("v3", "Export tab + SheetJS prefetched when idle (usable offline); failure -> error toast, no alert()", async (c) => {
     const page = await newPage(c, "admin1");
     const js = [];
-    page.on("request", (r) => { if (r.url().includes("/_next/static/chunks/")) js.push({ t: Date.now(), u: r.url().replace(APP, "") }); });
+    // JS only: Turbopack also serves CSS from /_next/static/chunks/.
+    page.on("request", (r) => { if (/\/_next\/static\/chunks\/.*\.js(\?|$)/.test(r.url())) js.push({ t: Date.now(), u: r.url().replace(APP, "") }); });
     await login(page, "admin1@test.local");
     const tIdle = Date.now();
     await page.waitForTimeout(4000);
