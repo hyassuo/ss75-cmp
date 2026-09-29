@@ -1,6 +1,6 @@
 # Backlog: SS-75 CMP
 
-Estado em 29/09/2026, após a v1.21.1. Reúne o que ficou em aberto
+Estado em 29/09/2026, após a v1.21.2. Reúne o que ficou em aberto
 da revisão completa (segurança + UI/UX) e das auditorias das etapas 1–4.
 Cada item foi conferido no código desta versão.
 
@@ -41,9 +41,9 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | # | Decisão | O que muda |
 |---|---------|------------|
 | B1 | Manter a regra do admin inicial (`hyassuo@gmail.com`) como está | Com A1 (confirmação de e-mail) ninguém consegue assumir o e-mail. Trocar por configuração só ao abrir uma segunda unidade. |
-| B2 | Análise por IA só para **admin e inspector** | ✅ Implementado: a rota `app/api/ai/analyze-photo` recusa viewer (o botão já não aparecia para ele). |
-| B3 | Filtro de departamento vale em todo o app | ✅ Implementado: Risk Matrix e Schedule respeitam o filtro; o Export pergunta "só este departamento / todos", o nome do arquivo e o cabeçalho do PDF dizem o recorte. |
-| D1 | Metodologia principal = **fotos + análise por IA**; leituras de profundidade são opcionais | ✅ Implementado (ver "Concluídos"). Espessura por UT (tubulações) vira item futuro (D3). |
+| B2 | Análise por IA só para **admin e inspector** | Implementado: a rota `app/api/ai/analyze-photo` recusa viewer (o botão já não aparecia para ele). |
+| B3 | Filtro de departamento vale em todo o app | Implementado: Risk Matrix e Schedule respeitam o filtro; o Export pergunta "só este departamento / todos", o nome do arquivo e o cabeçalho do PDF dizem o recorte. |
+| D1 | Metodologia principal = **fotos + análise por IA**; leituras de profundidade são opcionais | Implementado (ver "Concluídos"). Espessura por UT (tubulações) vira item futuro (D3). |
 
 ## C. Segurança
 
@@ -59,7 +59,9 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 ## E. UI/UX
 
-_(nenhum item aberto)_
+| # | P | Item | Onde / sugestão |
+|---|---|------|-----------------|
+| E6 | P3 | Revisar o tema escuro antes de religar | Desligado em 29/09/2026 porque ficou visualmente pesado. Antes de religar (`DARK_MODE_ENABLED` em `lib/theme/theme.ts`): clarear as superfícies e bordas da paleta escura em `app/globals.css`, rever o contraste do cabeçalho e dos cartões, validar com o responsável em tela real (tablet e celular) e trazer de volta o botão da barra superior (`ThemeToggle`, no histórico do git). |
 
 ## F. Engenharia e operação
 
@@ -81,10 +83,10 @@ _(nenhum item aberto)_
 | C6 | Tabelas de referência só para ativos | `units`, `zones` e `ifs_objects` só são lidas por usuário ativo (qualquer policy antiga aberta é removida). |
 | D2 | Auditoria de inclusões | Adicionar leitura ou evidência gera evento (`reading_added` / `evidence_added`) com autor; rascunho de "Novo item" continua cancelável com fotos/leituras. |
 | E1 | Busca de item | Campo na barra superior (atalho `/`): nome, código IFS, OS, local funcional, zona, mecanismo ou notas; ignora acentos, maiúsculas e pontuação dos códigos; arquivados por último; funciona offline. |
-| E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (○ baixo, ◇ médio, △ alto, ▲ crítico) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
+| E2 | Matriz de risco sem depender de cor | Cada nível tem forma própria (círculo = baixo, losango = médio, triângulo vazado = alto, triângulo cheio = crítico; desenhos SVG) e nome lido por leitor de tela ("Risco alto"…), distinto dos nomes de prioridade. |
 | E3 | Várias fotos de uma vez | A galeria aceita até 10 arquivos por seleção; cada um vira um registro de evidência (mesma data e descrição), salvos em sequência com progresso. A IA analisa a primeira foto da fila. Se um envio falhar, os já salvos são informados e o restante fica na fila para tentar de novo, sem duplicar. |
 | F4 | Planos antigos | Os 5 planos de `docs/plans/` foram conferidos critério a critério contra o código: todos concluídos (alguns por soluções mais novas). Arquivados em `docs/plans/archive/` com um índice; o único resto no código (limites de taxa repetidos no painel de leituras) foi corrigido; os testes que faltavam foram para o F3. |
-| E4 | Tema escuro | Botão na barra superior alterna dispositivo → claro → escuro (lembrado em cookie, já aplicado na primeira pintura, sem script inline). Contraste AA em todas as telas nos dois temas (mín. 4,52:1 claro / 5,34:1 escuro, verificado em teste); impressão e PDF sempre claros. |
+| E4 | Tema escuro | Botão na barra superior alterna dispositivo → claro → escuro (lembrado em cookie, já aplicado na primeira pintura, sem script inline). Contraste AA em todas as telas nos dois temas (mín. 4,52:1 claro / 5,34:1 escuro, verificado em teste); impressão e PDF sempre claros. **Desativado por ora a pedido do responsável (29/09/2026); religar com `DARK_MODE_ENABLED`** (ver E6): o app fica sempre claro, mesmo com o aparelho em modo escuro ou um cookie antigo de tema. |
 | F3 | Testes E2E ampliados | 6 cenários novos: item arquivado (fora das telas e do PDF, dentro do CSV/XLSX; Arquivar/Desarquivar), IA no item (só campos vazios, "Aplicar" sobrescreve, leitura estimada só no Salvar e fora da taxa), SECE sobe a prioridade, conteúdo do PDF (uma linha por item, nota de fotos), página de Usuários e higiene das rotas (JSON inválido, 429, mensagens genéricas), prefetch sem sessão. Mais testes unitários do filtro da saída da IA e checagem SQL entre unidades. Continuam sem teste automático: câmera real, IA real (Gemini) e Realtime. |
 | E5 | Padronização visual | Tailwind removido (o reset base dele foi copiado para o `globals.css`, sem mudança visual); uma escala de fontes em `DS.fs`, sem texto abaixo de 10 px; botões e caixas de mensagem feitos à mão viraram os componentes `Button` e `Notice` em `components/ui/`. |
 | F5 | Migração de versões major | Next 15 → 16 (build com Turbopack; `middleware.ts` virou `proxy.ts`, mesmo CSP com nonce), React 18 → 19, Vitest 4 → 5, ESLint 8 → 9 com config flat (`eslint .`, mesmas regras de antes). Sem mudança de comportamento; unitários, SQL e os 57 cenários E2E passando. |
@@ -96,4 +98,5 @@ _(nenhum item aberto)_
 | A7 | URL de redefinição de senha | Redirect URL `/auth/reset` liberada no Supabase. |
 | C7 | Fotos só dentro da sessão | Sem links compartilháveis (nem assinados nem públicos): cada foto é baixada com a sessão do usuário e mostrada da memória da aba (`blob:`), descartada ao fechar o item; nada no cache do navegador (nem da exportação) nem no service worker; só imagens e PDF são exibidos: um arquivo gravado como SVG/HTML aparece como "tipo de arquivo não permitido"; download sem resposta desiste em 2 min, com "Tentar novamente"; o CSP não aceita imagem vinda do Supabase. Tirar fotos do app = exportar o PDF. |
 | A11 | Chaves JWT assimétricas | Chave atual ECC (P-256); o segredo HS256 antigo fica como *previous key*: não revogar enquanto o app usar as chaves anon/service_role legadas. O servidor confere o login localmente (`getClaims()`). |
+| E7 | Visual sóbrio: sem emojis e sem travessões longos | Emojis e símbolos usados como ícone trocados por um único conjunto de ícones monocromáticos em SVG (lucide-react, na cor do texto), iguais na barra lateral, na navegação do celular e nos botões; nenhum travessão longo nos textos EN/PT, comentários, testes e documentos. Nos SQL já aplicados em produção só mudaram comentários: os 14 que estão dentro de funções gravadas no banco ficaram, para o banco não divergir do repositório (verificado com `pg_dump` idêntico). |
 | A9 | ~~Variáveis do Supabase nos previews~~ | Descartado por ora: sem vaga para um projeto Supabase de teste no plano gratuito; os previews ficam só como verificação de build e o funcionamento é coberto pelos testes E2E do CI. Rever se o plano mudar (Pro permite branching). |
