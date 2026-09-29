@@ -4051,6 +4051,201 @@ async function main() {
     }
   });
 
+  await run("e5ui", "E5: Button/Notice — Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; × delete buttons named in EN/PT", async (c) => {
+    const E5 = "00000000-0000-0000-0000-0000000e5a01";
+    const NAME = "E2E E5 UI Target";
+    await sql(
+      `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, notes, created_by, created_at)
+       VALUES ($1, $2, 'Z13', $3, 'Attention', 3, 3, 'base note', $4, now() - interval '3 days') ON CONFLICT (id) DO NOTHING`,
+      [E5, await unitId(), NAME, USERS.insp2]
+    );
+    await sql("INSERT INTO readings (item_id, reading_date, depth_mm, location) VALUES ($1, current_date - 120, 1.0, 'P1'), ($1, current_date - 1, 1.2, 'P1')", [E5]);
+    await sql("INSERT INTO evidences (item_id, evidence_date, description, created_by) VALUES ($1, current_date - 1, 'E5 evidence note', $2)", [E5, USERS.insp2]);
+
+    // Smallest rendered text under `scope`: every visible text node, plus the
+    // form controls that show a value or a placeholder.
+    const tinyText = (page, scope = "body") => page.evaluate((scope) => {
+      const root = document.querySelector(scope);
+      if (!root) return { n: 0, min: null, bad: [`scope ${scope} not found`] };
+      const els = new Set();
+      const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let t = tw.nextNode(); t; t = tw.nextNode()) if (t.textContent.trim() && t.parentElement) els.add(t.parentElement);
+      for (const f of root.querySelectorAll("input, select, textarea")) {
+        if (["hidden", "checkbox", "radio", "file", "range", "color"].includes(f.type)) continue;
+        if ((f.value || f.placeholder || "").trim()) els.add(f);
+      }
+      let n = 0, min = Infinity;
+      const bad = [];
+      for (const el of els) {
+        if (["SCRIPT", "STYLE", "NOSCRIPT", "TITLE", "OPTION"].includes(el.tagName)) continue;
+        if (!el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) || el.closest(".sr-only")) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        const size = parseFloat(getComputedStyle(el).fontSize);
+        n++;
+        min = Math.min(min, size);
+        if (size < 10) bad.push(`${size}px <${el.tagName.toLowerCase()}> "${(el.value || el.textContent || el.placeholder).trim().slice(0, 30)}"`);
+      }
+      return { n, min, bad: bad.slice(0, 10) };
+    }, scope);
+    // Every <Button> (it carries its size class btn-sm/-md/-lg) that is shown.
+    const buttonSizes = (page, scope = "body") => page.evaluate((scope) => {
+      const list = [...document.querySelectorAll(`${scope} button.btn-sm, ${scope} button.btn-md, ${scope} button.btn-lg`)]
+        .filter((b) => b.checkVisibility({ visibilityProperty: true }))
+        .map((b) => {
+          const r = b.getBoundingClientRect();
+          return { h: Math.round(r.height * 10) / 10, w: Math.round(r.width), label: (b.getAttribute("aria-label") || b.textContent || "").trim().slice(0, 30) };
+        })
+        .filter((b) => b.w > 0);
+      return { coarse: matchMedia("(pointer: coarse)").matches, list };
+    }, scope);
+    const SCREENS = [
+      ["dashboard", "/dashboard", "body"],
+      ["zones", "/dashboard?tab=zones", "body"],
+      ["item modal", `/dashboard?tab=zones&item=${E5}`, ".modal-overlay"],
+      ["risk matrix", "/dashboard?tab=risk", "body"],
+      ["schedule", "/dashboard?tab=schedule", "body"],
+      ["export", "/dashboard?tab=export", "body"],
+      ["users", "/users", "body"],
+      ["audit log", "/audit-log", "body"],
+    ];
+    const visit = async (page, url, scope) => {
+      await page.goto(APP + url);
+      await waitLoaded(page).catch(() => {});
+      if (url === "/users") await page.getByText("admin1@test.local").first().waitFor({ timeout: 30000 }).catch(() => {});
+      if (url === "/audit-log") await page.getByText(/Audit Log \(\d+\)/).first().waitFor({ timeout: 30000 }).catch(() => {});
+      if (scope === ".modal-overlay") {
+        await modal(page).waitFor({ timeout: 30000 });
+        await modal(page).getByText("E5 evidence note").waitFor({ timeout: 15000 }).catch(() => {});
+      }
+      await page.waitForTimeout(1200);
+    };
+    // aria-labels of the modal's × buttons (for failure details).
+    const xLabels = (page) => modal(page).locator("button", { hasText: /^×$/ }).evaluateAll((bs) => bs.map((b) => b.getAttribute("aria-label")));
+
+    try {
+      // ---- 1. sign-in form: the button is a submit button, Enter submits,
+      //      the error is announced (role=alert) and describes the form.
+      const anon = await newPage(c, "anon");
+      await anon.goto(`${APP}/login`);
+      const signIn = anon.getByRole("button", { name: "Sign in" });
+      await signIn.waitFor();
+      c.expect((await signIn.getAttribute("type")) === "submit", "'Sign in' is type=submit", await signIn.getAttribute("type"));
+      const size0 = await tinyText(anon);
+      c.expect(size0.n > 5 && size0.bad.length === 0, `login page: no text below 10 px (${size0.n} nodes, min ${size0.min}px)`, size0.bad);
+      await anon.locator('input[type="email"]').fill("insp1@test.local");
+      const pw = anon.locator('input[type="password"]');
+      await pw.fill("wrong-password-e5");
+      await pw.press("Enter");
+      const err = anon.locator('form [role="alert"]');
+      await err.waitFor({ timeout: 10000 }).catch(() => {});
+      const wiring = await anon.evaluate(() => {
+        const f = document.querySelector("form");
+        const a = f?.querySelector('[role="alert"]');
+        return { describedby: f?.getAttribute("aria-describedby"), id: a?.id || null, text: a?.textContent || null };
+      });
+      c.expect(/Invalid email or password/.test(wiring.text || ""), "Enter in the password field submits (wrong password -> 'Invalid email or password.')", wiring);
+      c.expect(!!wiring.id && wiring.describedby === wiring.id, "the error box is the form's aria-describedby", wiring);
+      await pw.fill(PASSWORD);
+      await pw.press("Enter");
+      await anon.waitForURL(/\/dashboard/, { timeout: 30000 }).catch(() => {});
+      c.expect(q(anon).pathname === "/dashboard", "Enter with the right password signs in", anon.url());
+      await anon.context().close();
+
+      // ---- 2. new-password form (from a 'Forgot password?' email): Enter
+      //      submits; a too-short password is refused before any request.
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot%'");
+      const fp = await newPage(c, "anon-forgot");
+      await fp.goto(`${APP}/login`);
+      await fp.locator('input[type="email"]').fill("insp2@test.local");
+      const t0 = Date.now();
+      await fp.getByRole("button", { name: "Forgot password?" }).click();
+      await fp.getByRole("status").filter({ hasText: "a reset link is on its way" }).waitFor({ timeout: 10000 }).catch(() => {});
+      const mail = (await mailsSince(t0)).find((m) => m.email === "insp2@test.local");
+      c.expect(!!mail, "recovery email sent to insp2", mail);
+      if (mail) {
+        await fp.goto(mail.action_link);
+        await resetForm(fp).waitFor({ timeout: 20000 }).catch(() => {});
+        const save = fp.getByRole("button", { name: "Save new password" });
+        c.expect((await save.getAttribute("type").catch(() => null)) === "submit", "'Save new password' is type=submit");
+        await resetForm(fp).fill("short1");
+        const pw2 = fp.getByLabel("Repeat the new password");
+        await pw2.fill("short1");
+        await pw2.press("Enter");
+        const alert = fp.locator('form [role="alert"]');
+        await alert.waitFor({ timeout: 5000 }).catch(() => {});
+        c.expect(/at least 8 characters/.test(await alert.innerText().catch(() => "")), "Enter in the new-password form submits (too short -> 'at least 8 characters')", await alert.allInnerTexts());
+        const pre = await one("SELECT encrypted_password IS NULL AS same FROM auth.users WHERE email = 'insp2@test.local'");
+        c.expect(pre.same, "password unchanged");
+      }
+      await fp.context().close();
+
+      // ---- 3. desktop 1440 px: text sizes on every main screen; the ×
+      //      delete buttons have names.
+      const desk = await newPage(c, "admin1-1440");
+      await login(desk, "admin1@test.local");
+      for (const [name, url, scope] of SCREENS) {
+        await visit(desk, url, scope);
+        const s = await tinyText(desk, scope);
+        c.expect(s.n > 10 && s.bad.length === 0, `1440 px ${name}: no text below 10 px (${s.n} nodes, min ${s.min}px)`, s.bad);
+        if (scope === ".modal-overlay") {
+          const ev = modal(desk).getByRole("button", { name: "Delete evidence", exact: true });
+          const rd = modal(desk).getByRole("button", { name: "Delete reading", exact: true });
+          c.expect((await ev.count()) === 1 && (await ev.innerText()).trim() === "×", "evidence × is named 'Delete evidence'", await xLabels(desk));
+          c.expect((await rd.count()) === 2 && (await rd.first().innerText()).trim() === "×", "each reading × is named 'Delete reading'", await xLabels(desk));
+          // Confirmation (Button + data-autofocus): the safe choice gets focus.
+          desk.__manualDialogs = true;
+          await rd.first().click();
+          await confirmDlg(desk).waitFor({ timeout: 5000 });
+          const focus = await desk.evaluate(() => document.activeElement?.textContent?.trim());
+          c.expect(focus === "Cancel", "confirm dialog: focus on Cancel (data-autofocus kept)", focus);
+          const cs = await tinyText(desk, '[role="alertdialog"]');
+          c.expect(cs.bad.length === 0, "confirm dialog: no text below 10 px", cs.bad);
+          await confirmDlg(desk).getByRole("button", { name: "Cancel" }).click();
+          await confirmDlg(desk).waitFor({ state: "detached", timeout: 5000 }).catch(() => {});
+          desk.__manualDialogs = false;
+          c.expect((await one("SELECT count(*)::int n FROM readings WHERE item_id = $1", [E5])).n === 2, "Cancel kept the reading");
+        }
+      }
+      await desk.context().close();
+
+      // ---- 4. phone 390 px with a touch screen: text sizes and 44 px Buttons.
+      const mob = await newPage(c, "admin1-390", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+      await mob.goto(`${APP}/login`);
+      await mob.getByRole("button", { name: "Sign in" }).waitFor();
+      let b = await buttonSizes(mob);
+      c.expect(b.coarse, "touch emulation: (pointer: coarse) matches");
+      c.expect(b.list.length === 3 && b.list.every((x) => x.h >= 44), `390 px login: all ${b.list.length} Buttons >= 44 px tall`, b.list);
+      await login(mob, "admin1@test.local");
+      let total = 0;
+      for (const [name, url, scope] of SCREENS) {
+        await visit(mob, url, scope);
+        const s = await tinyText(mob, scope);
+        c.expect(s.n > 10 && s.bad.length === 0, `390 px ${name}: no text below 10 px (${s.n} nodes, min ${s.min}px)`, s.bad);
+        b = await buttonSizes(mob, scope);
+        total += b.list.length;
+        const small = b.list.filter((x) => x.h < 44);
+        c.expect(small.length === 0, `390 px ${name}: all ${b.list.length} Buttons >= 44 px tall`, small);
+      }
+      c.expect(total >= 15, `Buttons measured on the phone screens: ${total}`);
+
+      // ---- 5. Portuguese: the × delete buttons are named in PT.
+      await mob.context().addCookies([{ name: "ss75-cmp.lang", value: "pt", url: APP }]);
+      await visit(mob, `/dashboard?tab=zones&item=${E5}`, ".modal-overlay");
+      const evPt = modal(mob).getByRole("button", { name: "Excluir evidência", exact: true });
+      const rdPt = modal(mob).getByRole("button", { name: "Excluir leitura", exact: true });
+      c.expect((await evPt.count()) === 1, "PT: evidence × is named 'Excluir evidência'", await xLabels(mob));
+      c.expect((await rdPt.count()) === 2, "PT: each reading × is named 'Excluir leitura'", await xLabels(mob));
+      b = await buttonSizes(mob, ".modal-overlay");
+      c.expect(b.list.length > 0 && b.list.every((x) => x.h >= 44), `PT 390 px item modal: all ${b.list.length} Buttons >= 44 px tall`, b.list.filter((x) => x.h < 44));
+      await shot(c, mob, "pt-modal");
+      await mob.context().close();
+    } finally {
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot%'");
+      await sql("DELETE FROM items WHERE id = $1", [E5]);
+    }
+  });
+
   await browser.close();
   await pool.end();
 
