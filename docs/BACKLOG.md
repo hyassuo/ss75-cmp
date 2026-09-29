@@ -16,13 +16,14 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A4 | P2 | Adotar o histórico de migrações | `supabase link` → `supabase migration repair --status applied 20260928000000 20260928000100` → `supabase db diff --linked` (deve vir vazio). |
 | A5 | P3 | PITR (point-in-time recovery) | Se o plano do Supabase permitir. |
 
-## B. Decisões pendentes
+## B. Decisões tomadas (29/09/2026)
 
-| # | P | Decisão | Contexto |
-|---|---|---------|----------|
-| B1 | P1 | E-mail do admin inicial fixo no código | `hyassuo@gmail.com` vira admin ativo automaticamente (`supabase/migrations/20260928000000_baseline.sql:756-786`, `supabase/seed/demo.sql:33`). Com A1 feito o risco cai, mas num ambiente novo com cadastro aberto quem registrar esse e-mail vira admin. Opções: mover para configuração ou remover depois do setup. |
-| B2 | P2 | Quem pode usar a análise por IA | `app/api/ai/analyze-photo/route.ts:188` aceita qualquer usuário ativo, inclusive viewer (decisão antiga, por causa do Gemini gratuito). Restringir a admin/inspector? |
-| B3 | P3 | Alcance do filtro de departamento | Vale em Dashboard, Zones, Topbar e AlertBar; não vale em Risk Matrix, Schedule e Export. Estender ou sinalizar na tela. |
+| # | Decisão | O que muda |
+|---|---------|------------|
+| B1 | Manter a regra do admin inicial (`hyassuo@gmail.com`) como está | Com A1 (confirmação de e-mail) ninguém consegue assumir o e-mail. Trocar por configuração só ao abrir uma segunda unidade. |
+| B2 | Análise por IA só para **admin e inspector** | Rota `app/api/ai/analyze-photo` passa a recusar viewer; o botão some para viewer. |
+| B3 | Filtro de departamento vale em todo o app | Risk Matrix e Schedule respeitam o filtro; o Export ganha a escolha "só este departamento / todos" e o PDF traz o departamento no cabeçalho. |
+| D1 | Metodologia principal = **fotos + análise por IA**; leituras de profundidade são opcionais | Ver D1 abaixo. Espessura por UT (tubulações) vira item futuro (D3). |
 
 ## C. Segurança
 
@@ -41,8 +42,9 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 
 | # | P | Item | Onde / sugestão |
 |---|---|------|-----------------|
-| D1 | P2 | Taxa de corrosão simplista | `lib/domain/calcRate.ts:21`: usa só a primeira e a última leitura e mistura locais de medição diferentes (as estimativas da IA já são ignoradas). Calcular por local de medição, com regressão linear. |
+| D1 | P2 | Taxa de corrosão só com medição real e comparável | `lib/domain/calcRate.ts:21`: calcular apenas com ≥ 2 medições reais **no mesmo ponto** e ≥ 90 dias entre elas; senão, "dados insuficientes" (sem alerta). Estimativas da IA seguem fora da taxa. Status/prioridade continuam guiados pela avaliação visual (P×C). |
 | D2 | P3 | Auditoria não registra inclusão de leituras e evidências | Exclusões e mudanças no item são auditadas; inserções de leituras/evidências não. |
+| D3 | P3 | Módulo de espessura (UT) para tubulações | Futuro: espessura remanescente por ponto, espessura mínima por linha, taxa curto/longo prazo (a maior vale) e vida remanescente — padrão API 570. |
 
 ## E. UI/UX
 
@@ -62,3 +64,4 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | F2 | P2 | Tipos do banco escritos à mão | `lib/types/database.types.ts` → gerar com `supabase gen types typescript --linked` e checar no CI. |
 | F3 | P3 | Lacunas dos testes E2E | Login e Storage são simulados; página de Usuários, câmera real, IA e Realtime não são cobertos. |
 | F4 | P3 | Planos antigos em `docs/plans/` | Os 5 planos parecem já executados (amostras conferidas: data local, penalidade única, PDF sem corte de zona, IA sem sobrescrever, rate limit nas rotas de usuários). Revisar os critérios de aceite e arquivar. |
+| F5 | P3 | Migração de versões major | Next 15 → 16, React 18 → 19, Vitest 4 → 5: o Dependabot passou a ignorar majors; fazer como projeto próprio, com os testes E2E como rede de segurança. |

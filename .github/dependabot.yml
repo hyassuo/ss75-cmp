@@ -6,13 +6,22 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      # One PR for all patch/minor bumps; majors come one by one.
+      # One PR for all patch/minor bumps.
       minor-and-patch:
         update-types: [minor, patch]
+    # Major versions (Next, React, Vitest…) are migrations, not bumps: they
+    # need code changes and are done on purpose. React and react-dom (and
+    # their types) only work in lockstep, so separate PRs can't even install.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
   # E2E harness dependencies (Playwright, pg) — separate lockfile.
   - package-ecosystem: npm
     directory: /tests/e2e
