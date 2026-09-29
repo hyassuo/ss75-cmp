@@ -41,7 +41,7 @@ function supabaseOrigin(): string | null {
 
 export const metadata: Metadata = {
   title: "CMP | Noble Courage",
-  description: "Corrosion Management Plan — SS-75 Noble Courage",
+  description: "Corrosion Management Plan for SS-75 Noble Courage",
   applicationName: "SS-75 CMP",
   // iOS standalone mode (Add to Home Screen). The manifest handles Android.
   appleWebApp: {

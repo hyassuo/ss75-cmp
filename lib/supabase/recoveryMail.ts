@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 // Sends Supabase's password-reset email with the implicit flow: the link
 // itself carries the session (#access_token…&type=recovery), so it works in
-// any browser — including an installed iOS web app, whose cookies are
+// any browser: including an installed iOS web app, whose cookies are
 // separate from the Mail app's browser. The SSR clients force PKCE, whose
 // one-time code is redeemable only by the client that asked (this server).
 // The service-role key keeps a CAPTCHA setting from blocking server calls.

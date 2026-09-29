@@ -22,7 +22,7 @@ updates:
     groups:
       actions:
         patterns: ["*"]
-  # E2E harness dependencies (Playwright, pg) — separate lockfile.
+  # E2E harness dependencies (Playwright, pg): separate lockfile.
   - package-ecosystem: npm
     directory: /tests/e2e
     schedule:

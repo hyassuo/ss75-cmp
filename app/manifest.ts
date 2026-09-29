@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// PWA manifest — served at /manifest.webmanifest and auto-linked by Next.
+// PWA manifest, served at /manifest.webmanifest and auto-linked by Next.
 // Colors come from the design system: sbBg (dark topbar) as theme, bg as
 // the splash background. The app opens straight on /dashboard (the proxy
 // sends a signed-out user to /login and back): a start_url of "/" cost a
@@ -8,10 +8,10 @@ import type { MetadataRoute } from "next";
 // same one.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "SS-75 CMP — Corrosion Management Plan",
+    name: "SS-75 CMP · Corrosion Management Plan",
     short_name: "SS-75 CMP",
     description:
-      "Corrosion Management Plan — SS-75 Noble Courage. Inspections, risk matrix, evidence and reporting.",
+      "Corrosion Management Plan for SS-75 Noble Courage. Inspections, risk matrix, evidence and reporting.",
     id: "/",
     start_url: "/dashboard",
     scope: "/",

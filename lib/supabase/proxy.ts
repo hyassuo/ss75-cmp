@@ -18,12 +18,12 @@ export async function updateSession(
   };
   let supabaseResponse = forward();
 
-  // Prefetch requests are background hovers/viewport hints — skip the
+  // Prefetch requests are background hovers/viewport hints: skip the
   // Supabase auth round-trip so section switching stays snappy for
   // signed-in users. The prefetch headers are client-controlled (trivially
   // forged with curl), so the shortcut applies only when a Supabase session
   // cookie is present; unauthenticated requests always take the full
-  // check + redirect. (Real auth lives in the server layouts and RLS —
+  // check + redirect. (Real auth lives in the server layouts and RLS;
   // this gate is defense-in-depth.)
   const isPrefetch =
     request.headers.get("next-router-prefetch") === "1" ||
@@ -40,7 +40,7 @@ export async function updateSession(
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // Without Supabase env configured, don't crash the whole site in
-  // the proxy — let requests through so pages can render a clear error.
+  // the proxy: let requests through so pages can render a clear error.
   if (!supabaseUrl || !supabaseKey) {
     return supabaseResponse;
   }
@@ -90,8 +90,8 @@ export async function updateSession(
         : ((await supabase.auth.getClaims().catch(() => null))?.data?.claims ??
           null);
 
-    // Redirects carry any session cookies set above (a refreshed session —
-    // its old refresh token has just been spent — or a cleared one).
+    // Redirects carry any session cookies set above (a refreshed session,
+    // whose old refresh token has just been spent, or a cleared one).
     const redirectTo = (url: URL) => {
       const res = NextResponse.redirect(url);
       for (const c of supabaseResponse.cookies.getAll()) res.cookies.set(c);
@@ -111,7 +111,7 @@ export async function updateSession(
     }
 
     // Signed in: "/" (bookmarks, apps installed with the old start_url) and
-    // /login go straight to the dashboard — no render + second verification
+    // /login go straight to the dashboard: no render + second verification
     // of "/" (app/page.tsx) just to redirect.
     if (user && (path === "/login" || path === "/")) {
       const url = request.nextUrl.clone();

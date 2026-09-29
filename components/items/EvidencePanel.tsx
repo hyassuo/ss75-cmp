@@ -207,7 +207,7 @@ export function EvidencePanel({
   }
 
   // Uploads one photo (if any) and records the evidence row. On failure the
-  // blob just uploaded is removed again — unless the insert did land and
+  // blob just uploaded is removed again: unless the insert did land and
   // only its response was lost on the link: then the blob is in use.
   async function saveOne(
     f: File | null,
@@ -330,7 +330,7 @@ export function EvidencePanel({
           {t("f.addEvidenceTitle")}
         </div>
 
-        {/* Step 1 — attach */}
+        {/* Step 1: attach */}
         <div style={{ marginBottom: 12 }}>
           <Label>{t("f.step1")}</Label>
           {/* capture="environment" opens the rear camera straight away on
@@ -432,7 +432,7 @@ export function EvidencePanel({
           )}
         </div>
 
-        {/* Step 2 — AI (only when a photo is loaded) */}
+        {/* Step 2: AI (only when a photo is loaded) */}
         {b64 && (
           <div style={{ marginBottom: 12 }}>
             <Label>{t("f.step2")}</Label>
@@ -450,7 +450,7 @@ export function EvidencePanel({
           </div>
         )}
 
-        {/* Step 3 — date + description */}
+        {/* Step 3: date + description */}
         <div style={{ marginBottom: 12 }}>
           <Label>{t("f.step3")}</Label>
           <div style={{ marginBottom: 8 }}>
@@ -469,7 +469,7 @@ export function EvidencePanel({
           />
         </div>
 
-        {/* Step 4 — save */}
+        {/* Step 4: save */}
         <Button
           size="lg"
           fullWidth

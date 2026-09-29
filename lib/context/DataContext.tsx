@@ -31,8 +31,8 @@ import type {
 // Every mutation reports its outcome so the caller can keep the user's
 // input on screen when it fails (offshore links drop often) instead of
 // closing a form over a lost write.
-//   conflict — the row changed since the caller read it (see updateItem)
-//   notFound — the row is gone (deleted elsewhere) or RLS hides it
+//   conflict: the row changed since the caller read it (see updateItem)
+//   notFound: the row is gone (deleted elsewhere) or RLS hides it
 export type MutationResult<T = void> =
   | { ok: true; data: T }
   | { ok: false; error: string; conflict?: boolean; notFound?: boolean };
@@ -79,7 +79,7 @@ interface DataState {
 export interface EvidenceInput {
   evidence_date: string;
   description: string | null;
-  // No file_url: the legacy column stays empty — a stored link would be a
+  // No file_url: the legacy column stays empty: a stored link would be a
   // way to reach a photo outside the session (C7). Files go by file_path.
   file_path: string | null;
   file_name: string | null;
@@ -118,7 +118,7 @@ export function DataProvider({
   }, [allItems]);
   // Bumped by every local write. A background refresh that started before
   // a write would put pre-write rows back (resurrect a deleted item, drop a
-  // just-created draft, revert a save) — such a result is discarded.
+  // just-created draft, revert a save): such a result is discarded.
   const writeSeq = useRef(0);
 
   const replaceItem = useCallback(
@@ -131,7 +131,7 @@ export function DataProvider({
     []
   );
 
-  // silent: background refresh — no skeleton, no error banner, no sweep of
+  // silent: background refresh: no skeleton, no error banner, no sweep of
   // abandoned drafts (loadAppData), so a draft open in the item modal right
   // now can never be swept from under it.
   // The first load takes over the one LoginForm started at sign-in, if any.
@@ -404,9 +404,9 @@ export function DataProvider({
 
   // Storage objects don't cascade with the DB row. Their paths are
   // collected up front (listing needs the item to exist), then:
-  //   discardDraft — files first, then the row: the storage policy lets a
+  //   discardDraft: files first, then the row: the storage policy lets a
   //     creator remove files only while the draft row still exists;
-  //   otherwise    — the row first, then the files, so a failed delete
+  //   otherwise: the row first, then the files, so a failed delete
   //     never leaves an item whose photos are already gone.
   const deleteItem = useCallback(
     async (

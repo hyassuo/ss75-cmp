@@ -35,7 +35,7 @@ describe("zoneScore", () => {
     // Weighted mean must sit below the unweighted mean (75) because the
     // low score carries the 1.4 weight.
     // Weights follow the effective (recomputed) priority, so the risk
-    // inputs drive it — not the stored snapshot.
+    // inputs drive it: not the stored snapshot.
     const bad = makeItem({ prob: 5, cons: 5, status: "Critical" });
     const good = makeItem({ id: "item-2", prob: 1, cons: 1 });
     const sc = zoneScore([bad, good]);

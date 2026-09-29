@@ -2,8 +2,8 @@
 //
 // rateLimitShared() counts in Postgres (public.rate_limit_hit, migration
 // 20260929000000_rate_limits.sql), so every serverless instance shares one
-// counter per key. If that call fails — migration not applied yet, database
-// unreachable — it falls back to rateLimit(), which counts in this
+// counter per key. If that call fails (migration not applied yet, database
+// unreachable), it falls back to rateLimit(), which counts in this
 // instance's memory only: weaker (instances are ephemeral and run in
 // parallel), but never lets an outage turn into "no limit at all" or into
 // refusing every request.

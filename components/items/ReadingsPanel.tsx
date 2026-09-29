@@ -60,7 +60,7 @@ export function ReadingsPanel({
 
   async function add() {
     if (busy || !depth.trim()) return;
-    // Plain decimal only — Number() would also take "0x10" or "1e2".
+    // Plain decimal only: Number() would also take "0x10" or "1e2".
     // Accept a decimal comma too ("1,5"), the norm on pt-BR keyboards.
     const txt = depth.trim();
     if (!/^\d+([.,]\d+)?$/.test(txt)) {

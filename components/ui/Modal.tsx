@@ -109,7 +109,7 @@ export function Modal({
 
   if (!mounted) return null;
 
-  // No backdrop-click-to-close — too easy to lose half-filled forms by
+  // No backdrop-click-to-close: too easy to lose half-filled forms by
   // accident. Each modal renders its own Cancel / close affordance.
   return createPortal(
     <div

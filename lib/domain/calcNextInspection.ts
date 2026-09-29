@@ -14,7 +14,7 @@ export const FREQ_DAYS: Record<InspectionFrequency, number | null> = {
   "As required": null,
 };
 
-// handoff 6.3 — runs client-side whenever last_insp or freq_insp changes.
+// handoff 6.3: runs client-side whenever last_insp or freq_insp changes.
 export function calcNextInspection(
   lastInsp: string | null,
   freq: InspectionFrequency | null

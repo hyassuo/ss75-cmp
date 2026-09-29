@@ -78,7 +78,7 @@ export const FREQUENCIES: InspectionFrequency[] = [
   "As required",
 ];
 
-// Tratativa (corrective-action cycle) + bands + accessory — canonical
+// Tratativa (corrective-action cycle) + bands + accessory: canonical
 // values are PORTUGUESE (FM-116-OFF reference method; deliberate exception
 // to the "DB stores English" rule). Dict keys: actionType.*, actionStatus.*,
 // accType.*. Band labels render as `${band}%` directly.

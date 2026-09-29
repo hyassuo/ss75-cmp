@@ -55,7 +55,7 @@ export function IfsSection({ f, set, setF, recalcPriority }: {
         value={ifsValue}
         onSelect={(o) =>
           // recalcPriority so a SECE flip (×1.5 weight) updates the
-          // priority immediately. Two literals — passing `sece:
+          // priority immediately. Two literals: passing `sece:
           // undefined` through the {...x, ...next} merge would clobber
           // the current value with undefined.
           recalcPriority(
@@ -279,7 +279,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
       </div>
       <div>
         <Label>{t("ifs.seceNote")}</Label>
-        {/* Auto-populated from the IFS Equipment Register. Not editable —
+        {/* Auto-populated from the IFS Equipment Register. Not editable:
             select an IFS Object above and the flag flows from there. */}
         <div
           style={{
@@ -301,7 +301,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
             {f.ifs_obj_id
               ? f.sece
                 ? t("sece.yes") : t("sece.no")
-              : "—"}
+              : "-"}
           </span>
           <span style={{ fontSize: DS.fs.xs, fontWeight: 500, color: DS.text3 }}>
             {f.ifs_obj_id ? null : t("f.seceSelect")}
@@ -309,7 +309,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
         </div>
       </div>
 
-      {/* DROPS + Structural — additional risk contributors (+2 each on
+      {/* DROPS + Structural: additional risk contributors (+2 each on
           priority weight). Manually toggled, unlike SECE which is
           sourced from IFS. */}
       <div
@@ -333,7 +333,7 @@ export function RiskSection({ f, set, recalcPriority, onBandChange }: {
       </div>
 
       {/* Informative assessment bands (FM-116-OFF method). Handlers go
-          through onBandChange — the seam where a future
+          through onBandChange: the seam where a future
           suggestRiskFromBands(corr, loss) can swap `set` for
           recalcPriority to also suggest P×C. */}
       <div
@@ -430,7 +430,7 @@ export function InspectionSection({ f, onFreqOrLast }: {
               alignItems: "center",
             }}
           >
-            {f.next_insp ?? "—"}
+            {f.next_insp ?? "-"}
           </div>
         </div>
       </div>
@@ -473,7 +473,7 @@ export function ActionSection({ f, set, onActionTypeChange }: {
                   v: s,
                   l: t(`actionStatus.${s}` as DictKey) || s,
                 }))
-              : [{ v: "", l: "—" }]
+              : [{ v: "", l: "-" }]
           }
         />
       </div>

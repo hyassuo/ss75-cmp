@@ -1,5 +1,5 @@
 -- =============================================================
--- SS-75 CMP — IFS Equipment Register seed (idempotent)
+-- SS-75 CMP: IFS Equipment Register seed (idempotent)
 -- =============================================================
 -- Run AFTER supabase/migrations/20260928000100_ifs_register.sql. Safe to re-run: TRUNCATEs
 -- the table first.

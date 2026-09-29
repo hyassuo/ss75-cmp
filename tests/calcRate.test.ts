@@ -19,7 +19,7 @@ describe("calcRate", () => {
     expect(r).toBeCloseTo(1.0, 5); // +1 mm over 365 days
   });
 
-  it("sorts by date — input order does not matter", () => {
+  it("sorts by date: input order does not matter", () => {
     const r = calcRate([
       makeReading({ id: "r-2", reading_date: "2026-01-01", depth_mm: 2.0 }),
       makeReading({ reading_date: "2025-01-01", depth_mm: 1.0 }),
@@ -53,7 +53,7 @@ describe("calcRate", () => {
   });
 });
 
-describe("calcRate — comparable measurements only", () => {
+describe("calcRate: comparable measurements only", () => {
   it("returns null when readings are less than 90 days apart", () => {
     const r = calcRate([
       makeReading({ reading_date: "2026-01-01", depth_mm: 1.0 }),
@@ -117,7 +117,7 @@ describe("calcRate — comparable measurements only", () => {
   });
 });
 
-describe("calcRate — same-day readings", () => {
+describe("calcRate: same-day readings", () => {
   it("takes the one recorded last as the latest, whatever the input order", () => {
     const readings = [
       makeReading({ reading_date: "2025-01-01", depth_mm: 1.0 }),

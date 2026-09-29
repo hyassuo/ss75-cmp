@@ -7,9 +7,9 @@
 #   data.sql        data only (public schema + auth.users/identities), with
 #                   session_replication_role = replica so a restore neither
 #                   fires the audit/authorship triggers nor duplicates
-#                   history — the restore path (README "Backups")
+#                   history: the restore path (README "Backups")
 #   database.dump   full custom-format dump of public/auth/storage (schema,
-#                   data, privileges) — forensic copy, pg_restore -l to browse
+#                   data, privileges): forensic copy, pg_restore -l to browse
 #   storage/        every file of the evidence-photos bucket
 #
 # Env:
@@ -18,7 +18,7 @@
 #                              direct db.<ref> host is IPv6-only)
 #   SUPABASE_URL               https://<ref>.supabase.co
 #   SUPABASE_SERVICE_ROLE_KEY  service-role key (storage download)
-#   BACKUP_AGE_RECIPIENT       age public key (age1…) — keep the private key
+#   BACKUP_AGE_RECIPIENT       age public key (age1…): keep the private key
 #                              offline; it is the only way to restore.
 #   PG_DUMP                    pg_dump binary, ≥ the server's major version
 #                              (default: pg_dump on PATH)

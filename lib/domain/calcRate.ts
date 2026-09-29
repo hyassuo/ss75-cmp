@@ -1,7 +1,7 @@
 import { DS } from "@/lib/design/tokens";
 import type { Reading } from "@/lib/types/domain";
 
-// Corrosion-rate severity thresholds (mm/yr) — shared by rateColor,
+// Corrosion-rate severity thresholds (mm/yr): shared by rateColor,
 // AlertBar and itemScore so the bands can never drift apart.
 export const RATE_CRITICAL_MM_YR = 0.5;
 export const RATE_ELEVATED_MM_YR = 0.2;
@@ -25,7 +25,7 @@ const days = (a: string, b: string) =>
   (new Date(b).getTime() - new Date(a).getTime()) / DAY_MS;
 
 // Corrosion / pit growth rate in mm/year (handoff 6.6), from measured
-// readings only — AI estimates are ignored. Readings are compared only at
+// readings only: AI estimates are ignored. Readings are compared only at
 // the same measuring point (location, case/space-insensitive; blank counts
 // as one point) and only when at least RATE_MIN_SPAN_DAYS apart. Per point
 // the long-term rate (first → latest) and the short-term rate (latest vs

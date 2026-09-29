@@ -1,13 +1,13 @@
 -- =============================================================================
--- SS-75 CMP — DATA SNAPSHOT (run in Supabase SQL Editor, download the result)
+-- SS-75 CMP: DATA SNAPSHOT (run in Supabase SQL Editor, download the result)
 -- =============================================================================
 -- Read-only. Dumps the 7 application tables as ONE json document. Run it in
 -- the SQL Editor and use "Download results" (JSON/CSV) to save the backup
 -- locally BEFORE applying a schema migration (e.g. supabase/upgrades/schema-v140.sql).
 --
 -- Not included:
---   - public.ifs_objects  — re-seedable from supabase/seed/ifs-data.sql
---   - Storage bucket 'evidence-photos' — files are not reachable from SQL;
+--   - public.ifs_objects : re-seedable from supabase/seed/ifs-data.sql
+--   - Storage bucket 'evidence-photos': files are not reachable from SQL;
 --     evidences.file_path below preserves every object's path. (Schema
 --     migrations never touch Storage.)
 -- =============================================================================

@@ -21,7 +21,7 @@ async function forceSignOut(reload: boolean) {
     // inspector out of the tablet in the middle of an inspection.
     await supabase.auth.signOut({ scope: "local" });
   } catch {
-    // ignore — we're already tearing the session down
+    // ignore: we're already tearing the session down
   }
   // Hard reload so any in-memory state is cleared (data context, modal
   // state, etc.) and the proxy redirects to /login on the next page.
@@ -35,7 +35,7 @@ async function forceSignOut(reload: boolean) {
  * (mouse, keyboard, touch, scroll) reset the timer.
  *
  * Mobile browsers freeze timers in background tabs, so the deadline is also
- * checked against the wall clock whenever the page becomes visible again —
+ * checked against the wall clock whenever the page becomes visible again:
  * returning to the tab is not "activity" and must not restart the count.
  * Unsaved item edits survive the sign-out in local storage (itemDraft).
  */
@@ -163,7 +163,7 @@ export function ConnectionBanner() {
  * Forces a re-login only when the app's MAJOR version changes.
  *
  * Patch and minor bumps (1.3.11 → 1.4.0) are silent. Routine feature and
- * fix deploys must not bounce a user who just signed in — that produced the
+ * fix deploys must not bounce a user who just signed in: that produced the
  * "log in, flash the dashboard, get kicked back to login" effect, because
  * DeployLogout mounts right after login and would see the stored version
  * differ from the freshly deployed one.
@@ -187,7 +187,7 @@ export function DeployLogout() {
         void forceSignOut(true);
       }
     } catch {
-      // Storage disabled — silently skip; users will still re-login on the
+      // Storage disabled: silently skip; users will still re-login on the
       // next browser close because cookies are session-only.
     }
   }, []);

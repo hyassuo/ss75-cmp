@@ -2,7 +2,7 @@ import type { Item, ItemPriority } from "@/lib/types/domain";
 import { addDays } from "@/lib/utils/format";
 
 // Suggested tratativa deadline, driven by OUR priority (P×C + SECE +
-// readings) — not by the FM-116-OFF band matrix. Advisory only: the UI
+// readings): not by the FM-116-OFF band matrix. Advisory only: the UI
 // pre-fills the date and the user can edit it freely.
 export const ACTION_DUE_DAYS: Record<ItemPriority, number> = {
   Critical: 90,

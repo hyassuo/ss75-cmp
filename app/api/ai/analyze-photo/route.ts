@@ -88,7 +88,7 @@ const SYSTEM = [
   "- componentName: 1-3 word identifier of the item shown, e.g. Handrail,",
   "  Pipeline, Flange, Valve, Bolt, Walkway grating, Beam, Bracket. Use",
   "  Unknown if you cannot tell.",
-  "- probability: integer 1-5 on the unit risk matrix —",
+  "- probability: integer 1-5 on the unit risk matrix:",
   "  1 = Never occurred in the Industry,",
   "  2 = Has occurred in the Industry,",
   "  3 = Has occurred in the Company,",
@@ -97,7 +97,7 @@ const SYSTEM = [
   "  Choose based on how common this corrosion mode + extent is on offshore",
   "  rigs. Atmospheric corrosion on external steel is typically 4-5. Pitting",
   "  on internal piping is typically 3-4. Exotic failures are 1-2.",
-  "- consequence: integer 1-5 on the unit risk matrix —",
+  "- consequence: integer 1-5 on the unit risk matrix:",
   "  1 = Insignificant, 2 = Minor, 3 = Moderate, 4 = Serious, 5 = Critical.",
   "  Choose based on what the affected item likely is. A handrail or",
   "  walkway is 2-3. A pressure-containing component, lifting equipment or",
@@ -114,7 +114,7 @@ const SYSTEM = [
   "  items, longer for minor cosmetic atmospheric attack.",
   "- findings: 2-3 sentence description of what you see.",
   "- recommendation: 1-2 sentence next step.",
-  "Never invent a severity field — priority is computed downstream from",
+  "Never invent a severity field: priority is computed downstream from",
   "probability × consequence.",
 ].join(" ");
 
@@ -183,7 +183,7 @@ export async function POST(request: Request) {
   // missing key, bad body or oversize image doesn't spend them). The
   // per-user quota goes first so a user over it doesn't eat the app-wide
   // one; the reverse (a user's count rising while only the app-wide quota
-  // refuses) is accepted — it lasts at most until midnight UTC.
+  // refuses) is accepted: it lasts at most until midnight UTC.
   const now = new Date();
   const day = now.toISOString().slice(0, 10);
   const mine = await rateLimitShared(

@@ -12,7 +12,7 @@ import pg from "pg";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "@e965/xlsx";
 
-// Lets context.setOffline() reach service workers (Chromium) — only the
+// Lets context.setOffline() reach service workers (Chromium): only the
 // csp3 scenario allows a service worker; every other context blocks them.
 process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS ??= "1";
 
@@ -226,7 +226,7 @@ class Check {
       this.steps.push(`OK  ${msg}`);
       console.log(`   ✓ ${msg}`);
     } else {
-      const d = detail === undefined ? "" : ` — got: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`;
+      const d = detail === undefined ? "" : `; got: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`;
       this.failures.push(msg + d);
       console.log(`   ✗ ${msg}${d}`);
     }
@@ -237,7 +237,7 @@ class Check {
 async function newPage(chk, label, opts = {}) {
   // The app's real Content-Security-Policy is enforced (no bypassCSP):
   // every violation, in any page of the context (popups included), fails
-  // the scenario — see watchCsp and run().
+  // the scenario: see watchCsp and run().
   const ctx = await browser.newContext({
     serviceWorkers: "block",
     acceptDownloads: true,
@@ -354,7 +354,7 @@ async function login(page, email) {
 
 async function waitLoaded(page) {
   // DataContext finished loading when the skeleton (no text) is replaced by
-  // real content — works for every tab and language.
+  // real content: works for every tab and language.
   await page.waitForFunction(
     () => (document.querySelector("main.app-content")?.innerText || "").trim().length > 40,
     null,
@@ -487,7 +487,7 @@ async function main() {
     // 1) PostgREST answers 503 on PATCH
     await ctl.fault({ method: "PATCH", prefix: "/rest/v1/items", status: 503, times: -1 });
     await modal(page).getByRole("button", { name: "Save", exact: true }).click();
-    const alert = modal(page).getByText(/Not saved — your changes are still here/);
+    const alert = modal(page).getByText(/Not saved\. Your changes are still here\./);
     await alert.waitFor({ timeout: 15000 }).catch(() => {});
     c.expect(await modalOpen(page), "modal stays open after failed save");
     c.expect(await alert.isVisible(), "inline 'Not saved' error shown", await modal(page).locator('[role="alert"]').allInnerTexts());
@@ -936,7 +936,7 @@ async function main() {
     const ghost = await page.getByText("E2E Deleted Elsewhere Target", { exact: true }).count();
     await shot(c, page, "after-close");
     c.expect(ghost === 0, "deleted item no longer listed after closing the modal",
-      `card still listed (${ghost}) — the failed save put the stale copy back into the list`);
+      `card still listed (${ghost}): the failed save put the stale copy back into the list`);
     await page.context().close();
   });
 
@@ -1545,7 +1545,7 @@ async function main() {
       const riskOk = !/Something went wrong/.test(await main());
       await shot(c, page, "online-retry-risk");
       c.expect(riskOk, "back online: the failed tab recovers with 'Try again'",
-        "Risk Matrix stays on the error screen even after 'Try again' online (rejected lazy import is cached) — only a full reload helps");
+        "Risk Matrix stays on the error screen even after 'Try again' online (rejected lazy import is cached): only a full reload helps");
     }
     await page.context().close();
   });
@@ -2042,7 +2042,7 @@ async function main() {
     await fb.context().close();
   });
 
-  await run("r3", "C1: 'Forgot password?' — empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
+  await run("r3", "C1: 'Forgot password?': empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
     const page = await newPage(c, "anon");
     await page.goto(`${APP}/login`);
     const forgot = page.getByRole("button", { name: "Forgot password?" });
@@ -2256,7 +2256,7 @@ async function main() {
     const lcsp = cspOf(lr.headers());
     c.expect(!!nonceOf(lcsp) && /'strict-dynamic'/.test(lcsp), "/login response: CSP with a nonce + 'strict-dynamic'", lcsp);
     // What the proxy skips (API, images, their 404 pages) gets the
-    // locked-down static policy — exactly one CSP header, never none.
+    // locked-down static policy: exactly one CSP header, never none.
     for (const path of ["/api/does-not-exist", "/nope.png", "/icon.svg"]) {
       const res = await fetch(`${APP}${path}`);
       const policy = res.headers.get("content-security-policy") ?? "";
@@ -2275,7 +2275,7 @@ async function main() {
     c.expect(!!n1 && !!n2 && n1 !== n2, "a fresh nonce per response", { n1, n2 });
     c.expect(!/'unsafe-inline'|'unsafe-eval'/.test(ss), "script-src has no 'unsafe-inline' / 'unsafe-eval'", ss);
     c.expect(directive(csp1, "connect-src").includes(GW), "connect-src lists the project's Supabase origin", csp1);
-    // C7: photos are blob: URLs of authenticated downloads — no <img> may
+    // C7: photos are blob: URLs of authenticated downloads: no <img> may
     // load a storage URL, so img-src doesn't list Supabase at all.
     const imgSrc = directive(csp1, "img-src");
     c.expect(!imgSrc.includes(GW) && !/supabase/.test(imgSrc) && /\sblob:/.test(imgSrc), "img-src: blob: yes, the Supabase origin no", imgSrc);
@@ -2391,7 +2391,7 @@ async function main() {
     // C7: neither the thumbnail's nor the export's download may stay in the
     // browser's HTTP cache (it outlives the session, on disk). A
     // force-cache fetch of the same address is answered from that cache
-    // when a copy exists — it reaches the gateway only if none was kept.
+    // when a copy exists: it reaches the gateway only if none was kept.
     const evRow = await one("SELECT file_path FROM evidences WHERE item_id = $1 AND file_name = 'tiny.png' ORDER BY created_at DESC LIMIT 1", [ID.evidence]);
     const sess = await sessionFromCookies(page);
     const tProbe = Date.now();
@@ -2405,7 +2405,7 @@ async function main() {
     await sql("DELETE FROM evidences WHERE item_id = $1", [ID.evidence]).catch(() => {});
   });
 
-  await run("csp3", "C3: /offline.html directly — script-free CSP, no violation, 'Retry' reloads", async (c) => {
+  await run("csp3", "C3: /offline.html directly: script-free CSP, no violation, 'Retry' reloads", async (c) => {
     const page = await newPage(c, "anon");
     // A query string must survive 'Retry' (deep links like ?item=).
     const r = await page.goto(`${APP}/offline.html?keep=1`);
@@ -2558,7 +2558,7 @@ async function main() {
     };
     const AUDIT = "00000000-0000-0000-0000-0000000e2ec6"; // fixed ids e2e10..e2e13 belong to d1rate
     try {
-      // C6 — REST, as PostgREST sees the caller.
+      // C6: REST, as PostgREST sees the caller.
       const api = await apiAs(EMAIL);
       const before = [await count(api, "units"), await count(api, "zones"), await count(api, "ifs_objects")];
       c.expect(before[0] >= 1 && before[1] === 14 && before[2] >= 4, "active inspector reads units, 14 zones and IFS objects", before);
@@ -2572,7 +2572,7 @@ async function main() {
       await sql("UPDATE profiles SET active = true WHERE email = $1", [EMAIL]);
     }
 
-    // D2 — UI: add a reading and an evidence record, reopen, read History.
+    // D2: UI: add a reading and an evidence record, reopen, read History.
     await sql(`INSERT INTO items (id, unit_id, zone_id, name, status, notes, created_by)
                SELECT $1, id, 'Z13', 'E2E Audit Target', 'Attention', 'base note', $2 FROM units WHERE code = 'SS-75'
                `, [AUDIT, USERS.insp2]);
@@ -2633,7 +2633,7 @@ async function main() {
     };
   });
 
-  await run("e1search", "E1: top-bar item search — name/IFS/WO, accents, archived last, cap, keys, '/', Escape, mouse, no results, PT, users/audit, 390px", async (c) => {
+  await run("e1search", "E1: top-bar item search: name/IFS/WO, accents, archived last, cap, keys, '/', Escape, mouse, no results, PT, users/audit, 390px", async (c) => {
     await seedSearch();
     try {
       const page = await newPage(c, "insp1");
@@ -2989,7 +2989,7 @@ async function main() {
     await mob.context().close();
   });
 
-  await run("e3photos", "E3: several photos at once from the gallery — preview + '+N more', AI on the first only, one row each, progress, 10 limit, partial failure + retry, PT, 390px", async (c) => {
+  await run("e3photos", "E3: several photos at once from the gallery: preview + '+N more', AI on the first only, one row each, progress, 10 limit, partial failure + retry, PT, 390px", async (c) => {
     const unit = (await one("SELECT id FROM units WHERE code = 'SS-75'")).id;
     const IT = { en: "00000000-0000-0000-0000-0000000e2e14", pt: "00000000-0000-0000-0000-0000000e2e15" };
     for (const [id, name] of [[IT.en, "E2E Multi Photo Target"], [IT.pt, "E2E Multi Photo Mobile"]]) {
@@ -3090,7 +3090,7 @@ async function main() {
     await modal(page).getByText(/^\+9 more$/).waitFor({ timeout: 30000 }).catch(() => {});
     st = await seen(page);
     c.expect(st.some((x) => x.status === "Preparing 10 photos…" && x.picksDisabled), "'Preparing 10 photos…' (role=status) while compressing, picks disabled", st.map((x) => x.status));
-    const limit = modal(page).getByRole("alert").filter({ hasText: "Up to 10 photos at a time — only the first 10 were kept." });
+    const limit = modal(page).getByRole("alert").filter({ hasText: "Up to 10 photos at a time: only the first 10 were kept." });
     c.expect(await limit.isVisible().catch(() => false), "limit message shown (role=alert)");
     c.expect((await saveBtn.textContent()) === "Save 10 evidence records", "10 queued", await saveBtn.textContent());
     const row11 = await fileRow.innerText().catch(() => "");
@@ -3109,7 +3109,7 @@ async function main() {
     const err = modal(page).getByRole("alert").filter({ hasText: "Photo upload failed:" });
     await err.waitFor({ timeout: 15000 }).catch(() => {});
     const errText = await err.textContent().catch(() => "");
-    c.expect(/Injected fault 503/.test(errText) && /\(1 of 3 saved — Save again for the other 2\.\)$/.test(errText), "error says what failed and that 1 of 3 landed", errText);
+    c.expect(/Injected fault 503/.test(errText) && /\(1 of 3 saved\. Save again for the other 2\.\)$/.test(errText), "error says what failed and that 1 of 3 landed", errText);
     r = (await rows(IT.en)).filter((x) => x.description === "E3 partial batch");
     c.expect(r.length === 1 && r[0].file_name === "e3-p1.png", "only the first photo saved", r.map((x) => x.file_name));
     const kept = await fileRow.innerText().catch(() => "");
@@ -3140,7 +3140,7 @@ async function main() {
     await modal(mob).getByText(/^\+9 arquivos$/).waitFor({ timeout: 30000 }).catch(() => {});
     st = await seen(mob);
     c.expect(st.some((x) => x.status === "Preparando 10 fotos…"), "PT: 'Preparando 10 fotos…'", st.map((x) => x.status));
-    c.expect(await modal(mob).getByRole("alert").filter({ hasText: "Até 10 fotos por vez — só as 10 primeiras foram mantidas." }).isVisible().catch(() => false), "PT: limit message");
+    c.expect(await modal(mob).getByRole("alert").filter({ hasText: "Até 10 fotos por vez: só as 10 primeiras foram mantidas." }).isVisible().catch(() => false), "PT: limit message");
     const saveMob = modal(mob).getByRole("button", { name: /^Salvar (\d+ registros|registro) de evidência$/ });
     c.expect((await saveMob.textContent()) === "Salvar 10 registros de evidência", "PT: 'Salvar 10 registros de evidência'", await saveMob.textContent());
     const LONG = "e3-corroded-flange-bolt-portside-frame-112-close-up-before-cleaning.png";
@@ -3170,7 +3170,7 @@ async function main() {
     const errPt = modal(mob).getByRole("alert").filter({ hasText: "Falha no envio da foto:" });
     await errPt.waitFor({ timeout: 15000 }).catch(() => {});
     const errPtText = await errPt.textContent().catch(() => "");
-    c.expect(/\(1 de 3 salvas — salve de novo para as outras 2\.\)$/.test(errPtText), "PT: partial-failure note", errPtText);
+    c.expect(/\(1 de 3 salvas\. Salve de novo para as outras 2\.\)$/.test(errPtText), "PT: partial-failure note", errPtText);
     c.expect((await saveMob.textContent()) === "Salvar 2 registros de evidência", "PT: 2 left in the queue", await saveMob.textContent());
     await saveMob.click();
     c.expect(await toastSeen(mob, "2 evidências salvas", 15000), "PT: toast '2 evidências salvas'");
@@ -3510,8 +3510,8 @@ async function main() {
     return rows;
   }
   const exportCount = async (page) => {
-    const t = await page.getByText(/^Export — \d+ items$/).first().textContent();
-    return Number(t.match(/— (\d+) items/)[1]);
+    const t = await page.getByText(/^Export \(\d+ items\)$/).first().textContent();
+    return Number(t.match(/\((\d+) items\)/)[1]);
   };
 
   await run("f3archived", "F3: an archived item is left out of Dashboard, Zones, Risk Matrix, Schedule and the PDF, kept in CSV/XLSX (Archived=YES); admin Archive/Unarchive (warns before discarding edits); 'N archived' badge", async (c) => {
@@ -3649,7 +3649,7 @@ async function main() {
     }
   });
 
-  await run("f3ai", "F3: AI in the item modal — auto-apply fills only empty fields, 'Apply to Item Fields' overwrites; the pit-depth estimate is staged (Cancel: no reading; Save: one AI-tagged reading) and never drives the rate; unsaved-evidence confirm on Save; viewers get no AI", async (c) => {
+  await run("f3ai", "F3: AI in the item modal: auto-apply fills only empty fields, 'Apply to Item Fields' overwrites; the pit-depth estimate is staged (Cancel: no reading; Save: one AI-tagged reading) and never drives the rate; unsaved-evidence confirm on Save; viewers get no AI", async (c) => {
     const NAME = "E2E AI Target";
     await sql(
       `INSERT INTO items (id, unit_id, zone_id, name, status, notes, created_by, created_at)
@@ -3675,7 +3675,7 @@ async function main() {
         mech: await f.mech().inputValue(), prob: await f.prob().inputValue(), cons: await f.cons().inputValue(),
         freq: await f.freq().inputValue(), status: await f.status().inputValue(), priority: (await f.priority().innerText()).trim(),
       });
-      const staged = modal(page).getByText(/AI pit-depth estimate — saved as a reading when you save the item: 0\.4 mm/);
+      const staged = modal(page).getByText(/AI pit-depth estimate \(saved as a reading when you save the item\): 0\.4 mm/);
       const analyse = async () => {
         await modal(page).locator('input[type="file"]:not([capture])').setInputFiles({ name: "f3-ai.png", mimeType: "image/png", buffer: tinyPng({ tint: 40 }) });
         await modal(page).getByRole("button", { name: /Analyse with AI/ }).click();
@@ -3775,7 +3775,7 @@ async function main() {
       await login(page, "insp1@test.local");
       await openItem(page, NAME);
       const priority = async () => (await modal(page).locator('div:has(> label:text-is("Priority (auto)")) > div').innerText()).trim();
-      const seceBox = async () => (await modal(page).locator('div:has(> label:text-is("SECE — Safety & Environmental Critical Element")) > div > span').first().innerText()).trim();
+      const seceBox = async () => (await modal(page).locator('div:has(> label:text-is("SECE (Safety & Environmental Critical Element)")) > div > span').first().innerText()).trim();
       const combo = modal(page).locator('input[role="combobox"]');
       const pick = async (term, id) => {
         await combo.scrollIntoViewIfNeeded();
@@ -3805,7 +3805,7 @@ async function main() {
     }
   });
 
-  await run("f3pdf", "F3: PDF export — one row per item of the Export tab (zones flow across pages, per-zone counts match), header total, 'Photos: …' note", async (c) => {
+  await run("f3pdf", "F3: PDF export: one row per item of the Export tab (zones flow across pages, per-zone counts match), header total, 'Photos: …' note", async (c) => {
     const unit = await unitId();
     await sql(
       `INSERT INTO items (id, unit_id, zone_id, name, status, prob, cons, created_by, created_at)
@@ -3866,7 +3866,7 @@ async function main() {
     }
   });
 
-  await run("f3users", "F3: Users page — create (validation, duplicate -> generic error, success), role change, dept shown, deactivate/reactivate, delete (confirm); non-admins can't open /users", async (c) => {
+  await run("f3users", "F3: Users page: create (validation, duplicate -> generic error, success), role change, dept shown, deactivate/reactivate, delete (confirm); non-admins can't open /users", async (c) => {
     const EMAIL = "f3-new@test.local";
     const TEMP = "Temp-Passw0rd1";
     await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
@@ -4052,7 +4052,7 @@ async function main() {
     }
   });
 
-  await run("e5ui", "E5: Button/Notice — Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; X delete buttons (icon only) named in EN/PT", async (c) => {
+  await run("e5ui", "E5: Button/Notice: Enter submits the sign-in and new-password forms (type=submit kept), sign-in error tied to the form (aria-describedby); no text below 10 px on the main screens (1440 px and 390 px); every <Button> >= 44 px tall on a touch screen; X delete buttons (icon only) named in EN/PT", async (c) => {
     const E5 = "00000000-0000-0000-0000-0000000e5a01";
     const NAME = "E2E E5 UI Target";
     await sql(
@@ -4318,7 +4318,7 @@ async function main() {
   // Same browser, two users of different units, one after the other within
   // the sign-in preload's 30 s window (a shared tablet offshore): the
   // second user must never see the first one's data, not even for a frame.
-  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser — only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
+  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser: only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
     const OTHER = { id: "00000000-0000-0000-0000-00000000f001", email: "other1@test.local", item: "00000000-0000-0000-0000-0000000e2ef1" };
     await sql("INSERT INTO public.units (code, name) VALUES ('E2E-99', 'E2E other unit') ON CONFLICT (code) DO NOTHING");
     await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [OTHER.id, OTHER.email]);
@@ -4391,8 +4391,8 @@ async function main() {
 
   // Asymmetric JWT signing keys (backlog A11): the gateway signs new
   // sessions with ES256 and publishes the key in its JWKS, so getClaims()
-  // verifies locally — the path production takes once A11 is done.
-  await run("f6jwt", "F6/A11: ES256 sessions — pages check the JWT locally (no Auth call), an expired-but-refreshable session is refreshed; forged, expired, unknown-alg and 'none' tokens -> /login?next= from the proxy; a deactivated user (token still valid) ends on /login, no redirect loop", async (c) => {
+  // verifies locally: the path production takes once A11 is done.
+  await run("f6jwt", "F6/A11: ES256 sessions: pages check the JWT locally (no Auth call), an expired-but-refreshable session is refreshed; forged, expired, unknown-alg and 'none' tokens -> /login?next= from the proxy; a deactivated user (token still valid) ends on /login, no redirect loop", async (c) => {
     const EMAIL = "insp2@test.local";
     const now = () => Math.floor(Date.now() / 1000);
     const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
@@ -4502,7 +4502,7 @@ async function main() {
   // downloaded with the user's JWT and shown from an in-memory blob: URL,
   // revoked when the item closes. Runs with the service worker allowed, so
   // "nothing in Cache Storage" is checked against the real one.
-  await run("c7photos", "C7: photos only inside the session — no signed URLs, blob: thumbnails from authenticated downloads, per-photo error + retry, new tab from memory (image and PDF), revoked on close, nothing in Cache Storage, fresh after sign-out/in", async (c) => {
+  await run("c7photos", "C7: photos only inside the session: no signed URLs, blob: thumbnails from authenticated downloads, per-photo error + retry, new tab from memory (image and PDF), revoked on close, nothing in Cache Storage, fresh after sign-out/in", async (c) => {
     const ITEM = "00000000-0000-0000-0000-0000000ec701";
     const NAME = "E2E C7 Photo Target";
     await sql(
@@ -4682,7 +4682,7 @@ async function main() {
         return out;
       });
       c.step(`Cache Storage: ${cached.length} entries`);
-      c.expect(cached.length > 0 && !cached.some((u) => u.includes("/storage/v1/") || u.startsWith(GW) || u.startsWith("blob:")), "Cache Storage has app assets only — no Supabase / storage / blob: entry", cached.filter((u) => !u.startsWith(APP)));
+      c.expect(cached.length > 0 && !cached.some((u) => u.includes("/storage/v1/") || u.startsWith(GW) || u.startsWith("blob:")), "Cache Storage has app assets only: no Supabase / storage / blob: entry", cached.filter((u) => !u.startsWith(APP)));
 
       // ---- 8. sign out and back in: nothing stale, photos downloaded afresh
       await openItem(page, NAME);
@@ -4719,7 +4719,7 @@ async function main() {
   });
 
   // A file whose stored type is a document (SVG, HTML) must never become a
-  // blob: document in the app's origin — neither as a thumbnail (which
+  // blob: document in the app's origin: neither as a thumbnail (which
   // "Open image in new tab" would navigate to) nor in the tab the app
   // opens. The bucket's allowed_mime_types normally refuses these; here it
   // is lifted, as on a bucket created before that list existed (the
@@ -4806,7 +4806,7 @@ async function main() {
 
       const created = (await page.evaluate(() => window.__c7.created)) || [];
       const bad = created.filter((x) => !/^(image\/(png|jpeg|webp|gif|avif|heic|heif)|application\/pdf)$/.test(x.type || ""));
-      c.expect(created.length > 0 && bad.length === 0, "every object URL the app made has an image/PDF type — none of SVG, HTML or unknown type", created);
+      c.expect(created.length > 0 && bad.length === 0, "every object URL the app made has an image/PDF type: none of SVG, HTML or unknown type", created);
       const docs = [];
       for (const p of pages) {
         if (p.isClosed()) continue;

@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CORROSION MANAGEMENT PLAN — SUPABASE SETUP
+-- SS-75 CORROSION MANAGEMENT PLAN: SUPABASE SETUP
 -- =============================================================================
 -- Project:    ss75-cmp
 -- Author:     Helcio Yassuo
@@ -11,7 +11,7 @@
 -- Execution:  Paste this entire file in Supabase SQL Editor and click "Run".
 --
 -- NOTE: audit_item_changes() is SECURITY DEFINER so the audit trigger can
---       write to public.history (which has no INSERT policy by design — it
+--       write to public.history (which has no INSERT policy by design: it
 --       is an append-only log written only by the trigger). Without
 --       SECURITY DEFINER, INSERTs fail with "new row violates row-level
 --       security policy for table history".
@@ -19,7 +19,7 @@
 
 
 -- =============================================================================
--- SECTION 1 — EXTENSIONS
+-- SECTION 1: EXTENSIONS
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -27,7 +27,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 
 -- =============================================================================
--- SECTION 2 — ENUMS
+-- SECTION 2: ENUMS
 -- =============================================================================
 
 DO $$ BEGIN
@@ -52,7 +52,7 @@ EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 
 -- =============================================================================
--- SECTION 3 — TABLES
+-- SECTION 3: TABLES
 -- =============================================================================
 
 -- units: drilling units / rigs (multi-tenant ready for future NS-59)
@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS public.items (
   action_due      date,
   action_status   text,
   action_note     text,
-  -- Informative assessment bands (v1.4.0) — do NOT affect priority.
+  -- Informative assessment bands (v1.4.0): do NOT affect priority.
   corr_extent_band   text,
   material_loss_band text,
   -- Line accessory (v1.4.0): IFS object = parent LINE; item = accessory on it.
@@ -269,7 +269,7 @@ CREATE INDEX IF NOT EXISTS idx_history_item_ref ON public.history(item_ref);
 
 
 -- =============================================================================
--- SECTION 4 — TRIGGERS: updated_at + audit log
+-- SECTION 4: TRIGGERS: updated_at + audit log
 -- =============================================================================
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
@@ -446,7 +446,7 @@ CREATE TRIGGER trg_audit_items
   AFTER INSERT OR UPDATE ON public.items
   FOR EACH ROW EXECUTE FUNCTION public.audit_item_changes();
 
--- Pristine drafts (hardening round 5) — the only items a non-admin may
+-- Pristine drafts (hardening round 5): the only items a non-admin may
 -- delete; see items_delete_creator.
 -- True for the stub row the app inserts when "New Item" is clicked, as long
 -- as nobody has saved anything onto it: every content field is still empty
@@ -489,7 +489,7 @@ RETURNS boolean AS $$
   )
 $$ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public;
 -- INVOKER: called from the RLS policy it runs as the querying user, so the
--- items/history RLS limits it to the user's unit — exposed as
+-- items/history RLS limits it to the user's unit: exposed as
 -- /rpc/is_pristine_draft it can't probe other units' rows. Triggers call it
 -- from SECURITY DEFINER code and see everything.
 REVOKE EXECUTE ON FUNCTION public.is_pristine_draft(uuid) FROM PUBLIC, anon;
@@ -760,7 +760,7 @@ CREATE TRIGGER trg_subareas_author
 
 
 -- =============================================================================
--- SECTION 5 — AUTH HOOK: auto-create profile on signup
+-- SECTION 5: AUTH HOOK: auto-create profile on signup
 -- =============================================================================
 
 -- NOTE: 'hyassuo@gmail.com' is the bootstrap admin (auto-active on first
@@ -806,7 +806,7 @@ CREATE TRIGGER on_auth_user_created
 
 
 -- =============================================================================
--- SECTION 6 — ROW LEVEL SECURITY
+-- SECTION 6: ROW LEVEL SECURITY
 -- =============================================================================
 
 ALTER TABLE public.units      ENABLE ROW LEVEL SECURITY;
@@ -855,7 +855,7 @@ DROP POLICY IF EXISTS "profiles_select_authenticated" ON public.profiles;
 -- Visibility limited to self OR admins. Avoids leaking emails/names of other
 -- users to viewers/inspectors via direct PostgREST calls.
 -- Admin visibility/management scoped to the admin's own unit (hardening
--- round 4) — a global admin branch let any admin reach every unit's
+-- round 4): a global admin branch let any admin reach every unit's
 -- profiles via direct PostgREST.
 DROP POLICY IF EXISTS "profiles_select_self_or_admin" ON public.profiles;
 CREATE POLICY "profiles_select_self_or_admin" ON public.profiles
@@ -876,8 +876,8 @@ CREATE POLICY "profiles_update_self" ON public.profiles
 DROP POLICY IF EXISTS "profiles_admin_all" ON public.profiles;
 
 -- Column-level guard: without this, profiles_update_self would let any user
--- set their own role/active (privilege escalation). role/active/unit_id —
--- and creating/deleting profiles — are managed only via the admin API
+-- set their own role/active (privilege escalation). role/active/unit_id
+-- (and creating/deleting profiles) are managed only via the admin API
 -- routes (service role).
 REVOKE UPDATE ON public.profiles FROM authenticated, anon;
 REVOKE INSERT, DELETE, TRUNCATE ON public.profiles FROM authenticated, anon;
@@ -1020,7 +1020,7 @@ REVOKE TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 
 
 -- =============================================================================
--- SECTION 7 — STORAGE BUCKET
+-- SECTION 7: STORAGE BUCKET
 -- =============================================================================
 
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -1033,10 +1033,10 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Photos are stored under {item_id}/... — readable only if the item belongs
+-- Photos are stored under {item_id}/...: readable only if the item belongs
 -- to the user's unit. storage.objects' `name` MUST be qualified inside the
 -- items subqueries: unqualified it resolves to items.name (hardening
--- round 5 — the unqualified form denied real uploads and let an item named
+-- round 5: the unqualified form denied real uploads and let an item named
 -- "<id>/x" open every unit's photos).
 DROP POLICY IF EXISTS "evidence_select_authenticated" ON storage.objects;
 CREATE POLICY "evidence_select_authenticated" ON storage.objects
@@ -1074,7 +1074,7 @@ CREATE POLICY "evidence_delete_admin" ON storage.objects
   );
 
 -- Discarding a new item: its creator clears the photos attached to the
--- draft (while the draft row still exists — the app deletes files first).
+-- draft (while the draft row still exists: the app deletes files first).
 DROP POLICY IF EXISTS "evidence_delete_draft_creator" ON storage.objects;
 CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
   FOR DELETE TO authenticated USING (
@@ -1089,7 +1089,7 @@ CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
     )
   );
 
--- The uploader may remove their own file that no evidence row uses — the
+-- The uploader may remove their own file that no evidence row uses: the
 -- cleanup after an evidence insert that failed right after its upload.
 DROP POLICY IF EXISTS "evidence_delete_own_unreferenced" ON storage.objects;
 CREATE POLICY "evidence_delete_own_unreferenced" ON storage.objects
@@ -1102,7 +1102,7 @@ CREATE POLICY "evidence_delete_own_unreferenced" ON storage.objects
     )
   );
 
--- Deleting a real item: the app deletes the row first, then its files —
+-- Deleting a real item: the app deletes the row first, then its files,
 -- allowed to admins of the unit the audit trail says the item was in.
 -- Unit that owns a *deleted* item's leftover folder, decided with a view
 -- of every unit (SECURITY DEFINER): NULL while an item with that id exists
@@ -1146,7 +1146,7 @@ CREATE POLICY "evidence_select_admin_orphans" ON storage.objects
 
 
 -- =============================================================================
--- SECTION 8 — STRUCTURAL SEED (units + zones only)
+-- SECTION 8: STRUCTURAL SEED (units + zones only)
 -- =============================================================================
 
 INSERT INTO public.units (code, name, type)
@@ -1172,7 +1172,7 @@ ON CONFLICT (zid) DO NOTHING;
 
 
 -- =============================================================================
--- SECTION 9 — VERIFICATION QUERY
+-- SECTION 9: VERIFICATION QUERY
 -- =============================================================================
 -- Expected: 1 unit, 14 zones, 0 in all other tables.
 

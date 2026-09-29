@@ -1,11 +1,11 @@
 -- =============================================================================
--- SS-75 CMP — SECURITY FIXES (run once in Supabase SQL Editor)
+-- SS-75 CMP: SECURITY FIXES (run once in Supabase SQL Editor)
 -- =============================================================================
--- Applies on top of supabase/migrations/20260928000000_baseline.sql. Idempotent — safe to re-run.
+-- Applies on top of supabase/migrations/20260928000000_baseline.sql. Idempotent: safe to re-run.
 --
 -- FIX 1  (CRITICAL) Privilege escalation via profiles_update_self:
 --        the self-update RLS policy allowed a user to UPDATE any column of
---        their own profile — including role and active — so any viewer could
+--        their own profile (including role and active) so any viewer could
 --        promote themselves to admin with a direct PostgREST call.
 --        Fix: column-level grants. Authenticated users can only update
 --        full_name and dept; role/active/unit_id changes go through the
@@ -17,7 +17,7 @@
 --        which makes every policy that uses them deny access immediately.
 --
 -- FIX 3  readings/evidences INSERT policies only checked the role, not the
---        unit — an inspector could attach data to another unit's items.
+--        unit: an inspector could attach data to another unit's items.
 --        Fix: WITH CHECK that the parent item belongs to the user's unit.
 --
 -- FIX 4  created_by / updated_by are client-supplied and spoofable.
@@ -34,11 +34,11 @@
 -- =============================================================================
 
 
--- FIX 1 — profiles column-level grants ---------------------------------------
+-- FIX 1: profiles column-level grants ---------------------------------------
 REVOKE UPDATE ON public.profiles FROM authenticated;
 GRANT UPDATE (full_name, dept) ON public.profiles TO authenticated;
 
--- FIX 2 — inactive users lose all RLS-mediated access -------------------------
+-- FIX 2: inactive users lose all RLS-mediated access -------------------------
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS user_role AS $$
   SELECT role FROM public.profiles WHERE id = auth.uid() AND active = true
@@ -49,7 +49,7 @@ RETURNS uuid AS $$
   SELECT unit_id FROM public.profiles WHERE id = auth.uid() AND active = true
 $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 
--- FIX 3 — child inserts must target items of the user's own unit -------------
+-- FIX 3: child inserts must target items of the user's own unit -------------
 DROP POLICY IF EXISTS "readings_insert_inspector_admin" ON public.readings;
 CREATE POLICY "readings_insert_inspector_admin" ON public.readings
   FOR INSERT TO authenticated WITH CHECK (
@@ -72,7 +72,7 @@ CREATE POLICY "evidences_insert_inspector_admin" ON public.evidences
     )
   );
 
--- FIX 4 — server-enforced authorship ------------------------------------------
+-- FIX 4: server-enforced authorship ------------------------------------------
 CREATE OR REPLACE FUNCTION public.enforce_author()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -103,7 +103,7 @@ CREATE TRIGGER trg_evidences_author
   BEFORE INSERT ON public.evidences
   FOR EACH ROW EXECUTE FUNCTION public.enforce_author();
 
--- FIX 5 — evidence photos readable only within the owning unit ----------------
+-- FIX 5: evidence photos readable only within the owning unit ----------------
 DROP POLICY IF EXISTS "evidence_select_authenticated" ON storage.objects;
 CREATE POLICY "evidence_select_authenticated" ON storage.objects
   FOR SELECT TO authenticated USING (
@@ -115,7 +115,7 @@ CREATE POLICY "evidence_select_authenticated" ON storage.objects
     )
   );
 
--- FIX 6 — creators may delete their own items in their own unit ---------------
+-- FIX 6: creators may delete their own items in their own unit ---------------
 DROP POLICY IF EXISTS "items_delete_creator" ON public.items;
 CREATE POLICY "items_delete_creator" ON public.items
   FOR DELETE TO authenticated USING (

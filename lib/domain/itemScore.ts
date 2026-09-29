@@ -3,7 +3,7 @@ import { calcRate, RATE_CRITICAL_MM_YR } from "@/lib/domain/calcRate";
 import { isOverdue } from "@/lib/utils/format";
 import type { ItemWithRelations } from "@/lib/types/domain";
 
-// handoff 6.4 — status penalty + a single overdue penalty. Overdue used to
+// handoff 6.4: status penalty + a single overdue penalty. Overdue used to
 // be counted twice (once via effectiveStatus mapping to "Overdue", once via
 // the raw isOverdue check), and an overdue item's own status penalty was
 // swallowed by that mapping. Now: the stored status always contributes, and

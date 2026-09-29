@@ -70,7 +70,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
         setSysFilterState(v as SystemFilter);
       }
     } catch {
-      // storage unavailable — default filter
+      // storage unavailable: default filter
     }
   }, []);
 
@@ -147,7 +147,7 @@ export function ShellProvider({ children }: { children: ReactNode }) {
 
   const closeItem = useCallback(() => {
     // Already closed (e.g. Back won a race with Cancel): don't navigate
-    // again — a second back() would leave the tab or the app.
+    // again: a second back() would leave the tab or the app.
     if (!params.get("item")) return;
     closingIntentionally.current = true;
     if (pushedItem.current) {

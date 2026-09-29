@@ -64,7 +64,7 @@ export function Topbar() {
     >
       {/* ── Top band: title block ─────────────────────────────────────────── */}
       <div className="tb-band-top" style={{ background: TOP_BAND }}>
-        {/* Row 1 — hamburger + title + status */}
+        {/* Row 1: hamburger + title + status */}
         <div className="tb-row1">
           <div className="tb-left">
             <button
@@ -185,7 +185,7 @@ export function Topbar() {
           </div>
         </div>
 
-        {/* Row 2 — subtitle + short date */}
+        {/* Row 2: subtitle + short date */}
         <div className="tb-row2">
           <div
             className="tb-sub"

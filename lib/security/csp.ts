@@ -1,8 +1,8 @@
 // Content-Security-Policy for the app's HTML pages, built per request with
 // a fresh nonce (see proxy.ts). Next.js reads the nonce from the
 // request's CSP header and stamps it on its own bootstrap scripts;
-// 'strict-dynamic' lets those load the app's chunks. Anything else — an
-// injected <script>, an inline event handler, eval — is refused.
+// 'strict-dynamic' lets those load the app's chunks. Anything else (an
+// injected <script>, an inline event handler, eval) is refused.
 //
 // Browser traffic goes only to this origin and the project's Supabase URL
 // (REST, auth, storage downloads). Gemini is called by the server, never by

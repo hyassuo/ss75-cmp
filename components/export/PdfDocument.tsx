@@ -74,7 +74,7 @@ export interface PdfItem {
   id: string;
   zid: string;
   zname: string;
-  // Sub-área name ("" when none) — rendered as a group subheader.
+  // Sub-área name ("" when none): rendered as a group subheader.
   subarea: string;
   name: string;
   ifs: string;
@@ -84,7 +84,7 @@ export interface PdfItem {
   last_insp: string;
   next_insp: string;
   rate: string;
-  // Pre-formatted tratativa line ("" when none) — rendered as a second
+  // Pre-formatted tratativa line ("" when none): rendered as a second
   // indented line under the item row.
   action: string;
 }
@@ -103,7 +103,7 @@ export interface PdfDocProps {
   critical: number;
   items: PdfItem[];
   photosByItem?: Map<string, PdfPhoto[]>;
-  // Photo coverage note ("N embedded · M failed · cap reached") — rendered
+  // Photo coverage note ("N embedded · M failed · cap reached"): rendered
   // in the header so the report documents its own omissions.
   note?: string;
   // "All departments" or the department the report is limited to.
@@ -201,7 +201,7 @@ export function PdfDocument({
             <View key={zid}>
               <View wrap={false} minPresenceAhead={40}>
                 <Text style={s.zone}>
-                  {zid} — {zname}
+                  {zid} · {zname}
                 </Text>
                 <View style={s.h}>
                   <Text style={[s.cName, s.hc]}>Item</Text>

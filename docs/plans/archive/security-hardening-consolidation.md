@@ -1,7 +1,7 @@
-# PLAN: Security hardening consolidation — setup.sql final state, middleware, API hygiene
+# PLAN: Security hardening consolidation: setup.sql final state, middleware, API hygiene
 
 **Rank: 5 of 5.** Independent of plans 2–4. **Must land before onboarding a
-second unit (NS-59 or any other)** — several closed gaps are latent only
+second unit (NS-59 or any other)**: several closed gaps are latent only
 because a single unit exists today.
 
 ## Goal
@@ -14,7 +14,7 @@ admin-gated). Four residual issues remain:
    It has absorbed hardening rounds 1–3, but NOT round 4: a fresh install
    from `supabase-setup.sql` alone ships **globally-scoped admin policies**
    (`units_admin_all`, `profiles_admin_all`, `profiles_select_self_or_admin`,
-   `zones_admin_all`, and the four `*_delete_admin` policies) — any admin can
+   `zones_admin_all`, and the four `*_delete_admin` policies): any admin can
    reach every unit's data via direct PostgREST the moment a second unit
    exists. The fix only lands if the operator also remembers to run
    `supabase-hardening-4.sql`.
@@ -27,8 +27,8 @@ admin-gated). Four residual issues remain:
    to the client and have no rate limit**; every JSON-body route 500s on a
    malformed body instead of 400.
 4. **The AI route returns Gemini's parsed JSON verbatim** with no server-side
-   re-validation of the enums/ranges (`app/api/ai/analyze-photo/route.ts:195-197`)
-   — it trusts the model to honor `responseSchema`.
+   re-validation of the enums/ranges (`app/api/ai/analyze-photo/route.ts:195-197`):
+   it trusts the model to honor `responseSchema`.
 
 ## Files to touch
 
@@ -46,12 +46,12 @@ admin-gated). Four residual issues remain:
 
 ## Steps (in order)
 
-### 1. `lib/supabase/middleware.ts` — close the anonymous prefetch bypass
+### 1. `lib/supabase/middleware.ts`: close the anonymous prefetch bypass
 
 Replace the block at lines 13–19:
 
 ```ts
-// Prefetch requests are background hovers/viewport hints — skip the
+// Prefetch requests are background hovers/viewport hints: skip the
 // Supabase auth round-trip so section switching stays snappy for
 // signed-in users. Unauthenticated requests never take this shortcut:
 // the prefetch headers are client-controlled (trivially forged with
@@ -70,10 +70,10 @@ if (isPrefetch && hasSupabaseCookie) {
 }
 ```
 
-### 2. `supabase-setup.sql` — make a fresh install land on the final state
+### 2. `supabase-setup.sql`: make a fresh install land on the final state
 
 Port `supabase-hardening-4.sql` into `supabase-setup.sql` by replacing these
-blocks (policy names are identical — copy the CREATE POLICY bodies **verbatim**
+blocks (policy names are identical: copy the CREATE POLICY bodies **verbatim**
 from `supabase-hardening-4.sql`, they are the source of truth):
 
 | In setup.sql (approx. lines) | Replace with hardening-4 version (lines) |
@@ -81,7 +81,7 @@ from `supabase-hardening-4.sql`, they are the source of truth):
 | `units_admin_all` (377–379) | hardening-4: 116–126 (scoped `AND id = public.current_user_unit()`) |
 | `profiles_select_self_or_admin` (385–389) | hardening-4: 50–58 (admin branch scoped to own unit) |
 | `profiles_admin_all` (393–395) | hardening-4: 61–71 (USING + WITH CHECK, unit-scoped) |
-| `zones_admin_all` (407–409) | hardening-4: 128–132 — **delete the CREATE POLICY entirely**, keep the `DROP POLICY IF EXISTS`, add the "read-only reference data" comment |
+| `zones_admin_all` (407–409) | hardening-4: 128–132: **delete the CREATE POLICY entirely**, keep the `DROP POLICY IF EXISTS`, add the "read-only reference data" comment |
 | `items_delete_admin` (435–437) | hardening-4: 74–79 |
 | `readings_delete_admin` (463–465) | hardening-4: 81–90 |
 | `evidences_delete_admin` (483–485) | hardening-4: 92–101 |
@@ -103,10 +103,10 @@ Additionally:
 - Do NOT renumber or restructure anything else in setup.sql; the file must
   stay a drop-in "paste and Run".
 
-Keep `supabase-hardening*.sql` files unchanged — they remain the upgrade path
+Keep `supabase-hardening*.sql` files unchanged: they remain the upgrade path
 for existing databases and are idempotent no-ops after this change.
 
-### 3. `README.md` — update the schema table
+### 3. `README.md`: update the schema table
 
 In the "Supabase schema" table: change the `supabase-setup.sql` row's purpose
 to "Tables, RLS (final hardened state incl. rounds 1–4), triggers, storage
@@ -118,7 +118,7 @@ databases created before v1.9 and re-run safely."
 ### 4. Shared JSON-body guard
 
 The five mutating routes and the IFS search all call `await request.json()`
-bare — a malformed body throws → 500. Add a tiny helper in
+bare: a malformed body throws → 500. Add a tiny helper in
 `lib/supabase/adminGuard.ts` (it's the shared server-guard module):
 
 ```ts
@@ -141,20 +141,20 @@ const body = await readJson<{ …same shape as before… }>(request);
 if (!body) {
   return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
 }
-const { email, password } = body; // etc. — destructure as before
+const { email, password } = body; // etc.: destructure as before
 ```
 
-### 5. `app/api/users/*` — generic error messages + rate limits
+### 5. `app/api/users/*`: generic error messages + rate limits
 
 For all four routes:
 
 1. Import `rateLimit` from `@/lib/utils/rateLimit`. After the `requireAdmin`
    guard passes, add:
-   - create/delete/update — shared budget:
+   - create/delete/update: shared budget:
      ```ts
      const rl = rateLimit(`users:${guard.ctx.userId}`, 30, 60_000);
      ```
-   - reset — its own tighter budget (it sends email):
+   - reset: its own tighter budget (it sends email):
      ```ts
      const rl = rateLimit(`users-reset:${guard.ctx.userId}`, 5, 60_000);
      ```
@@ -181,10 +181,10 @@ For all four routes:
    - `update/route.ts:85-88`: log; return `{ error: "Could not update user" }`.
 
    Do NOT genericize the validation messages ("Valid email required",
-   "Cannot delete the only active admin.", etc.) — those are intentional,
+   "Cannot delete the only active admin.", etc.): those are intentional,
    safe, user-facing copy that `UserTable.tsx` displays.
 
-### 6. `app/api/ai/analyze-photo/route.ts` — validate the model output
+### 6. `app/api/ai/analyze-photo/route.ts`: validate the model output
 
 After `JSON.parse(clean)` succeeds, run the result through a sanitizer before
 returning it. Add above the `POST` handler:
@@ -245,7 +245,7 @@ if (!sanitized) {
 return NextResponse.json(sanitized);
 ```
 
-Note: `RESPONSE_SCHEMA.properties.…` — check how `AiJsonSchema` is typed in
+Note: `RESPONSE_SCHEMA.properties.…`: check how `AiJsonSchema` is typed in
 `lib/ai/client.ts`; if the `enum` access doesn't typecheck, declare the three
 string arrays as standalone consts and reference them from both the schema
 and the sanitizer (single source of truth, no duplication).
@@ -261,33 +261,33 @@ npm run lint && npm run typecheck && npm test && npm run build
 1. **Do NOT delete the prefetch skip entirely.** It exists for section-switch
    latency (its comment says why). The fix is conditioning it on a Supabase
    cookie, not removing it. A forged `sb-` cookie + prefetch header still
-   skips the middleware — that is fine: the middleware was never the real
+   skips the middleware: that is fine: the middleware was never the real
    gate; `app/(app)/layout.tsx` `getUser()` + RLS are, and a junk cookie
    fails there.
 2. **Policy port must be verbatim.** The hardening-4 policies reference
-   `public.current_user_unit()` — already defined in setup.sql (lines
+   `public.current_user_unit()`: already defined in setup.sql (lines
    368–371) with the `active = true` guard, so no helper functions need
    porting. Don't "improve" the SQL while copying.
 3. **`zones_admin_all` is a DROP-only change.** After the port, zones have a
-   SELECT policy and nothing else — RLS default-denies writes for
+   SELECT policy and nothing else: RLS default-denies writes for
    `authenticated`. Do not add a replacement write policy.
 4. **Keep the hardening files.** Existing production DBs upgrade by running
    them; deleting them breaks the documented upgrade path. They are
    idempotent (`DROP POLICY IF EXISTS` + `CREATE`).
 5. **`sameOrigin` stays as-is.** Its no-Origin pass-through is documented,
    intentional defense-in-depth (SameSite=Lax cookies are the real CSRF
-   gate). Don't "fix" it to reject missing Origin — that breaks
+   gate). Don't "fix" it to reject missing Origin: that breaks
    server-to-server calls and changes nothing for browsers.
 6. **The rate limiter is per-instance** (its file comment says so). The
    limits here are belt-and-suspenders against a hammering client, not hard
    global caps. Do not attempt to add Redis/KV in this plan.
 7. **`analyze-photo` parses the body BEFORE its try/catch** (line 168 vs
-   185). When adding the `readJson` guard, keep it before the `try` — do not
+   185). When adding the `readJson` guard, keep it before the `try`: do not
    accidentally move the Gemini call out of the try.
 8. **Don't tighten `users/create` password/email validation beyond what's
    there.** GoTrue re-validates; changing user-facing rules is product scope,
    not hygiene.
-9. **The `inspectionFrequency: ""` fallback is deliberate** — the client
+9. **The `inspectionFrequency: ""` fallback is deliberate**: the client
    (`ItemModal.applyAI`) checks `FREQUENCIES.includes(freq)` and skips empty
    strings, so an off-list model answer degrades to "no suggestion" instead
    of a bogus schedule.
@@ -302,7 +302,7 @@ Local (`npm run dev`), using curl with NO cookies:
       round-trip (verify: navigation between tabs stays snappy; no functional
       change for signed-in users).
 - [ ] `curl -s -X POST http://localhost:3000/api/users/create -H "Content-Type: application/json" -d 'not-json'`
-      → `401` (unauth) — and from a logged-in admin session with a garbage
+      → `401` (unauth): and from a logged-in admin session with a garbage
       body → `400 {"error":"Invalid JSON body"}` (was 500).
 - [ ] 6 rapid reset-password calls from an admin session → 6th returns 429.
 - [ ] Force a GoTrue failure (create a user with an email that already
@@ -310,7 +310,7 @@ Local (`npm run dev`), using curl with NO cookies:
       reason appears in the server log only.
 - [ ] SQL: on a scratch Supabase project, run ONLY the new
       `supabase-setup.sql` (+ ifs files), then run the verification queries
-      from `supabase-hardening-4.sql`'s VERIFICATION comment block — all
+      from `supabase-hardening-4.sql`'s VERIFICATION comment block: all
       pass without ever running the hardening files.
 - [ ] Diff check: `CREATE POLICY` bodies for the 7 ported policies in
       setup.sql are byte-identical to `supabase-hardening-4.sql` (ignoring

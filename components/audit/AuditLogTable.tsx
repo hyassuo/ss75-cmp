@@ -73,7 +73,7 @@ export function AuditLogTable() {
             (r.item_ref ? names.get(r.item_ref) : undefined) ??
             r.item_name ??
             r.item_ref ??
-            "—",
+            "-",
         }))
       );
       setTruncated(res.truncated);
@@ -309,7 +309,7 @@ export function AuditLogTable() {
                       color: DS.text3,
                     }}
                   >
-                    {(r.prev_value ?? "—") + " → " + (r.new_value ?? "—")}
+                    {(r.prev_value ?? "-") + " → " + (r.new_value ?? "-")}
                   </td>
                   <td
                     style={{

@@ -1,7 +1,7 @@
 -- =============================================================================
--- SS-75 CMP — SECURITY HARDENING, ROUND 5
+-- SS-75 CMP: SECURITY HARDENING, ROUND 5
 -- =============================================================================
--- In-place upgrade for databases created before v1.14.1. Idempotent — safe to
+-- In-place upgrade for databases created before v1.14.1. Idempotent: safe to
 -- re-run. Already folded into supabase/migrations/20260928000000_baseline.sql / supabase/migrations/20260928000100_ifs_register.sql
 -- for fresh installs.
 --
@@ -17,7 +17,7 @@
 --      Now created_by / created_at (and items.updated_at) are set by the
 --      server on INSERT and frozen, together with unit_id, on UPDATE.
 --   2. items_delete_creator only covers what it was meant for: discarding
---      a "pristine draft" — the exact stub row the app inserts for a new
+--      a "pristine draft": the exact stub row the app inserts for a new
 --      item (name 'Untitled', status Pending, every content field empty)
 --      that nobody has edited since (no audit event besides 'created').
 --      Deleting a real item is an admin-only action.
@@ -52,7 +52,7 @@
 --      "EXISTS (SELECT … FROM public.items WHERE … foldername(name) …)" the
 --      unqualified `name` resolved to items.name, not storage.objects.name.
 --      Legitimate uploads/reads were denied, and an item whose *name* was
---      its own id ("<id>/x") opened every unit's photos to that unit —
+--      its own id ("<id>/x") opened every unit's photos to that unit:
 --      read, upload and (admins) delete. Now qualified as objects.name.
 --      Two narrow DELETE policies let a creator clear a discarded draft's
 --      files and an admin clear files a deleted item left behind.
@@ -125,7 +125,7 @@ $$ LANGUAGE plpgsql SET search_path = public;
 
 
 -- -----------------------------------------------------------------------------
--- 2. Pristine drafts — the only items a non-admin may delete
+-- 2. Pristine drafts: the only items a non-admin may delete
 -- -----------------------------------------------------------------------------
 -- True for the stub row the app inserts when "New Item" is clicked, as long
 -- as nobody has saved anything onto it: every content field is still empty
@@ -170,7 +170,7 @@ RETURNS boolean AS $$
   )
 $$ LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public;
 -- INVOKER: called from the RLS policy it runs as the querying user, so the
--- items/history RLS limits it to the user's unit — exposed as
+-- items/history RLS limits it to the user's unit: exposed as
 -- /rpc/is_pristine_draft it can't probe other units' rows. Triggers call it
 -- from SECURITY DEFINER code and see everything.
 REVOKE EXECUTE ON FUNCTION public.is_pristine_draft(uuid) FROM PUBLIC, anon;
@@ -375,7 +375,7 @@ REVOKE UPDATE ON public.profiles FROM anon;
 
 -- -----------------------------------------------------------------------------
 -- 5. ifs_objects: read-only at runtime (skipped if the IFS table isn't
---    installed yet — supabase/migrations/20260928000100_ifs_register.sql carries the same rule)
+--    installed yet: supabase/migrations/20260928000100_ifs_register.sql carries the same rule)
 -- -----------------------------------------------------------------------------
 DO $$
 BEGIN
@@ -425,7 +425,7 @@ CREATE POLICY "evidence_delete_admin" ON storage.objects
   );
 
 -- Discarding a new item: its creator clears the photos attached to the
--- draft (while the draft row still exists — the app deletes files first).
+-- draft (while the draft row still exists: the app deletes files first).
 DROP POLICY IF EXISTS "evidence_delete_draft_creator" ON storage.objects;
 CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
   FOR DELETE TO authenticated USING (
@@ -440,7 +440,7 @@ CREATE POLICY "evidence_delete_draft_creator" ON storage.objects
     )
   );
 
--- The uploader may remove their own file that no evidence row uses — the
+-- The uploader may remove their own file that no evidence row uses: the
 -- cleanup after an evidence insert that failed right after its upload.
 DROP POLICY IF EXISTS "evidence_delete_own_unreferenced" ON storage.objects;
 CREATE POLICY "evidence_delete_own_unreferenced" ON storage.objects
@@ -453,7 +453,7 @@ CREATE POLICY "evidence_delete_own_unreferenced" ON storage.objects
     )
   );
 
--- Deleting a real item: the app deletes the row first, then its files —
+-- Deleting a real item: the app deletes the row first, then its files,
 -- allowed to admins of the unit the audit trail says the item was in.
 -- Unit that owns a *deleted* item's leftover folder, decided with a view
 -- of every unit (SECURITY DEFINER): NULL while an item with that id exists

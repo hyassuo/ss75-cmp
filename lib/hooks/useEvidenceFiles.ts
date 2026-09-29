@@ -13,7 +13,7 @@ const BUCKET = "evidence-photos";
 
 // Authenticated download (the session's JWT in the Authorization header,
 // storage RLS decides). no-store: the bytes stay out of the browser's
-// HTTP cache too — they exist only in this tab's memory.
+// HTTP cache too: they exist only in this tab's memory.
 async function downloadEvidence(path: string, signal: AbortSignal): Promise<Blob> {
   const { data, error } = await createClient()
     .storage.from(BUCKET)

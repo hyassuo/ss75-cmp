@@ -2,7 +2,7 @@ import { FREQUENCIES } from "@/lib/utils/constants";
 
 // Enum values shared between the request schema sent to Gemini
 // (app/api/ai/analyze-photo/route.ts) and the server-side sanitizer that
-// re-validates its answer — single source of truth, no drift.
+// re-validates its answer: single source of truth, no drift.
 export const CORROSION_TYPES = [
   "Galvanic",
   "Atmospheric",
@@ -50,7 +50,7 @@ export function sanitizeAnalysis(raw: unknown): Record<string, unknown> | null {
     immediateAction: ACTIONS.includes(a.immediateAction as string)
       ? a.immediateAction
       : "Monitor",
-    // Off-list frequency degrades to "no suggestion" — the client applies
+    // Off-list frequency degrades to "no suggestion": the client applies
     // it only when it matches the FREQUENCIES list.
     inspectionFrequency: (FREQUENCIES as readonly string[]).includes(
       a.inspectionFrequency as string

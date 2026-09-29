@@ -114,7 +114,7 @@ export function LoginForm() {
     <main
       style={{
         // body has overflow:hidden (the app shell scrolls internally), so
-        // the login page scrolls itself — landscape phones and the
+        // the login page scrolls itself: landscape phones and the
         // on-screen keyboard can leave less than the card's height.
         height: "100dvh",
         overflowY: "auto",
@@ -156,7 +156,7 @@ export function LoginForm() {
               marginBottom: 6,
             }}
           >
-            SS-75 — Noble Courage
+            SS-75 · Noble Courage
           </div>
           <h1
             style={{

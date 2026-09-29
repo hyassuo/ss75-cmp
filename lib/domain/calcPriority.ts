@@ -39,7 +39,7 @@ type PriorityInputs = Pick<
 
 // Priority as of today. The stored `priority` column is a snapshot taken at
 // the last save, but part of the score (overdue / due-soon escalation)
-// depends on the calendar — an item saved as Medium that later goes overdue
+// depends on the calendar: an item saved as Medium that later goes overdue
 // must read High without anyone re-saving it. Every screen and export uses
 // this instead of the stored value. Null when P or C is unset.
 export function effectivePriority(it: PriorityInputs): ItemPriority | null {

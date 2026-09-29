@@ -2,8 +2,8 @@ import type { Item } from "@/lib/types/domain";
 
 // Item search over the items already loaded in the browser (works offline,
 // no extra query). Every word of the query must appear somewhere in the
-// item — name, IFS object/work order/functional location, mechanism, notes
-// or the zone — ignoring case and accents ("corrosao" finds "Corrosão") and,
+// item: name, IFS object/work order/functional location, mechanism, notes
+// or the zone: ignoring case and accents ("corrosao" finds "Corrosão") and,
 // for codes, punctuation ("313a1" finds "313-A1-01").
 // Best matches first: name starting with the query, then name containing
 // it, then an IFS code, then anything else; archived items last.

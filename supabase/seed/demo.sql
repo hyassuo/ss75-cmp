@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CMP — DEMO SEED DATA (idempotent)
+-- SS-75 CMP: DEMO SEED DATA (idempotent)
 -- =============================================================================
 -- Run in Supabase SQL Editor. Re-run to refresh the demo data.
 --
@@ -7,13 +7,13 @@
 -- zones, with a mix of priorities/SECE/overdue/upcoming dates so the
 -- dashboard, risk matrix, schedule, and status chip have something to show.
 -- Includes pit-depth readings (with growth) and text evidence rows.
--- No image files are uploaded — only metadata.
+-- No image files are uploaded: only metadata.
 --
 -- Every row is tagged with the sentinel "[DEMO]" at the start of `notes`,
 -- and every item this script creates is registered in
 -- public.demo_seed_items. A re-run removes only registered items nobody has
 -- touched since (no audit event besides 'created', no reading/evidence by
--- another user) — a real item can't be swept by typing "[DEMO]" into it.
+-- another user): a real item can't be swept by typing "[DEMO]" into it.
 -- =============================================================================
 
 -- Registry of seeded items. Not exposed to the API (RLS on, no policies).
@@ -37,8 +37,8 @@ BEGIN
 
   -- Idempotency: drop previous demo rows. CASCADE clears readings and
   -- evidences; the audit trail outlives item deletion (hardening round 5),
-  -- so the demo items' history — including the 'deleted' events this
-  -- DELETE writes — is removed explicitly (this script runs as the table
+  -- so the demo items' history (including the 'deleted' events this
+  -- DELETE writes) is removed explicitly (this script runs as the table
   -- owner, which history's append-only grants don't restrict).
   CREATE TEMP TABLE demo_ids ON COMMIT DROP AS
     SELECT i.id FROM public.items i

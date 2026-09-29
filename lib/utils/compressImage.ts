@@ -53,7 +53,7 @@ export async function compressImage(file: File): Promise<CompressResult> {
     const blob = await canvasToBlob(canvas, "image/jpeg", JPEG_QUALITY);
     if (!blob || blob.size >= originalBytes * 0.95) {
       // Compression didn't help (already efficient JPEG, or canvas blew it
-      // up) — keep the original to avoid wasting cycles.
+      // up): keep the original to avoid wasting cycles.
       return { file, compressed: false, originalBytes, finalBytes: originalBytes };
     }
 

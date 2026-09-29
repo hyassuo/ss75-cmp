@@ -1,11 +1,11 @@
-// industrial-inspection-design-system v1.0 — Helcio Yassuo
+// industrial-inspection-design-system v1.0: Helcio Yassuo
 // Colours are CSS custom properties (app/globals.css) so the light and
 // dark themes swap without re-rendering: the values below are var()
 // references, usable anywhere a CSS colour is (inline styles, SVG style).
 // Every text/background pair meets WCAG AA (4.5:1) in both themes,
 // including 10px badge text on its tinted chip (tint(color, 13) on sur2).
 // Field use: tablets in direct sun or dimmed at night.
-// To add transparency use tint() — appending hex alpha ("…" + "20") does
+// To add transparency use tint(): appending hex alpha ("…" + "20") does
 // not work on a var().
 export const DS = {
   // Surfaces
@@ -52,7 +52,7 @@ export const DS = {
   sbAct: "var(--ds-sb-act)",
   sbActTxt: "var(--ds-sb-act-txt)",
 
-  // Typography — values use CSS variables loaded by next/font in app/layout.tsx
+  // Typography: values use CSS variables loaded by next/font in app/layout.tsx
   // (Inter for sans, IBM Plex Mono for mono). Without var(--font-sans) inline
   // styles fall back to system fonts, which is the look that felt off.
   sans: "var(--font-sans), system-ui, -apple-system, sans-serif",

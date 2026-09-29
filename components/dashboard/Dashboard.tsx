@@ -26,7 +26,7 @@ export function Dashboard() {
 
   const visibleZones =
     sysFilter === "All" ? zones : zones.filter((z) => z.system === sysFilter);
-  // Archived items are excluded from every KPI — same rule as AlertBar and
+  // Archived items are excluded from every KPI: same rule as AlertBar and
   // the Zones tab, so all surfaces agree.
   const allItems = visibleZones
     .flatMap((z) => itemsByZone(z.zid))
@@ -313,7 +313,7 @@ export function Dashboard() {
             );
           })}
         </div>
-        {/* No "needs 2+ items" footnote anymore — zoneScore now handles
+        {/* No "needs 2+ items" footnote anymore: zoneScore now handles
             single-item zones, so the asterisk legend is no longer needed. */}
       </div>
 

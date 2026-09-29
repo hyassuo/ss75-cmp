@@ -1,6 +1,6 @@
 // Unsaved item-modal edits, mirrored to localStorage so a dropped
 // connection, an idle logout or a closed tab doesn't lose an inspection
-// that was typed but not saved. Per-browser convenience only — never the
+// that was typed but not saved. Per-browser convenience only: never the
 // source of truth. Every access is guarded: storage can be disabled or
 // full (private mode, quota), and the app must work without it.
 // Keyed per user: on a shared tablet one inspector must never be offered
@@ -11,7 +11,7 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ItemDraft<F> {
   form: F;
-  /** The form as loaded, before the user's edits — tells which fields
+  /** The form as loaded, before the user's edits: tells which fields
    *  the user actually changed when the draft is restored later. */
   baseForm: F;
   /** items.updated_at the edits were based on (for conflict detection). */
@@ -48,7 +48,7 @@ export function saveItemDraft<F>(
   try {
     window.localStorage.setItem(key(userId, itemId), JSON.stringify(draft));
   } catch {
-    // quota / disabled — drafts are best-effort
+    // quota / disabled: drafts are best-effort
   }
 }
 

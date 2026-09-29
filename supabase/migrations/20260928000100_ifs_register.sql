@@ -1,5 +1,5 @@
 -- =============================================================================
--- SS-75 CMP — IFS Equipment Register table (run once)
+-- SS-75 CMP: IFS Equipment Register table (run once)
 -- =============================================================================
 -- Creates the lookup table behind the IFS Object autocomplete in the item
 -- modal. Replaces the previous AI-based stub (which hallucinated objects)

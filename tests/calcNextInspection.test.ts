@@ -19,7 +19,7 @@ describe("calcNextInspection", () => {
     expect(calcNextInspection("2026-01-01", "Quarterly")).toBe("2026-04-02"); // 91 days
   });
 
-  it("Annual is 365 fixed days — drifts one day across a leap year (characterization)", () => {
+  it("Annual is 365 fixed days: drifts one day across a leap year (characterization)", () => {
     expect(calcNextInspection("2024-02-28", "Annual")).toBe("2025-02-27");
   });
 

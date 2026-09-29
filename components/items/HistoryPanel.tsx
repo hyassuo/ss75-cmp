@@ -82,7 +82,7 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
             </div>
             {(h.prev_value || h.new_value) && (
               <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
-                {h.prev_value ?? "—"} → {h.new_value ?? "—"}
+                {h.prev_value ?? "-"} → {h.new_value ?? "-"}
               </div>
             )}
             {h.note && (

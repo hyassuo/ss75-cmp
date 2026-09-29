@@ -27,8 +27,8 @@ import { useShell } from "@/lib/context/ShellContext";
 const MAX_PHOTOS_PER_ITEM = 4;
 // Hard ceiling on how many items can carry photos in one PDF. Without this a
 // 5000-item export with photos would trigger 20 000 storage fetches and lock
-// the browser tab for minutes. Items beyond the cap still appear in the PDF
-// — they just render without thumbnails.
+// the browser tab for minutes. Items beyond the cap still appear in the PDF;
+// they just render without thumbnails.
 const MAX_ITEMS_WITH_PHOTOS = 50;
 
 // Read a Blob into a base64 data URL.
@@ -42,7 +42,7 @@ function blobToDataURL(blob: Blob): Promise<string> {
 }
 
 // Race a promise against a timeout. If the timeout wins, the original
-// promise's resolution is discarded (no cancel — just abandoned).
+// promise's resolution is discarded (no cancel: just abandoned).
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
@@ -60,7 +60,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 }
 
 // Re-encode any displayable image Blob to a JPEG data URL via canvas.
-// @react-pdf only renders JPEG/PNG — evidence stored as HEIC (iPhone) or
+// @react-pdf only renders JPEG/PNG: evidence stored as HEIC (iPhone) or
 // WebP would be silently dropped. Drawing through a canvas normalises the
 // format and downscales to a PDF-thumbnail-friendly size. Falls back to
 // the raw data URL if the browser can't decode the blob.
@@ -93,7 +93,7 @@ async function blobToJpegDataURL(blob: Blob): Promise<string> {
   } catch {
     // Couldn't decode (e.g. HEIC on a browser without support). Only
     // JPEG/PNG can be embedded raw; anything else would be SILENTLY
-    // dropped by @react-pdf — throw so the caller counts it as failed.
+    // dropped by @react-pdf: throw so the caller counts it as failed.
     if (blob.type === "image/jpeg" || blob.type === "image/png") {
       return blobToDataURL(blob);
     }
@@ -103,7 +103,7 @@ async function blobToJpegDataURL(blob: Blob): Promise<string> {
 
 // Load the finished PDF into a tab that was opened synchronously during the
 // click (see exportPDF). window.open() after an await is treated as
-// programmatic and gets popup-blocked — which is why the first click
+// programmatic and gets popup-blocked: which is why the first click
 // "did nothing". We open the tab up front, then point it at the blob URL
 // once generation finishes. The URL is revoked after a minute so the tab
 // has time to load it.
@@ -112,7 +112,7 @@ function showPdfInTab(win: Window | null, blob: Blob, name: string) {
   if (win && !win.closed) {
     win.location.href = url;
   } else {
-    // Tab was blocked/closed — fall back to a same-gesture download.
+    // Tab was blocked/closed: fall back to a same-gesture download.
     const a = document.createElement("a");
     a.href = url;
     a.download = name;
@@ -128,7 +128,7 @@ export function ExportTab() {
   const { toast } = useFeedback();
   const { zones: allZones, itemsByZone, subareas } = useData();
   // With a department picked in the top bar, the export says explicitly
-  // whether it covers that department or everything — a PDF must never
+  // whether it covers that department or everything: a PDF must never
   // look like a department report while holding all of them (or vice versa).
   const { sysFilter } = useShell();
   const [scope, setScope] = useState<"dept" | "all">("dept");
@@ -221,7 +221,7 @@ export function ExportTab() {
       // The unit's whole audit trail (RLS scopes it to the unit), paged past
       // the 1000-row response cap, then narrowed to the exported items plus
       // deleted ones (item_id NULL) so deletions stay on the record. The
-      // only export query with a network dependency — time it out so a
+      // only export query with a network dependency: time it out so a
       // stalled request errors visibly instead of hanging the button on
       // "Generating…" forever.
       const res = await withTimeout(
@@ -320,7 +320,7 @@ export function ExportTab() {
         `${fileBase}.xlsx`
       );
     } catch (e) {
-      // Surface the failure — was previously silent, so a thrown error left
+      // Surface the failure: was previously silent, so a thrown error left
       // the button stuck in "Generating..." with no signal to the user.
       const msg = e instanceof Error ? e.message : String(e);
       toast(`${t("exp.xlsxFail")} ${msg}`, "error");
@@ -338,7 +338,7 @@ export function ExportTab() {
     onProgress: (loaded: number, total: number) => void
   ): Promise<PhotoLoad> {
     const result = new Map<string, PdfPhoto[]>();
-    // Evidence metadata is already in memory — DataContext loads items with
+    // Evidence metadata is already in memory: DataContext loads items with
     // their evidences in one go. Re-querying via supabase.from('evidences')
     // proved fragile (a single stalled request would freeze the export with
     // no recovery), so build the photo job list straight from memory. We
@@ -352,7 +352,7 @@ export function ExportTab() {
       (it.evidences ?? []).some(
         (e) => !!e.file_path && (e.file_type ?? "").startsWith("image/")
       );
-    // Spend the photo budget only on items that actually carry photos —
+    // Spend the photo budget only on items that actually carry photos:
     // slicing `flat` blind meant items in later zones lost their photos
     // even when earlier items had none.
     const withImages = activeFlat.filter(hasImage);
@@ -382,7 +382,7 @@ export function ExportTab() {
     if (!total) return { photos: result, failed, skippedItems };
 
     const supabase = createClient();
-    // Bounded concurrency — N parallel downloads. With per-job timeouts
+    // Bounded concurrency: N parallel downloads. With per-job timeouts
     // a single hung blob can no longer freeze the entire export.
     const CONCURRENCY = 6;
     const PER_PHOTO_TIMEOUT_MS = 12_000;
@@ -392,7 +392,7 @@ export function ExportTab() {
         const job = jobs[next++];
         try {
           // no-store: the photo must not stay in the browser's HTTP cache
-          // (on disk, after sign-out) — only the PDF takes it out (C7).
+          // (on disk, after sign-out): only the PDF takes it out (C7).
           const dl = Promise.resolve(
             supabase.storage
               .from("evidence-photos")
@@ -413,7 +413,7 @@ export function ExportTab() {
           }
         } catch {
           // Count individual failures (timeout, decode error) instead of
-          // aborting the whole PDF — surfaced in the report note.
+          // aborting the whole PDF: surfaced in the report note.
           failed += 1;
         }
         loaded += 1;
@@ -433,7 +433,7 @@ export function ExportTab() {
     // then we redirect it to the blob URL.
     const win = window.open("", "_blank");
     if (win) {
-      // Force a light background + readable text — browsers tinted the
+      // Force a light background + readable text: browsers tinted the
       // default about:blank black in dark mode, which made the placeholder
       // text invisible and looked like "the new tab is just black".
       win.document.write(
@@ -443,7 +443,7 @@ export function ExportTab() {
           "<body style='margin:0;background:#ffffff;color:#1e2d3d;" +
           "font-family:system-ui,sans-serif;padding:32px;font-size:16px'>" +
           "<div style='font-weight:700;margin-bottom:8px'>" +
-          "SS-75 CMP — PDF export</div>" +
+          "SS-75 CMP · PDF export</div>" +
           "<div id='cmp-status' style='color:#445566'>Preparing export…</div>" +
           "</body></html>"
       );
@@ -489,8 +489,8 @@ export function ExportTab() {
       const photosByItem = photoLoad?.photos;
       status("Rendering PDF…");
       // If the user asked for photos and image evidence exists but nothing
-      // loaded, say so rather than silently shipping a photo-less PDF —
-      // distinguishes a load/format problem from "there simply are no
+      // loaded, say so rather than silently shipping a photo-less PDF.
+      // This distinguishes a load/format problem from "there simply are no
       // photos". (failed > 0 implies image evidence existed.)
       if (
         includePhotos &&
@@ -500,7 +500,7 @@ export function ExportTab() {
       ) {
         toast(t("exp.photosUnavailable"), "error");
       }
-      // Lazy-load the PDF chunk only when an export actually runs — keeps
+      // Lazy-load the PDF chunk only when an export actually runs: keeps
       // it out of the dashboard's first-load bundle.
       const [{ pdf }, { PdfDocument }] = await Promise.all([
         import("@react-pdf/renderer"),
@@ -510,7 +510,7 @@ export function ExportTab() {
         ? Array.from(photosByItem.values()).reduce((n, a) => n + a.length, 0)
         : 0;
       // Self-describing report: state in the PDF itself when photos were
-      // dropped (load failures or the per-report cap) — silent omission is
+      // dropped (load failures or the per-report cap): silent omission is
       // the one failure mode a compliance document can't afford.
       let note = "";
       if (includePhotos && photoLoad) {
@@ -520,8 +520,8 @@ export function ExportTab() {
         }
         if (photoLoad.skippedItems > 0) {
           parts.push(
-            `capped at ${MAX_ITEMS_WITH_PHOTOS} items with photos — ` +
-              `${photoLoad.skippedItems} more items have photos not shown`
+            `capped at ${MAX_ITEMS_WITH_PHOTOS} items with photos (` +
+              `${photoLoad.skippedItems} more items have photos not shown)`
           );
         }
         note = "Photos: " + parts.join(" · ");
@@ -548,7 +548,7 @@ export function ExportTab() {
       status(
         `PDF ready (${(blob.size / 1024).toFixed(0)} KB, ${photoCount} photos` +
           (photoLoad?.failed ? `, ${photoLoad.failed} failed` : "") +
-          ") — opening…"
+          "). Opening…"
       );
       showPdfInTab(win, blob, `${fileBase}.pdf`);
     } catch (e) {
@@ -592,7 +592,7 @@ export function ExportTab() {
             marginBottom: 4,
           }}
         >
-          {t("exp.title")} — {activeFlat.length} {t("exp.itemsSuffix")}
+          {t("exp.title")} ({activeFlat.length} {t("exp.itemsSuffix")})
         </div>
         <div style={{ fontSize: DS.fs.md, color: DS.text3, marginBottom: 16 }}>
           {t("exp.format")}
