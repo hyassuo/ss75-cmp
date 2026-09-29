@@ -51,7 +51,6 @@ _(nenhum item aberto)_
 |---|---|------|----------|
 | F1 | P2 | Monitoramento de erros | Sentry ou similar (precisa de conta). |
 | F2 | P2 | Tipos do banco escritos à mão | `lib/types/database.types.ts` → gerar com `supabase gen types typescript --linked` e checar no CI. |
-| F5 | P3 | Migração de versões major | Next 15 → 16, React 18 → 19, Vitest 4 → 5: o Dependabot passou a ignorar majors; fazer como projeto próprio, com os testes E2E como rede de segurança. |
 
 ## Concluídos
 
@@ -72,3 +71,4 @@ _(nenhum item aberto)_
 | E4 | Tema escuro | Botão na barra superior alterna dispositivo → claro → escuro (lembrado em cookie, já aplicado na primeira pintura, sem script inline). Contraste AA em todas as telas nos dois temas (mín. 4,52:1 claro / 5,34:1 escuro, verificado em teste); impressão e PDF sempre claros. |
 | F3 | Testes E2E ampliados | 6 cenários novos: item arquivado (fora das telas e do PDF, dentro do CSV/XLSX; Arquivar/Desarquivar), IA no item (só campos vazios, "Aplicar" sobrescreve, leitura estimada só no Salvar e fora da taxa), SECE sobe a prioridade, conteúdo do PDF (uma linha por item, nota de fotos), página de Usuários e higiene das rotas (JSON inválido, 429, mensagens genéricas), prefetch sem sessão. Mais testes unitários do filtro da saída da IA e checagem SQL entre unidades. Continuam sem teste automático: câmera real, IA real (Gemini) e Realtime. |
 | E5 | Padronização visual | Tailwind removido (o reset base dele foi copiado para o `globals.css`, sem mudança visual); uma escala de fontes em `DS.fs`, sem texto abaixo de 10 px; botões e caixas de mensagem feitos à mão viraram os componentes `Button` e `Notice` em `components/ui/`. |
+| F5 | Migração de versões major | Next 15 → 16 (build com Turbopack; `middleware.ts` virou `proxy.ts`, mesmo CSP com nonce), React 18 → 19, Vitest 4 → 5, ESLint 8 → 9 com config flat (`eslint .`, mesmas regras de antes). Sem mudança de comportamento; unitários, SQL e os 57 cenários E2E passando. |

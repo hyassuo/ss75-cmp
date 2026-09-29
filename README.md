@@ -1,9 +1,9 @@
 # SS-75 CMP — Corrosion Management Plan
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
-Next.js 15 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
-Storage) · inline styles on CSS-variable design tokens (`lib/design/`) ·
-Gemini for AI photo analysis. Node 22 (`.nvmrc`).
+Next.js 16 (App Router, Turbopack, TypeScript strict) · React 19 ·
+Supabase (Postgres, Auth, Storage) · inline styles on CSS-variable design
+tokens (`lib/design/`) · Gemini for AI photo analysis. Node 22 (`.nvmrc`).
 
 ## Setup
 
