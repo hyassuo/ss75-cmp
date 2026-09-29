@@ -167,7 +167,9 @@ a throwaway local stack — no Supabase project, Docker or secrets needed:
 - **`tests/e2e/gateway.mjs`**, playing the Supabase API: proxies `/rest/v1`,
   implements the parts of GoTrue (`/auth/v1`) and Storage (`/storage/v1`)
   the app uses — Storage writes/reads/deletes `storage.objects` *as the
-  caller*, so the real storage policies decide — and offers fault injection
+  caller*, so the real storage policies decide; GoTrue keeps per-user
+  passwords and bans in `auth.users`, "sends" recovery emails to an outbox
+  (`/__ctl/mail`) whose links redirect like the real `/verify` — and offers fault injection
   (HTTP errors, dropped connections, "commit then lose the response",
   delays) for the offline/concurrency scenarios;
 - `next build` + `next start` with the local keys, then
@@ -178,7 +180,10 @@ Scenarios cover the data-integrity flows (failed/lost saves, conflicts,
 local drafts, cancel/delete guards and the audit trail, evidence upload and
 cleanup under RLS, audit-log/CSV/XLSX exports), URL navigation and Back,
 the accessible dialogs and confirmations, phone layout, offline, idle
-sign-out, language and contrast.
+sign-out, language and contrast; password reset (admin "Reset PW",
+"Forgot password?", expired/forwarded links), deactivation ending sessions,
+the photo-analysis role gate, the department scope of Risk Matrix /
+Schedule / Export, and the corrosion-rate data rules.
 
 Setup: `npm ci`, then `cd tests/e2e && npm ci && npx playwright install
 chromium` (Playwright and `pg` are harness-only dependencies with their own
