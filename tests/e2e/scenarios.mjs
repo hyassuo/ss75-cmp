@@ -2392,6 +2392,79 @@ async function main() {
     await sw.context().close();
   });
 
+  // ------------------------------------------------------------------ C4
+  await run("c4rl", "C4: shared rate limits in Postgres (429 + Retry-After), daily photo quotas, memory fallback when the RPC fails", async (c) => {
+    const uid = USERS.insp2;
+    const day = new Date().toISOString().slice(0, 10);
+    const K = { min: `photo:${uid}`, mine: `photo-day:${uid}:${day}`, all: `photo-day:all:${day}` };
+    const count = async (k) => Number((await one("SELECT count FROM rate_limits WHERE key = $1", [k]))?.count ?? 0);
+    const seed = (k, n) =>
+      sql("INSERT INTO rate_limits (key, window_start, count) VALUES ($1, now(), $2) ON CONFLICT (key) DO UPDATE SET window_start = now(), count = $2", [k, n]);
+    const reset = () => sql("DELETE FROM rate_limits WHERE key LIKE 'photo%' OR key LIKE 'forgot-%'");
+    const page = await newPage(c, "insp2");
+    await login(page, "insp2@test.local");
+    // No image in the body: past the limits the route answers 400, so Gemini
+    // is never called (the harness key is a dummy).
+    const post = async () => {
+      const r = await page.request.post(`${APP}/api/ai/analyze-photo`, { headers: { Origin: APP }, data: {} });
+      return { status: r.status(), retry: Number(r.headers()["retry-after"] || 0), body: await r.json().catch(() => ({})) };
+    };
+    try {
+      await reset();
+      // Per-minute burst limit: the counter lives in the database.
+      await seed(K.min, 10);
+      const burst = await post();
+      c.expect(burst.status === 429 && burst.retry >= 1 && burst.retry <= 60, "per-minute counter in Postgres -> 429 with Retry-After 1..60", burst);
+      c.expect((await count(K.mine)) === 0, "a request refused per minute doesn't touch the daily quota");
+      await sql("DELETE FROM rate_limits WHERE key = $1", [K.min]);
+      const ok = await post();
+      c.expect(ok.status === 400 && (await count(K.min)) === 1, "counter cleared in the database -> allowed again (then 400: no image)", ok);
+      c.step(`daily quota rows after a 400 (bad body): mine=${await count(K.mine)} all=${await count(K.all)}`);
+
+      // Daily quota per user.
+      await seed(K.mine, 60);
+      const allBefore = await count(K.all);
+      const mine = await post();
+      c.expect(mine.status === 429 && /Daily photo-analysis limit/.test(mine.body.error || ""), "61st photo of the day for one user -> 429 daily limit", mine);
+      c.expect(mine.retry >= 1 && mine.retry <= 86400, "daily 429 carries a Retry-After", mine.retry);
+      c.expect((await count(K.all)) === allBefore, "a request refused by the per-user quota doesn't count toward the app-wide quota");
+
+      // Daily quota for the whole app.
+      await sql("DELETE FROM rate_limits WHERE key = $1 OR key = $2", [K.mine, K.min]);
+      await seed(K.all, 500);
+      const all = await post();
+      c.expect(all.status === 429 && /Daily photo-analysis limit/.test(all.body.error || ""), "501st photo of the day for the app -> 429 daily limit", all);
+      c.step(`per-user daily counter after an app-wide refusal: ${await count(K.mine)}`);
+
+      // RPC failing (e.g. migration not applied): per-instance memory limit.
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'photo%'");
+      await ctl.fault({ method: "POST", prefix: "/rest/v1/rpc/rate_limit_hit", status: 404, times: -1,
+        body: { code: "PGRST202", message: "Could not find the function public.rate_limit_hit", details: null, hint: null } });
+      const fb = [];
+      for (let n = 0; n < 11; n++) fb.push((await post()).status);
+      await ctl.clear();
+      c.expect(fb.slice(0, 10).every((s) => s === 400) && fb[10] === 429, "RPC down -> memory fallback still allows 10/min then 429 (no 500s)", fb.join(","));
+      c.expect((await count(K.min)) === 0, "nothing written to the database while the RPC fails");
+
+      // Forgot password (public): per-address limit, shared.
+      const anon = await newPage(c, "anon-c4");
+      const forgot = async (email) => (await anon.request.post(`${APP}/api/auth/forgot`, { headers: { Origin: APP }, data: { email } })).status();
+      const f = [];
+      for (let n = 0; n < 4; n++) f.push(await forgot("c4-nobody@test.local"));
+      c.expect(f.join(",") === "200,200,200,429", "forgot: 3 per address per hour, then 429", f.join(","));
+      c.expect((await count("forgot-email:c4-nobody@test.local")) === 4, "forgot counter lives in Postgres");
+      await sql("UPDATE rate_limits SET count = 5 WHERE key LIKE 'forgot-ip:%'");
+      const ipBlocked = await forgot("c4-other@test.local");
+      c.expect(ipBlocked === 429, "forgot: per-client limit -> 429", ipBlocked);
+      c.step(`address counter written although the client was refused: ${await count("forgot-email:c4-other@test.local")}`);
+      await anon.context().close();
+    } finally {
+      await ctl.clear();
+      await reset();
+    }
+    await page.context().close();
+  });
+
   await browser.close();
   await pool.end();
 
