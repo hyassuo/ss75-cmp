@@ -1,6 +1,6 @@
 {
   "name": "ss75-cmp",
-  "version": "1.21.1",
+  "version": "1.21.2",
   "private": true,
   "engines": {
     "node": "22.x"
