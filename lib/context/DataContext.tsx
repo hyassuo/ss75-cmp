@@ -79,7 +79,8 @@ interface DataState {
 export interface EvidenceInput {
   evidence_date: string;
   description: string | null;
-  file_url?: string | null;
+  // No file_url: the legacy column stays empty — a stored link would be a
+  // way to reach a photo outside the session (C7). Files go by file_path.
   file_path: string | null;
   file_name: string | null;
   file_type: string | null;
@@ -504,7 +505,6 @@ export function DataProvider({
         .from("evidences")
         .insert({
           ...ev,
-          file_url: ev.file_url ?? null,
           item_id: itemId,
           created_by: profile.id,
         })
