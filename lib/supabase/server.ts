@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import type { Database } from "@/lib/types/database.types";
 
 export async function createClient() {
-  // Next 15: cookies() is async and must be awaited before use.
+  // cookies() is async (Next 15+; Next 16 removed the sync fallback).
   const cookieStore = await cookies();
 
   return createServerClient<Database>(
@@ -25,7 +25,7 @@ export async function createClient() {
               cookieStore.set(name, value, sessionOpts);
             });
           } catch {
-            // Called from a Server Component — middleware refreshes the session.
+            // Called from a Server Component — the proxy refreshes the session.
           }
         },
       },

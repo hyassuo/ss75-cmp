@@ -40,7 +40,7 @@ export async function updateSession(
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // Without Supabase env configured, don't crash the whole site in
-  // middleware — let requests through so pages can render a clear error.
+  // the proxy — let requests through so pages can render a clear error.
   if (!supabaseUrl || !supabaseKey) {
     return supabaseResponse;
   }
@@ -94,7 +94,7 @@ export async function updateSession(
 
     return supabaseResponse;
   } catch {
-    // Network/auth failure must not 500 every route via middleware.
+    // Network/auth failure must not 500 every route via the proxy.
     return supabaseResponse;
   }
 }

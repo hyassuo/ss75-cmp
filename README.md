@@ -1,9 +1,9 @@
 # SS-75 CMP — Corrosion Management Plan
 
 Production rebuild of the SS-75 Noble Courage Corrosion Management Plan.
-Next.js 15 (App Router, TypeScript strict) · Supabase (Postgres, Auth,
-Storage) · inline styles on CSS-variable design tokens (`lib/design/`) ·
-Gemini for AI photo analysis. Node 22 (`.nvmrc`).
+Next.js 16 (App Router, Turbopack, TypeScript strict) · React 19 ·
+Supabase (Postgres, Auth, Storage) · inline styles on CSS-variable design
+tokens (`lib/design/`) · Gemini for AI photo analysis. Node 22 (`.nvmrc`).
 
 ## Setup
 
@@ -229,7 +229,7 @@ The app is installable (Add to Home Screen / Install app):
   auth'd content stays fresh and private. Bump `VERSION` inside `sw.js`
   to force-invalidate the asset cache on a deploy.
 - Registered by `components/layout/PwaRegister.tsx` (production only).
-- The middleware matcher excludes `sw.js`, `manifest.webmanifest` and
+- The proxy (`proxy.ts`) matcher excludes `sw.js`, `manifest.webmanifest` and
   `offline.html` — they must load without a session.
 
 ## Deploy

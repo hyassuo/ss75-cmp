@@ -9,7 +9,7 @@
  *
  * Bump VERSION to invalidate every cache on the next deploy of this file.
  */
-const VERSION = "v2";
+const VERSION = "v3"; // v3: Next 16 (Turbopack) asset names
 const CACHE = "ss75-cmp-" + VERSION;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png"];

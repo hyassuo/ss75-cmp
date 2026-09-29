@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 //  - every response starts with lockedCsp (below): API JSON, images, the
 //    favicon and their 404 pages need no script, style or connection;
 //  - pages replace it with the per-request nonce policy set by the
-//    middleware (lib/security/csp.ts) — middleware headers win over these;
+//    proxy (proxy.ts, lib/security/csp.ts) — proxy headers win over these;
 //  - the static offline page replaces it with offlineCsp (no script at all;
 //    the later matching rule wins);
 //  - the service worker gets swCsp: a worker script's CSP governs the

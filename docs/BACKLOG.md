@@ -18,6 +18,8 @@ Prioridade: **P1** = fazer já · **P2** = próximo ciclo · **P3** = quando der
 | A6 | P1 | SMTP próprio para os e-mails de autenticação | Sem SMTP próprio o Supabase **só entrega e-mail para membros da equipe do projeto** (2 por hora, sem garantia) — reset de senha e confirmação de cadastro não chegam aos usuários. Supabase → Authentication → Emails → SMTP Settings (ex.: Resend, SendGrid, Amazon SES). |
 | A7 | P1 | Liberar a URL de redefinição de senha | Supabase → Authentication → URL Configuration: *Site URL* = endereço do app; em *Redirect URLs* incluir `https://<endereço do app>/auth/reset`. |
 | A8 | P1 | Aplicar as migrations novas no Supabase | SQL Editor, na ordem: `supabase/migrations/20260929000000_rate_limits.sql` (C4) e `supabase/migrations/20260929000100_active_reads_insert_audit.sql` (C6 + D2). Sem elas o app funciona, mas o limite de requisições fica só por instância, usuários inativos ainda leem as tabelas de referência e inclusões de leituras/evidências não são auditadas. |
+| A9 | P2 | Variáveis do Supabase no ambiente *Preview* da Vercel | Os deploys de preview (um por PR) não têm `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`: só `/login` abre, as outras páginas dão erro 500 (já era assim antes do Next 16). Vercel → Settings → Environment Variables → marcar *Preview* — de preferência apontando para um projeto Supabase de teste, não o de produção. |
+| A10 | P3 | Alinhar a versão do Node na Vercel | Vercel → Settings → Build and Deployment → Node.js Version: está 24.x, mas o app declara 22.x (`engines`, que prevalece). Mudar para 22.x só evita confusão. |
 
 ## B. Decisões tomadas (29/09/2026)
 
@@ -51,7 +53,6 @@ _(nenhum item aberto)_
 |---|---|------|----------|
 | F1 | P2 | Monitoramento de erros | Sentry ou similar (precisa de conta). |
 | F2 | P2 | Tipos do banco escritos à mão | `lib/types/database.types.ts` → gerar com `supabase gen types typescript --linked` e checar no CI. |
-| F5 | P3 | Migração de versões major | Next 15 → 16, React 18 → 19, Vitest 4 → 5: o Dependabot passou a ignorar majors; fazer como projeto próprio, com os testes E2E como rede de segurança. |
 
 ## Concluídos
 
@@ -72,3 +73,4 @@ _(nenhum item aberto)_
 | E4 | Tema escuro | Botão na barra superior alterna dispositivo → claro → escuro (lembrado em cookie, já aplicado na primeira pintura, sem script inline). Contraste AA em todas as telas nos dois temas (mín. 4,52:1 claro / 5,34:1 escuro, verificado em teste); impressão e PDF sempre claros. |
 | F3 | Testes E2E ampliados | 6 cenários novos: item arquivado (fora das telas e do PDF, dentro do CSV/XLSX; Arquivar/Desarquivar), IA no item (só campos vazios, "Aplicar" sobrescreve, leitura estimada só no Salvar e fora da taxa), SECE sobe a prioridade, conteúdo do PDF (uma linha por item, nota de fotos), página de Usuários e higiene das rotas (JSON inválido, 429, mensagens genéricas), prefetch sem sessão. Mais testes unitários do filtro da saída da IA e checagem SQL entre unidades. Continuam sem teste automático: câmera real, IA real (Gemini) e Realtime. |
 | E5 | Padronização visual | Tailwind removido (o reset base dele foi copiado para o `globals.css`, sem mudança visual); uma escala de fontes em `DS.fs`, sem texto abaixo de 10 px; botões e caixas de mensagem feitos à mão viraram os componentes `Button` e `Notice` em `components/ui/`. |
+| F5 | Migração de versões major | Next 15 → 16 (build com Turbopack; `middleware.ts` virou `proxy.ts`, mesmo CSP com nonce), React 18 → 19, Vitest 4 → 5, ESLint 8 → 9 com config flat (`eslint .`, mesmas regras de antes). Sem mudança de comportamento; unitários, SQL e os 57 cenários E2E passando. |

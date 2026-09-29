@@ -1,6 +1,6 @@
 {
   "name": "ss75-cmp",
-  "version": "1.19.1",
+  "version": "1.20.0",
   "private": true,
   "engines": {
     "node": "22.x"
@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -21,18 +21,18 @@
     "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.105.4",
-    "next": "^15.5.26",
-    "react": "^18",
-    "react-dom": "^18"
+    "next": "^16.3.6",
+    "react": "^19",
+    "react-dom": "^19"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "^15.5.26",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.3.6",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.2"
   },
   "overrides": {
     "postcss": "^8.5.28"
