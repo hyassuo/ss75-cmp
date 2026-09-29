@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { fmtShort, today, isOverdue } from "@/lib/utils/format";
 import { SYSTEMS } from "@/lib/utils/constants";
@@ -12,6 +13,11 @@ const TOP_BAND = DS.sbBg; // #2c3e52
 const BOTTOM_BAND = "#243446"; // slightly darker, gives the banded look
 
 export function Topbar() {
+  // "Today" in the device's time zone: the server renders in UTC, so the
+  // date is filled in after hydration (a server/browser mismatch between
+  // 00:00 and 03:00 UTC for Brazil broke hydration).
+  const [todayLabel, setTodayLabel] = useState("");
+  useEffect(() => setTodayLabel(fmtShort(today())), []);
   const { toggleSidebar, sidebarCollapsed, sysFilter, setSysFilter } =
     useShell();
   const { allItems, zones } = useData();
@@ -206,7 +212,7 @@ export function Topbar() {
               flexShrink: 0,
             }}
           >
-            {fmtShort(today())}
+            {todayLabel}
           </div>
         </div>
       </div>
