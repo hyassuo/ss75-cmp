@@ -90,11 +90,14 @@ IFS register read-only at runtime).
   instead.
 
 Then adopt the migration history once, so `supabase db push` only applies
-future migrations, and check for drift:
+future migrations, and check for drift. List every migration the database
+already has — in production that includes the two of 29/09
+(`20260929000000_rate_limits`, `20260929000100_active_reads_insert_audit`),
+which were applied by hand in the SQL Editor:
 
 ```
 supabase link --project-ref <ref>
-supabase migration repair --status applied 20260928000000 20260928000100
+supabase migration repair --status applied 20260928000000 20260928000100 20260929000000 20260929000100
 supabase db diff --linked   # should report no schema differences
 ```
 
@@ -224,9 +227,22 @@ Supabase Storage bucket `evidence-photos`. Path convention:
 
 RLS scopes SELECT, INSERT and DELETE to the owning item's unit, so
 photos never leak across units (see hardening round 5 for the
-`objects.name` qualification this depends on). Files are displayed in the modal via
-signed URLs. The PDF export embeds photo thumbnails (with a note when some
-could not be loaded).
+`objects.name` qualification this depends on).
+
+Photos are only visible inside the signed-in session: the app never
+creates a link to a file (no signed or public URLs). When an item is
+opened, its photos are downloaded with the user's session
+(`storage.download()`, JWT in the `Authorization` header, 4 at a time,
+`cache: "no-store"`) and shown from `blob:` object URLs that exist only in
+that tab's memory; closing the item revokes them. A photo opened in a new
+tab gets its own `blob:` URL, revoked a minute later (the tab keeps
+showing it; a reload finds nothing). PDF attachments download on the first
+click. A file that fails to load (offline, storage error) shows a message
+and a retry of its own. The service worker never touches Supabase
+requests, so nothing lands in Cache Storage, and the CSP's `img-src` does
+not list the Supabase origin at all. Taking photos out of the app is an
+explicit action: the PDF export embeds them (with a note when some could
+not be loaded). CSV/XLSX exports list file names only, never a link.
 
 ## PWA
 
