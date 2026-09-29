@@ -522,6 +522,26 @@ async function handleStorage(req, res, sub, query) {
     return send(res, 200, gone);
   }
 
+  // GET /object/{bucket}/{path} | /object/authenticated/{bucket}/{path}
+  // — download as the caller (storage.from().download(); the PDF export's
+  // photos): the object is served only if the caller's RLS can see its row.
+  if (req.method === "GET" && seg.length >= 3) {
+    const s = seg[1] === "authenticated" ? seg.slice(2) : seg.slice(1);
+    const bucket = s[0];
+    const name = s.slice(1).join("/");
+    const rows = await asCaller(claims, async (c) =>
+      (await c.query("SELECT metadata FROM storage.objects WHERE bucket_id = $1 AND name = $2", [bucket, name])).rows
+    ).catch((e) => e);
+    if (rows instanceof Error) return pgToStorage(res, rows);
+    let bytes = null;
+    try { bytes = fs.readFileSync(fileOf(bucket, name)); } catch {}
+    if (!rows.length || !bytes) return storageErr(res, 400, 404, "not_found", "Object not found");
+    return send(res, 200, bytes, {
+      "Content-Type": rows[0].metadata?.mimetype || "application/octet-stream",
+      "Cache-Control": "no-cache",
+    });
+  }
+
   // POST|PUT /object/{bucket}/{path}  (multipart or raw body)
   if ((req.method === "POST" || req.method === "PUT") && seg.length >= 3) {
     const bucket = seg[1];

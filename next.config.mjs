@@ -1,27 +1,30 @@
 import { readFileSync } from "node:fs";
 
-// CSP tuned for Next.js App Router + Supabase + Gemini:
-// - inline styles are used throughout the design system -> style-src allows them
-// - Next injects inline bootstrap scripts -> script-src allows 'unsafe-inline'
-//   (App Router doesn't emit nonces by default); we still lock object/base/frame
-//   and restrict where the app may connect/post.
-const SUPABASE = "https://*.supabase.co";
-const GEMINI = "https://generativelanguage.googleapis.com";
-const csp = [
+// Content-Security-Policy, three layers:
+//  - every response starts with lockedCsp (below): API JSON, images, the
+//    favicon and their 404 pages need no script, style or connection;
+//  - pages replace it with the per-request nonce policy set by the
+//    middleware (lib/security/csp.ts) — middleware headers win over these;
+//  - the static offline page replaces it with offlineCsp (no script at all;
+//    the later matching rule wins);
+//  - the service worker gets swCsp: a worker script's CSP governs the
+//    worker itself, and it must fetch/cache same-origin pages and assets.
+const offlineCsp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: " + SUPABASE,
-  "font-src 'self' data:",
-  `connect-src 'self' ${SUPABASE} ${GEMINI}`,
+  "script-src 'none'",
+  "style-src 'unsafe-inline'",
+  "img-src 'self' data:",
   "object-src 'none'",
-  "base-uri 'self'",
+  "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
 
+const swCsp = "default-src 'self'";
+
+const lockedCsp = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
+
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: csp },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -33,6 +36,7 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
+  { key: "Content-Security-Policy", value: lockedCsp },
 ];
 
 // Only the version reaches the client bundle (importing package.json in a
@@ -46,7 +50,17 @@ const nextConfig = {
   poweredByHeader: false,
   env: { NEXT_PUBLIC_APP_VERSION: version },
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      {
+        source: "/offline.html",
+        headers: [{ key: "Content-Security-Policy", value: offlineCsp }],
+      },
+      {
+        source: "/sw.js",
+        headers: [{ key: "Content-Security-Policy", value: swCsp }],
+      },
+    ];
   },
 };
 

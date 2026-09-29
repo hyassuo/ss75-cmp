@@ -47,7 +47,9 @@
     h1 { font-size: 17px; margin: 0 0 10px; }
     p { font-size: 13px; color: #445566; line-height: 1.6; margin: 0 0 6px; }
     p.en { color: #4f677f; margin-bottom: 20px; }
-    button {
+    a.retry {
+      display: inline-block;
+      text-decoration: none;
       background: #1a5cb5;
       color: #ffffff;
       border: none;
@@ -65,7 +67,9 @@
     <h1>Sem conexão</h1>
     <p>O SS-75 CMP precisa de conexão com a internet. Verifique a rede e tente novamente.</p>
     <p class="en">SS-75 CMP needs an internet connection. Check your network and try again.</p>
-    <button onclick="location.reload()">Tentar novamente / Retry</button>
+    <!-- A link, not a script: the page's CSP allows no JavaScript. An empty
+         href reloads the current address, query string included. -->
+    <a class="retry" href="">Tentar novamente / Retry</a>
   </div>
 </body>
 </html>

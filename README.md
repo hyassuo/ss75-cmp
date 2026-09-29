@@ -183,7 +183,12 @@ the accessible dialogs and confirmations, phone layout, offline, idle
 sign-out, language and contrast; password reset (admin "Reset PW",
 "Forgot password?", expired/forwarded links), deactivation ending sessions,
 the photo-analysis role gate, the department scope of Risk Matrix /
-Schedule / Export, and the corrosion-rate data rules.
+Schedule / Export, and the corrosion-rate data rules. The browser enforces
+the app's real Content-Security-Policy: any violation (a
+`securitypolicyviolation` event or a "Refused to …" console report, popups
+included) fails the scenario; `csp1`–`csp3` check the nonce policy itself,
+the PDF export with a photo, and the offline page (direct and as the
+service worker's fallback).
 
 Setup: `npm ci`, then `cd tests/e2e && npm ci && npx playwright install
 chromium` (Playwright and `pg` are harness-only dependencies with their own
