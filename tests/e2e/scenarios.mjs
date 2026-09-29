@@ -2157,8 +2157,11 @@ async function main() {
       await insp.locator('input[type="email"]').fill(EMAIL);
       await insp.locator('input[type="password"]').fill(PASSWORD);
       await insp.getByRole("button", { name: /sign in/i }).click();
-      const err = insp.getByRole("alert");
-      await err.first().waitFor({ timeout: 10000 }).catch(() => {});
+      // The login form's own alert: Next's route announcer is also an
+      // (empty) role=alert, so an unscoped locator can resolve before the
+      // sign-in answer arrives.
+      const err = insp.locator('form [role="alert"]');
+      await err.filter({ hasText: /\S/ }).first().waitFor({ timeout: 10000 }).catch(() => {});
       const errText = (await err.allInnerTexts()).join(" | ");
       c.step(`sign-in error shown: "${errText}"`);
       c.expect(/This account is deactivated\. Contact your administrator\./.test(errText) && q(insp).pathname === "/login", "new sign-in refused: 'This account is deactivated…', stays on /login", { errText, url: insp.url() });
