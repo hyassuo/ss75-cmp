@@ -24,6 +24,11 @@ const en = {
   // Header
   "header.title": "Corrosion Management Plan",
   "header.subtitle": "Noble Courage SS-75",
+  "search.label": "Search items",
+  "search.placeholder": "Search items (name, IFS, WO, zone…)  /",
+  "search.none": "No items found.",
+  "search.count": (n: number) => (n === 1 ? "1 item found." : `${n} items found.`),
+  "search.archived": "archived",
   "header.departments": "Departments:",
   "status.healthy": "HEALTHY",
   "status.attention": "ATTENTION",
@@ -342,6 +347,10 @@ const en = {
   "cons.3": "Moderate",
   "cons.4": "Serious",
   "cons.5": "Critical",
+  "risk.level.Low": "Low risk",
+  "risk.level.Medium": "Medium risk",
+  "risk.level.High": "High risk",
+  "risk.level.Critical": "Critical risk",
   "risk.legend": "Legend",
 
   // SECE display
@@ -462,6 +471,11 @@ type Translations = Partial<Record<Key, Value>>;
 const pt: Translations = {
   // Header
   "header.title": "Plano de Gerenciamento de Corrosão",
+  "search.label": "Buscar itens",
+  "search.placeholder": "Buscar itens (nome, IFS, OS, zona…)  /",
+  "search.none": "Nenhum item encontrado.",
+  "search.count": (n: number) => (n === 1 ? "1 item encontrado." : `${n} itens encontrados.`),
+  "search.archived": "arquivado",
   "header.departments": "Departamentos:",
   "status.healthy": "SAUDÁVEL",
   "status.attention": "ATENÇÃO",
@@ -781,6 +795,10 @@ const pt: Translations = {
   "cons.3": "Moderada",
   "cons.4": "Séria",
   "cons.5": "Crítica",
+  "risk.level.Low": "Risco baixo",
+  "risk.level.Medium": "Risco médio",
+  "risk.level.High": "Risco alto",
+  "risk.level.Critical": "Risco crítico",
   "risk.legend": "Legenda",
 
   // SECE

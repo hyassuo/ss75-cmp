@@ -7,6 +7,7 @@ import { SYSTEMS } from "@/lib/utils/constants";
 import { useShell } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useLang } from "@/lib/context/LangContext";
+import { ItemSearch } from "@/components/layout/ItemSearch";
 
 // Subtle band tones for the two-tone header.
 const TOP_BAND = DS.sbBg; // #2c3e52
@@ -217,7 +218,7 @@ export function Topbar() {
         </div>
       </div>
 
-      {/* ── Bottom band: dept filter with pill selector ───────────────────── */}
+      {/* ── Bottom band: dept filter with pill selector + item search ─────── */}
       <div
         className="tb-band-bottom"
         style={{
@@ -225,7 +226,8 @@ export function Topbar() {
           display: "flex",
           alignItems: "center",
           gap: 10,
-          flexWrap: "nowrap",
+          // The search drops to its own line on narrow screens (globals.css).
+          flexWrap: "wrap",
           borderTop: "1px solid rgba(0,0,0,0.18)",
         }}
       >
@@ -269,6 +271,7 @@ export function Topbar() {
             );
           })}
         </div>
+        <ItemSearch />
       </div>
     </div>
   );

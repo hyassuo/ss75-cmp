@@ -205,6 +205,27 @@ body {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+/* Item search (components/layout/ItemSearch.tsx): right-aligned next to
+   the department pills; its own full-width line on phones. */
+.tb-search {
+  margin-left: auto;
+  width: 280px;
+  flex-shrink: 0;
+}
+.tb-search input::placeholder {
+  color: #9db5cc;
+}
+@media (max-width: 768px) {
+  .tb-search {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+@media (pointer: coarse) {
+  .tb-search input {
+    height: 44px !important;
+  }
+}
 .tb-pills::-webkit-scrollbar {
   display: none;
 }

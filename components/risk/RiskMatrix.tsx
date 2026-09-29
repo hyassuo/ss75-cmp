@@ -13,10 +13,23 @@ import { useShell } from "@/lib/context/ShellContext";
 import { useScopedZones } from "@/lib/hooks/useScopedZones";
 import { pressable } from "@/lib/utils/a11y";
 
-function cellClr(p: number, c: number): string {
+type Level = "Low" | "Medium" | "High" | "Critical";
+
+function cellLevel(p: number, c: number): Level {
   const v = p * c;
-  return v >= 15 ? DS.red : v >= 8 ? DS.ora : v >= 4 ? DS.yel : DS.grn;
+  return v >= 15 ? "Critical" : v >= 8 ? "High" : v >= 4 ? "Medium" : "Low";
 }
+
+// Colour plus a shape per level: the four colours are close in brightness,
+// so colour-blind users (and a phone in direct sunlight) read the shape.
+// These are RPN bands of the matrix (risk.level.*), not the item Priority
+// (calcPriority also weighs SECE and due dates), hence their own names.
+const LEVEL: Record<Level, { color: string; glyph: string; range: string }> = {
+  Low: { color: DS.grn, glyph: "\u25CB", range: "RPN \u2264 3" }, // white circle
+  Medium: { color: DS.yel, glyph: "\u25C7", range: "RPN 4\u20137" }, // white diamond
+  High: { color: DS.ora, glyph: "\u25B3", range: "RPN 8\u201314" }, // white triangle
+  Critical: { color: DS.red, glyph: "\u25B2", range: "RPN \u2265 15" }, // black triangle
+};
 
 export function RiskMatrix() {
   const { itemsByZone } = useData();
@@ -243,7 +256,8 @@ export function RiskMatrix() {
                     </div>
                   </td>
                   {[1, 2, 3, 4, 5].map((c) => {
-                    const clr = cellClr(p, c);
+                    const level = cellLevel(p, c);
+                    const clr = LEVEL[level].color;
                     const its = withRisk.filter(
                       (i) => i.prob === p && i.cons === c
                     );
@@ -266,16 +280,22 @@ export function RiskMatrix() {
                           }}
                         >
                           <div
+                            title={`${t(`risk.level.${level}`)} · RPN ${p * c}`}
                             style={{
                               fontFamily: "monospace",
-                              fontSize: 9,
+                              fontSize: 10,
                               color: clr,
                               fontWeight: 800,
                               marginBottom: 3,
-                              opacity: 0.8,
+                              display: "flex",
+                              justifyContent: "space-between",
                             }}
                           >
-                            {p * c}
+                            <span>{p * c}</span>
+                            <span aria-hidden="true" style={{ fontSize: 12, lineHeight: 1 }}>
+                              {LEVEL[level].glyph}
+                            </span>
+                            <span className="sr-only">{t(`risk.level.${level}`)}</span>
                           </div>
                           {its.map((it) => (
                             <div
@@ -317,25 +337,20 @@ export function RiskMatrix() {
             flexWrap: "wrap",
           }}
         >
-          {[
-            [DS.grn, "Low (RPN ≤ 3)"],
-            [DS.yel, "Medium (RPN 4-7)"],
-            [DS.ora, "High (RPN 8-14)"],
-            [DS.red, "Critical (RPN ≥ 15)"],
-          ].map((pair) => (
+          {(["Low", "Medium", "High", "Critical"] as const).map((lv) => (
             <div
-              key={pair[1]}
+              key={lv}
               style={{ display: "flex", gap: 6, alignItems: "center" }}
             >
-              <div
-                style={{
-                  width: 10,
-                  height: 10,
-                  background: pair[0],
-                  borderRadius: 2,
-                }}
-              />
-              <span style={{ fontSize: 11, color: DS.text3 }}>{pair[1]}</span>
+              <span
+                aria-hidden="true"
+                style={{ color: LEVEL[lv].color, fontWeight: 800, fontSize: 13 }}
+              >
+                {LEVEL[lv].glyph}
+              </span>
+              <span style={{ fontSize: 11, color: DS.text3 }}>
+                {t(`risk.level.${lv}`)} ({LEVEL[lv].range})
+              </span>
             </div>
           ))}
         </div>
