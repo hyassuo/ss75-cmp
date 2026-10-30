@@ -5150,7 +5150,7 @@ async function main() {
   // Same browser, two users of different units, one after the other within
   // the sign-in preload's 30 s window (a shared tablet offshore): the
   // second user must never see the first one's data, not even for a frame.
-  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser: only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
+  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser: only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again; C9: sign-out clears the user's local drafts", async (c) => {
     const OTHER = { id: "00000000-0000-0000-0000-00000000f001", email: "other1@test.local", item: "00000000-0000-0000-0000-0000000e2ef1" };
     await sql("INSERT INTO public.units (code, name) VALUES ('E2E-99', 'E2E other unit') ON CONFLICT (code) DO NOTHING");
     await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [OTHER.id, OTHER.email]);
@@ -5195,8 +5195,19 @@ async function main() {
     const totalA = await kpiTotal();
     c.expect(totalA > 1000, `insp1 (SS-75) sees its unit's items (${totalA})`);
 
+    // C9: an explicit sign-out leaves none of this user's unsaved item
+    // edits on the device (other users' stay; an idle sign-out keeps them).
+    await page.evaluate((uid) => {
+      const d = JSON.stringify({ form: { notes: "x" }, baseForm: { notes: "" }, baseUpdatedAt: "t", savedAt: Date.now() });
+      localStorage.setItem(`ss75-cmp.itemDraft.${uid}.00000000-0000-0000-0000-0000000e2e01`, d);
+      localStorage.setItem("ss75-cmp.itemDraft.00000000-0000-0000-0000-00000000c002.00000000-0000-0000-0000-0000000e2e01", d);
+    }, USERS.insp1);
     const t0 = Date.now();
     await signOut();
+    const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("ss75-cmp.itemDraft.")));
+    c.expect(!left.some((k) => k.includes("00000000-0000-0000-0000-00000000c001")) && left.some((k) => k.includes("00000000-0000-0000-0000-00000000c002")),
+      "sign-out removed insp1's local drafts, kept another user's", left);
+    await page.evaluate(() => localStorage.removeItem("ss75-cmp.itemDraft.00000000-0000-0000-0000-00000000c002.00000000-0000-0000-0000-0000000e2e01"));
     await signIn(OTHER.email);
     const totalB = await kpiTotal();
     c.step(`other1 signed in and loaded ${Date.now() - t0} ms after insp1 signed out`);
