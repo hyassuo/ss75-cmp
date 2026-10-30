@@ -4,6 +4,21 @@
 -- Run once in Supabase SQL Editor. Idempotent: safe to re-run.
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- For databases created before security round 5 only (see README, "Existing
+-- database"): a database created from supabase/migrations/ already has all of
+-- this, in newer versions.
+-- Run on a newer schema (supabase/migrations/, or after hardening-5.sql) this
+-- file would weaken it: it redefines audit_item_changes() with the v1.3 body,
+-- which stops auditing every field added since. Refuse; nothing is changed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'schema-v130.sql is only for databases older than security round 5 (is_pristine_draft exists) and would weaken this one. Nothing was changed.';
+  END IF;
+END $$;
+
 -- 1) DROPS risk flag: contributes to priority weight (handoff: priority
 --    uses it like SECE but with a smaller bump).
 ALTER TABLE public.items

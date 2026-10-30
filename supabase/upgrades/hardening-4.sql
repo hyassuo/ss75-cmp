@@ -46,6 +46,22 @@
 --       migration operations via the service role. Reads (zones_select) stay.
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- For databases created before security round 5 only (see README, "Existing
+-- database"): a database created from supabase/migrations/ already has all of
+-- this, in newer versions.
+-- Run on a newer schema (supabase/migrations/, or after hardening-5.sql) this
+-- file would weaken it: it redefines the evidence-photos delete policy with
+-- an unqualified name and puts back the FOR ALL admin policy on profiles.
+-- Refuse; nothing is changed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'hardening-4.sql is only for databases older than security round 5 (is_pristine_draft exists) and would weaken this one. Nothing was changed.';
+  END IF;
+END $$;
+
 -- FIX 1: profiles SELECT: admins see only their own unit ----------------------
 DROP POLICY IF EXISTS "profiles_select_self_or_admin" ON public.profiles;
 CREATE POLICY "profiles_select_self_or_admin" ON public.profiles

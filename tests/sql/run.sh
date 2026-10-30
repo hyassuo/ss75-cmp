@@ -8,8 +8,9 @@
 #
 # Scenarios:
 #   fresh    every file in supabase/migrations/, in order (run twice: idempotency)
-#   upgrade  fresh install, then every in-place upgrade file in README order,
-#            ending with the latest hardening round
+#   upgrade  baseline with round 5 removed (pre-round5.sql), then every
+#            in-place upgrade file in README order, ending with the latest
+#            hardening round
 #
 # Usage: tests/sql/run.sh            (from the repo root or anywhere)
 # Env:   PG_BIN       directory with initdb/pg_ctl (auto-detected)
@@ -293,8 +294,16 @@ check "re-running the demo seed leaves no orphaned history" "$(su_sql "SELECT co
 check "demo seed loads its items" "$(su_sql "SELECT count(*) > 20 FROM items WHERE notes LIKE '[DEMO]%'")" "t"
 check "demo seed never removes an unregistered item" "$(su_sql "SELECT count(*) FROM items WHERE id = '$REAL'")" "1"
 check "rollback-v140 refuses to run under round 5" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/rollback-v140.sql" 2>&1 | grep -c 'not compatible with security round 5')" "1"
+for f in schema-v130 schema-v140 security-fixes hardening hardening-3 hardening-4; do
+  check "$f.sql refuses to run on a current schema" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/$f.sql" 2>&1 | grep -c "$f.sql is only for databases older than security round 5")" "1"
+done
+check "...and the storage policies stay qualified" "$(su_sql "SELECT count(*) FROM pg_policy WHERE polrelid = 'storage.objects'::regclass AND pg_get_expr(polqual, polrelid) || COALESCE(pg_get_expr(polwithcheck, polrelid), '') LIKE '%foldername(i%.name)%'")" "0"
+check "...and no FOR ALL admin policy came back on profiles" "$(su_sql "SELECT count(*) FROM pg_policy WHERE polname = 'profiles_admin_all'")" "0"
 
+# The pre-round-5 files refuse to run on a round-5 schema, so the chain
+# starts from the baseline with round 5's marker removed (pre-round5.sql).
 scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql \
+  tests/sql/pre-round5.sql \
   supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
   supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql supabase/upgrades/hardening-5.sql \
   supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql \

@@ -82,10 +82,14 @@ IFS register read-only at runtime).
 
 - `hardening-5.sql` is security round 5 (authorship, an audit trail that
   survives deletion, the storage-policy fix, the server-side draft sweep;
-  details in its header). It depends on the v1.4 columns. If you ever
-  re-run an older file (`security-fixes`, `hardening*`, `schema-v130/140`),
-  re-run `hardening-5.sql` afterwards: older rounds redefine some objects
-  with weaker versions.
+  details in its header). It depends on the v1.4 columns.
+- The older files (`schema-v130/140`, `security-fixes`, `hardening`,
+  `hardening-3`, `hardening-4`) redefine some objects with weaker versions
+  (e.g. a photo policy that opens every unit's photos), so they refuse to
+  run on a database that already has round 5, including any database
+  created from `migrations/`: they are only for the chain above. The SQL
+  Editor runs a file as one transaction, so a refusal changes nothing (with
+  `psql`, use `-v ON_ERROR_STOP=1`).
 - `rollback-v140.sql` refuses to run under round 5: restore a backup
   instead.
 

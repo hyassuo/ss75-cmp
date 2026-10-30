@@ -1197,6 +1197,9 @@ UNION ALL SELECT 'history',   count(*)::text FROM public.history;
 --
 --   UPDATE public.zones SET system = 'Third Party' WHERE zid = 'Z14';
 --
--- If the schema was provisioned before the security review, run
--- supabase/upgrades/security-fixes.sql (idempotent) to apply the RLS hardening.
+-- The files of supabase/upgrades/ are for databases created before this
+-- baseline (README, "Existing database"); never run them on a database
+-- created from this file. The pre-round-5 ones (security-fixes, hardening,
+-- hardening-3/4, schema-v130/140) would put back older, weaker objects, so
+-- they refuse to run on it.
 -- =============================================================================

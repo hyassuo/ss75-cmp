@@ -20,6 +20,22 @@
 --        we leave it that way (no policy created).
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- For databases created before security round 5 only (see README, "Existing
+-- database"): a database created from supabase/migrations/ already has all of
+-- this, in newer versions.
+-- Run on a newer schema (supabase/migrations/, or after hardening-5.sql) this
+-- file would weaken it: it redefines the evidence-photos upload policy with
+-- an unqualified name (uploads into any unit's folders). Refuse; nothing is
+-- changed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'hardening-3.sql is only for databases older than security round 5 (is_pristine_draft exists) and would weaken this one. Nothing was changed.';
+  END IF;
+END $$;
+
 -- FIX 1: items UPDATE: prevent unit_id transfer ------------------------------
 DROP POLICY IF EXISTS "items_update_inspector_admin" ON public.items;
 CREATE POLICY "items_update_inspector_admin" ON public.items

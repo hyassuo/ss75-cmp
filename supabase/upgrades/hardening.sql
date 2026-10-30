@@ -14,6 +14,21 @@
 -- is admin-only through the app.
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- For databases created before security round 5 only (see README, "Existing
+-- database"): a database created from supabase/migrations/ already has all of
+-- this, in newer versions.
+-- Run on a newer schema (supabase/migrations/, or after hardening-5.sql) this
+-- file would weaken it: it redefines handle_new_user() with the old
+-- hard-coded bootstrap admin. Refuse; nothing is changed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'hardening.sql is only for databases older than security round 5 (is_pristine_draft exists) and would weaken this one. Nothing was changed.';
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE

@@ -33,6 +33,22 @@
 --        Fix: creators may delete items they created in their own unit.
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- For databases created before security round 5 only (see README, "Existing
+-- database"): a database created from supabase/migrations/ already has all of
+-- this, in newer versions.
+-- Run on a newer schema (supabase/migrations/, or after hardening-5.sql) this
+-- file would weaken it: it redefines the evidence-photos read policy with an
+-- unqualified name (opens every unit's photos) and older authorship and
+-- draft-delete rules. Refuse; nothing is changed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'security-fixes.sql is only for databases older than security round 5 (is_pristine_draft exists) and would weaken this one. Nothing was changed.';
+  END IF;
+END $$;
+
 
 -- FIX 1: profiles column-level grants ---------------------------------------
 REVOKE UPDATE ON public.profiles FROM authenticated;
