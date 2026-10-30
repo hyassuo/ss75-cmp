@@ -1277,7 +1277,7 @@ async function main() {
     await page.context().close();
   });
 
-  await run("n5", "Deep link while logged out -> /login?next= -> item; open redirect blocked", async (c) => {
+  await run("n5", "Deep link while logged out -> /login?next= -> item; open redirect blocked (incl. TAB and dot-segment tricks)", async (c) => {
     const page = await newPage(c, "anon");
     await page.goto(`${APP}/dashboard?tab=zones&item=${ID.nav}`);
     await page.waitForURL(/\/login/, { timeout: 15000 });
@@ -1291,7 +1291,7 @@ async function main() {
     c.expect((await modalOpen(page)) && (await title(page)) === "E2E Nav Target", "after login the shared item is open", page.url());
     await shot(c, page, "landed");
     await page.context().close();
-    for (const evil of ["https://evil.example", "//evil.example", "/\\evil.example"]) {
+    for (const evil of ["https://evil.example", "//evil.example", "/\\evil.example", "/\t/evil.example", "/.//evil.example"]) {
       const p = await newPage(c, "anon");
       await p.goto(`${APP}/login?next=${encodeURIComponent(evil)}`);
       await p.locator('input[type="email"]').fill("insp1@test.local");
