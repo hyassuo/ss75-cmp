@@ -1477,6 +1477,7 @@ const API_ERRORS_PT: Record<string, string> = {
   "Could not create user": "Não foi possível criar o usuário.",
   "User created but could not be activated": "Usuário criado, mas não foi possível ativá-lo.",
   "User id required": "Usuário não informado.",
+  "Invalid user id": "Identificador de usuário inválido.",
   "You cannot delete yourself.": "Você não pode excluir a própria conta.",
   "User not found": "Usuário não encontrado.",
   "Cannot delete the only active admin.": "Não é possível excluir o único administrador ativo.",

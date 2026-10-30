@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rateLimitShared } from "@/lib/utils/rateLimit";
+import { canonicalUuid } from "@/lib/utils/uuid";
 import type { UserRole } from "@/lib/types/domain";
 
 export const runtime = "nodejs";
@@ -31,15 +32,21 @@ export async function POST(request: Request) {
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const { id, role, active } = body;
-  if (!id) {
+  const { role, active } = body;
+  if (!body.id) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
+  }
+  // Canonical (lower-case) form before any comparison or query: an
+  // upper-case copy of the admin's own id must not pass as someone else.
+  const id = canonicalUuid(body.id);
+  if (!id) {
+    return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
   }
   if (role && !["admin", "inspector", "viewer"].includes(role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 
-  const isSelf = id === guard.ctx.userId;
+  const isSelf = id === canonicalUuid(guard.ctx.userId);
   const demotingSelf = isSelf && role && role !== "admin";
   const deactivatingSelf = isSelf && active === false;
   if (demotingSelf || deactivatingSelf) {

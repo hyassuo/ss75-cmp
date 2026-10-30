@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rateLimitShared } from "@/lib/utils/rateLimit";
+import { canonicalUuid } from "@/lib/utils/uuid";
 
 export const runtime = "nodejs";
 
@@ -26,11 +27,16 @@ export async function POST(request: Request) {
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const { id } = body;
-  if (!id) {
+  if (!body.id) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
   }
-  if (id === guard.ctx.userId) {
+  // Canonical (lower-case) form before any comparison or query: an
+  // upper-case copy of the admin's own id must not pass as someone else.
+  const id = canonicalUuid(body.id);
+  if (!id) {
+    return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+  }
+  if (id === canonicalUuid(guard.ctx.userId)) {
     return NextResponse.json(
       { error: "You cannot delete yourself." },
       { status: 400 }
