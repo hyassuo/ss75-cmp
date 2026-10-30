@@ -763,10 +763,10 @@ CREATE TRIGGER trg_subareas_author
 -- SECTION 5: AUTH HOOK: auto-create profile on signup
 -- =============================================================================
 
--- NOTE: 'hyassuo@gmail.com' is the bootstrap admin (auto-active on first
--- sign-in so the very first login works). After the first admin exists,
--- this special case can be removed by re-running this function definition
--- without the email checks.
+-- NOTE: 'hyassuo@gmail.com' was the bootstrap admin (auto-active on first
+-- sign-in so the very first login worked). Removed by
+-- 20261030000100_no_bootstrap_admin.sql: every new account is an inactive
+-- viewer, and a new project's first admin is promoted by hand (README).
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE

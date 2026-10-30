@@ -53,10 +53,17 @@ the CLI, paste the two migration files and then the seed into the SQL
 Editor, in that order: every file is idempotent.
 
 **Before opening the app to users:** in Supabase → Authentication, turn
-**off** public sign-ups and turn **on** email confirmation. The baseline
-auto-promotes the first sign-in of `hyassuo@gmail.com` to admin (the
-bootstrap account); every other account is created by an admin on the
-**Users** page and starts inactive otherwise.
+**off** public sign-ups and turn **on** email confirmation. Every new
+account starts as an inactive viewer (no address is special); create the
+first admin in Supabase → Authentication → Users → *Add user*, then
+promote it in the SQL Editor:
+
+```sql
+UPDATE public.profiles SET role = 'admin', active = true
+ WHERE email = '<your address>';
+```
+
+Every other account is created by an admin on the **Users** page.
 
 **Auth emails** (password reset, confirmation): Supabase's built-in mailer
 only delivers to members of the project's team (2/hour), so configure a

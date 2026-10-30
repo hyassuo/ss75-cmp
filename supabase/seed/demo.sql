@@ -30,7 +30,8 @@ BEGIN
   -- Anchor unit and admin (used for created_by / updated_by attribution).
   SELECT id INTO v_unit FROM public.units WHERE code = 'SS-75' LIMIT 1;
   SELECT id INTO v_admin FROM public.profiles
-    WHERE email = 'hyassuo@gmail.com' LIMIT 1;
+    WHERE unit_id = v_unit AND role = 'admin' AND active
+    ORDER BY created_at LIMIT 1;
   IF v_unit IS NULL THEN
     RAISE EXCEPTION 'SS-75 unit not found; run supabase/migrations/20260928000000_baseline.sql first';
   END IF;

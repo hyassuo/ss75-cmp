@@ -153,6 +153,11 @@ suite() {
   check "...without bumping updated_at (no false edit conflicts)" "$(su_sql "SELECT updated_at = created_at FROM items WHERE id = '$KEEP'")" "t"
   check "...and the trail keeps the email" "$(su_sql "SELECT by_user IS NULL AND by_user_email = 'admin2@test' FROM history WHERE item_ref = '$DU' AND action = 'deleted'")" "t"
   check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
+  su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d003', 'hyassuo@gmail.com')" >/dev/null
+  check "the former bootstrap address signs up as an inactive viewer, not an admin" "$(su_sql "SELECT role || ',' || active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d003'")" "viewer,false"
+  check "...and reads nothing" "$(as 00000000-0000-0000-0000-00000000d003 "SELECT (SELECT count(*) FROM items) + (SELECT count(*) FROM units)")" "0"
+  check "no function hard-codes an email address any more" "$(su_sql "SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prosrc ~ '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+[.][A-Za-z]'")" "0"
+  su_sql "DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000d003'" >/dev/null
   local NU=00000000-0000-0000-0000-00000000d001
   check "an inactive account reads no units" "$(as $NU "SELECT count(*) FROM units")" "0"
   check "an inactive account reads no zones" "$(as $NU "SELECT count(*) FROM zones")" "0"
@@ -348,6 +353,7 @@ scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrat
   supabase/migrations/20260929000000_rate_limits.sql \
   supabase/migrations/20260929000100_active_reads_insert_audit.sql \
   supabase/migrations/20261030000000_last_admin_guard.sql \
+  supabase/migrations/20261030000100_no_bootstrap_admin.sql \
   supabase/upgrades/hardening-5.sql
 
 # The C9 upgrade file (what production gets, in the SQL Editor) on a
