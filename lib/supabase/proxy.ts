@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/types/database.types";
+import { requestIsHttps, sessionCookieOptions } from "@/lib/supabase/cookieOptions";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -45,6 +46,7 @@ export async function updateSession(
     return supabaseResponse;
   }
 
+  const secure = requestIsHttps(request.url, request.headers);
   try {
     const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
       cookies: {
@@ -56,14 +58,11 @@ export async function updateSession(
             request.cookies.set(name, value)
           );
           supabaseResponse = forward();
-          cookiesToSet.forEach(({ name, value, options }) => {
-            // Session-only cookies: drop maxAge/expires so the session
-            // ends when the browser closes.
-            const sessionOpts = { ...options };
-            delete sessionOpts.maxAge;
-            delete sessionOpts.expires;
-            supabaseResponse.cookies.set(name, value, sessionOpts);
-          });
+          // Session-only cookies (the session ends when the browser
+          // closes), Secure over https.
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, sessionCookieOptions(options, secure))
+          );
         },
       },
     });
