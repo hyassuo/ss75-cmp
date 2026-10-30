@@ -1627,6 +1627,122 @@ async function main() {
     await page.context().close();
   });
 
+  await run("c9idle", "C9: idle limit on the server too: HttpOnly session-only last-seen cookie; old last-seen, or no cookie on an old session -> signed out by the proxy to /login?reason=idle; fresh session without it -> cookie set; activity ping keeps it (401 once idle); a reopened tab sees the real idle time; signing in again starts afresh", async (c) => {
+    const LS = "ss75-cmp.last-seen";
+    const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+    const hs = (payload) => {
+      const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64(payload)}`;
+      return `${data}.${crypto.createHmac("sha256", process.env.JWT_SECRET).update(data).digest("base64url")}`;
+    };
+    const sessionCookie = async (page) => (await page.context().cookies()).filter((k) => /^sb-.*-auth-token(\.\d+)?$/.test(k.name));
+    const lastSeen = async (page) => (await page.context().cookies()).find((k) => k.name === LS);
+    const setLastSeen = async (page, value) => page.context().addCookies([{ name: LS, value, url: APP, httpOnly: true, sameSite: "Lax" }]);
+    const idleNotice = (page) => page.getByText("You were signed out after 30 minutes without activity.");
+
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    const ck = await lastSeen(page);
+    c.expect(!!ck && ck.httpOnly && ck.sameSite === "Lax" && ck.expires === -1 && ck.secure === false && ck.path === "/",
+      "after sign-in: last-seen cookie, HttpOnly, SameSite=Lax, session-only, not Secure on http://localhost", ck);
+    const sess = await sessionFromCookies(page);
+    const claims = JSON.parse(Buffer.from(sess.access_token.split(".")[1], "base64url").toString("utf8"));
+    c.expect(ck?.value.startsWith(`${claims.session_id}.`), "...bound to the session id", { cookie: ck?.value, sid: claims.session_id });
+
+    // Old last-seen (31 min) for this session: the proxy signs out.
+    await setLastSeen(page, `${claims.session_id}.${Date.now() - 31 * 60_000 - 5_000}`);
+    const t0 = Date.now();
+    await page.goto(`${APP}/dashboard?tab=zones`);
+    await page.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(page).pathname === "/login" && q(page).searchParams.get("reason") === "idle" && q(page).searchParams.get("next") === "/dashboard?tab=zones",
+      "stale last-seen -> /login?reason=idle&next=", page.url());
+    c.expect(await idleNotice(page).isVisible().catch(() => false), "login page says why");
+    c.expect((await sessionCookie(page)).filter((k) => k.value).length === 0 && !(await lastSeen(page)), "session and last-seen cookies cleared");
+    const lo = (await ctl.log(t0)).filter((l) => l.url.startsWith("/auth/v1/logout"));
+    c.expect(lo.length >= 1 && lo.every((l) => l.src === "server" && l.url.includes("scope=local")), "the server revoked the session (logout, scope=local)", lo);
+    await shot(c, page, "idle-login");
+
+    // Signing in again starts a fresh clock: no immediate sign-out.
+    await page.locator('input[type="email"]').fill("insp1@test.local");
+    await page.locator('input[type="password"]').fill(PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+    c.expect(q(page).pathname === "/dashboard", "signed in again after an idle sign-out -> stays on the dashboard", page.url());
+
+    // No last-seen cookie: a session that just started is fine (cookie set
+    // again)...
+    const fresh = await sessionFromCookies(page);
+    const fclaims = JSON.parse(Buffer.from(fresh.access_token.split(".")[1], "base64url").toString("utf8"));
+    const keep = (await page.context().cookies()).filter((k) => k.name !== LS);
+    await page.context().clearCookies();
+    await page.context().addCookies(keep);
+    await page.goto(`${APP}/dashboard`);
+    await waitLoaded(page).catch(() => {});
+    c.expect(q(page).pathname === "/dashboard" && !!(await lastSeen(page)), "no last-seen cookie, session just started -> dashboard, cookie set", page.url());
+    // ...but one that started 2 h ago (a browser restart kept the Supabase
+    // cookies, not ours) is signed out.
+    const oldTok = hs({ ...fclaims, amr: [{ method: "password", timestamp: Math.floor(Date.now() / 1000) - 7200 }] });
+    const base = (await sessionCookie(page))[0].name.replace(/\.\d+$/, "");
+    const oldCookie = `${base}=base64-${b64({ ...fresh, access_token: oldTok })}`;
+    const r = await fetch(`${APP}/dashboard`, { redirect: "manual", headers: { cookie: oldCookie } });
+    const loc = new URL(r.headers.get("location") || "/", APP);
+    c.expect(r.status === 307 && loc.pathname === "/login" && loc.searchParams.get("reason") === "idle", "no last-seen cookie, session started 2 h ago -> /login?reason=idle", { status: r.status, loc: loc.href });
+    const set = r.headers.getSetCookie();
+    c.expect(set.some((x) => x.startsWith(`${base}=;`) && /Max-Age=0/i.test(x)), "...and its session cookie is deleted", set);
+    // A prefetch with an old/missing last-seen gets no shortcut either.
+    const pf = await fetch(`${APP}/dashboard`, { redirect: "manual", headers: { cookie: oldCookie, "next-router-prefetch": "1" } });
+    c.expect(pf.status === 307 && new URL(pf.headers.get("location") || "/", APP).searchParams.get("reason") === "idle", "prefetch without a recent last-seen -> full check -> idle", pf.status);
+
+    // The activity ping (long form-filling without navigation).
+    const api = (cookie) => fetch(`${APP}/api/session/activity`, { method: "POST", headers: { Origin: APP, cookie } });
+    const jar = async () => (await page.context().cookies()).map((k) => `${k.name}=${k.value}`).join("; ");
+    const before = Number((await lastSeen(page)).value.split(".")[1]);
+    await page.waitForTimeout(1100);
+    const okPing = await api(await jar());
+    const newSeen = (okPing.headers.getSetCookie().find((x) => x.startsWith(`${LS}=`)) || "").split(";")[0].split("=")[1] || "";
+    c.expect(okPing.status === 204 && Number(newSeen.split(".")[1]) > before && /HttpOnly/i.test(okPing.headers.getSetCookie().join()), "POST /api/session/activity -> 204, last-seen moved forward", { status: okPing.status, newSeen, before });
+    const stalePing = await api((await jar()).replace(new RegExp(`${LS}=[^;]+`), `${LS}=${fclaims.session_id}.${Date.now() - 40 * 60_000}`));
+    c.expect(stalePing.status === 401 && (await stalePing.json()).error === "Session expired", "ping with an idle last-seen -> 401 'Session expired' (never revived)", stalePing.status);
+    const anonPing = await api("");
+    c.expect(anonPing.status === 401, "ping without a session -> 401", anonPing.status);
+    const xPing = await fetch(`${APP}/api/session/activity`, { method: "POST", headers: { Origin: "https://evil.example", cookie: await jar() } });
+    c.expect(xPing.status === 403, "cross-origin ping -> 403", xPing.status);
+
+    // The browser pings while the user is active (at most once a minute).
+    await page.clock.install();
+    await page.goto(`${APP}/dashboard`);
+    await waitLoaded(page);
+    await page.clock.fastForward("01:05");
+    const [pinged] = await Promise.all([
+      page.waitForResponse((rs) => rs.url().endsWith("/api/session/activity") && rs.request().method() === "POST", { timeout: 10000 }).catch(() => null),
+      page.keyboard.press("Shift"),
+    ]);
+    c.expect(pinged?.status() === 204, "activity after a minute -> the browser pings the server (204)", pinged?.status());
+    // The server says the session is idle -> the tab signs out.
+    await setLastSeen(page, `${fclaims.session_id}.${Date.now() - 40 * 60_000}`);
+    await page.clock.fastForward("01:05");
+    await page.keyboard.press("Shift");
+    await page.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(page).pathname === "/login" && q(page).searchParams.get("reason") === "idle", "ping answered 401 -> the tab goes to /login?reason=idle", page.url());
+    await page.context().close();
+
+    // A reopened tab sees the real idle time (stored in this browser).
+    const p2 = await newPage(c, "insp1-reopen");
+    await login(p2, "insp1@test.local");
+    await p2.evaluate((uid) => localStorage.setItem("ss75-cmp.lastActivity", JSON.stringify({ u: uid, t: Date.now() - 31 * 60_000 })), USERS.insp1);
+    await p2.goto(`${APP}/dashboard`);
+    await p2.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(p2).pathname === "/login" && q(p2).searchParams.get("reason") === "idle", "reopened after 31 min idle (stored activity) -> signed out, not a fresh 30 min", p2.url());
+    // Recent stored activity: the reload keeps the session.
+    await login(p2, "insp1@test.local");
+    await p2.evaluate((uid) => localStorage.setItem("ss75-cmp.lastActivity", JSON.stringify({ u: uid, t: Date.now() - 10 * 60_000 })), USERS.insp1);
+    await p2.goto(`${APP}/dashboard`);
+    await waitLoaded(p2).catch(() => {});
+    await p2.waitForTimeout(1500);
+    c.expect(q(p2).pathname === "/dashboard", "reopened after 10 min -> still signed in", p2.url());
+    await p2.context().close();
+  });
+
   await run("n12", "Language PT: <html lang>, cookie, SSR after reload, login in PT, CSV ';' + decimal comma", async (c) => {
     const page = await newPage(c, "admin1");
     await login(page, "admin1@test.local");

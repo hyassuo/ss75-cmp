@@ -10,6 +10,7 @@ import { Notice } from "@/components/ui/Notice";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/lib/context/LangContext";
 import { checkRecoveryToken, jwtPayload } from "@/lib/security/recoveryToken";
+import { writeLastActivity } from "@/lib/security/idle";
 
 export const MIN_PASSWORD = 8;
 
@@ -108,6 +109,10 @@ export function ResetPasswordForm() {
       return;
     }
     setPhase("done");
+    // The idle clock (SessionGuards) starts now for this new session.
+    const { data: after } = await createClient().auth.getSession();
+    const uid = jwtPayload(after.session?.access_token)?.sub;
+    if (typeof uid === "string") writeLastActivity(uid, Date.now());
     // Full load so the server layout picks up the session cookie.
     window.setTimeout(() => window.location.replace("/dashboard"), 1500);
   }
