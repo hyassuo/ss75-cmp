@@ -240,6 +240,9 @@ const en = {
   "reset.checking": "Checking the link…",
   "reset.invalid": "This reset link is invalid, was already used or has expired. Ask your administrator for a new one, or use “Forgot password?” on the sign-in page.",
   "reset.backToLogin": "Back to sign in",
+  "reset.otherUser":
+    "Another account is signed in on this device. Sign out of it, then ask for a new reset link.",
+  "reset.backToApp": "Back to the app",
   "reset.new": "New password",
   "reset.confirm": "Repeat the new password",
   "reset.rule": "At least 8 characters.",
@@ -947,6 +950,9 @@ const pt: Translations = {
   "reset.checking": "Verificando o link…",
   "reset.invalid": "Este link de redefinição é inválido, já foi usado ou expirou. Peça um novo ao administrador ou use “Esqueci minha senha” na tela de entrada.",
   "reset.backToLogin": "Voltar para a entrada",
+  "reset.otherUser":
+    "Outra conta está conectada neste aparelho. Saia dela e peça um novo link de redefinição.",
+  "reset.backToApp": "Voltar para o app",
   "reset.new": "Nova senha",
   "reset.confirm": "Repita a nova senha",
   "reset.rule": "Pelo menos 8 caracteres.",

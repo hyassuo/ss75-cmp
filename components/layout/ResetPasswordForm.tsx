@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/Button";
 import { Notice } from "@/components/ui/Notice";
 import { createClient } from "@/lib/supabase/client";
 import { useLang } from "@/lib/context/LangContext";
+import { checkRecoveryToken, jwtPayload } from "@/lib/security/recoveryToken";
 
 export const MIN_PASSWORD = 8;
 
-type Phase = "checking" | "ready" | "invalid" | "saving" | "done";
+type Phase = "checking" | "ready" | "invalid" | "otherUser" | "saving" | "done";
 
 // Landing page of the reset email (sent by lib/supabase/recoveryMail.ts,
 // implicit flow): #access_token=…&refresh_token=…&type=recovery. Only such a
@@ -20,6 +21,13 @@ type Phase = "checking" | "ready" | "invalid" | "saving" | "done";
 // password here. The tokens are read and stripped from the URL before the
 // Supabase browser client is created (it is a singleton that inspects the
 // URL when first constructed), so nothing else consumes them.
+//
+// The fragment is whatever the link says, so its tokens must prove they
+// come from a reset link opened just now (checkRecoveryToken: the "amr"
+// claim, before and after setSession), and they never replace another
+// user's session on this device: an insider's own tokens, sent as a
+// "reset link", would otherwise sign a colleague into the insider's
+// account.
 export function ResetPasswordForm() {
   const { t } = useLang();
   const [phase, setPhase] = useState<Phase>("checking");
@@ -41,14 +49,34 @@ export function ResetPasswordForm() {
       const supabase = createClient();
       const access = hash.get("access_token");
       const refresh = hash.get("refresh_token");
-      let ok = false;
-      if (hash.get("type") === "recovery" && access && refresh) {
-        ok = !(await supabase.auth.setSession({
-          access_token: access,
-          refresh_token: refresh,
-        })).error;
+      const link = checkRecoveryToken(access, Date.now());
+      if (hash.get("type") !== "recovery" || !access || !refresh || !link.ok) {
+        setPhase("invalid");
+        return;
       }
-      setPhase(ok ? "ready" : "invalid");
+      // Someone else signed in here: refuse rather than switch accounts.
+      const { data: current } = await supabase.auth.getSession();
+      const currentUser = jwtPayload(current.session?.access_token)?.sub;
+      if (currentUser && currentUser !== link.userId) {
+        setPhase("otherUser");
+        return;
+      }
+      const { data, error } = await supabase.auth.setSession({
+        access_token: access,
+        refresh_token: refresh,
+      });
+      // GoTrue has now verified the token (or refreshed it): check what it
+      // actually accepted, and drop the session if that isn't the link's.
+      const session = data.session;
+      const accepted =
+        !error &&
+        !!session &&
+        session.user.id === link.userId &&
+        checkRecoveryToken(session.access_token, Date.now()).ok;
+      if (!accepted && session) {
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+      }
+      setPhase(accepted ? "ready" : "invalid");
     })();
   }, []);
 
@@ -141,6 +169,17 @@ export function ResetPasswordForm() {
             </p>
             <a href="/login" style={{ color: DS.blu, fontSize: DS.fs.base, fontWeight: 600 }}>
               {t("reset.backToLogin")}
+            </a>
+          </div>
+        )}
+
+        {phase === "otherUser" && (
+          <div role="alert">
+            <p style={{ fontSize: DS.fs.base, color: DS.text2, lineHeight: 1.6, margin: "0 0 16px" }}>
+              {t("reset.otherUser")}
+            </p>
+            <a href="/dashboard" style={{ color: DS.blu, fontSize: DS.fs.base, fontWeight: 600 }}>
+              {t("reset.backToApp")}
             </a>
           </div>
         )}

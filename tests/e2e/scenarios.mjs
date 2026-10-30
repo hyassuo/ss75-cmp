@@ -2026,7 +2026,7 @@ async function main() {
   const resetForm = (page) => page.getByLabel("New password", { exact: true });
   const invalidMsg = (page) => page.getByText(/This reset link is invalid/);
 
-  await run("r2", "C1: /auth/reset without tokens (even signed in) refuses; expired link on /login is forwarded; Site-URL fallback forwarded", async (c) => {
+  await run("r2", "C1: /auth/reset without tokens (even signed in) refuses; expired link on /login is forwarded; Site-URL fallback forwarded; C9: a link never switches a signed-in device to another account, password-session tokens are not a reset link", async (c) => {
     const anon = await newPage(c, "anon");
     await anon.goto(`${APP}/auth/reset`);
     await invalidMsg(anon).waitFor({ timeout: 15000 }).catch(() => {});
@@ -2044,7 +2044,8 @@ async function main() {
     await invalidMsg(insp).waitFor({ timeout: 15000 }).catch(() => {});
     c.expect(await invalidMsg(insp).isVisible() && (await insp.locator('input[type="password"]').count()) === 0, "?code= (PKCE) is not accepted -> invalid, no form");
     // Someone else's recovery link opened on this signed-in device, landing
-    // on /dashboard: forwarded to /auth/reset, tokens gone from the URL.
+    // on /dashboard: forwarded to /auth/reset, tokens gone from the URL, and
+    // refused (C9): it must not silently switch the device to that account.
     const tr = Date.now();
     await fetch(`${GW}/auth/v1/recover?redirect_to=${encodeURIComponent(`${APP}/auth/reset`)}`, {
       method: "POST", headers: { apikey: process.env.ANON_KEY, "content-type": "application/json" }, body: JSON.stringify({ email: "viewer1@test.local" }),
@@ -2055,14 +2056,27 @@ async function main() {
     c.expect(/type=recovery/.test(frag) && /access_token=/.test(frag), "recovery fragment obtained from the email link", loc.slice(0, 80));
     await insp.goto(`${APP}/dashboard${frag}`);
     await insp.waitForURL(/\/auth\/reset/, { timeout: 20000 }).catch(() => {});
-    await resetForm(insp).waitFor({ timeout: 20000 }).catch(() => {});
-    c.expect(q(insp).pathname === "/auth/reset" && (await resetForm(insp).isVisible()), "recovery hash on /dashboard (other user signed in) -> forwarded, form shown", insp.url());
+    const other = insp.getByText(/Another account is signed in on this device/);
+    await other.waitFor({ timeout: 20000 }).catch(() => {});
+    c.expect(q(insp).pathname === "/auth/reset" && (await other.isVisible()) && (await insp.locator('input[type="password"]').count()) === 0,
+      "recovery hash on /dashboard (other user signed in) -> forwarded, refused ('another account'), no form", insp.url());
     c.expect(!/access_token|refresh_token|type=recovery/.test(insp.url()), "tokens gone from the URL", insp.url());
     const who = (await sessionFromCookies(insp))?.user?.email;
     c.step(`session in this browser after the forward: ${who}`);
-    c.expect(who === "viewer1@test.local", "the browser's session is now the link's user (viewer1), not insp1", who);
+    c.expect(who === "insp1@test.local", "the browser's session is still insp1's (no silent account switch)", who);
     await shot(c, insp, "dashboard-forwarded");
     await insp.context().close();
+
+    // C9: an insider's own password-session tokens dressed up as a reset
+    // link: refused (the token's amr says "password"), no session stored.
+    const own = (await (await apiAs("insp2@test.local")).auth.getSession()).data.session;
+    const fake = new URLSearchParams({ access_token: own.access_token, refresh_token: own.refresh_token, expires_in: "3600", token_type: "bearer", type: "recovery" });
+    const victim = await newPage(c, "victim");
+    await victim.goto(`${APP}/auth/reset#${fake}`);
+    await invalidMsg(victim).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(await invalidMsg(victim).isVisible() && (await victim.locator('input[type="password"]').count()) === 0, "password-session tokens as a 'reset link' -> invalid, no form");
+    c.expect(!(await sessionFromCookies(victim)), "...and no session stored in the browser", await sessionFromCookies(victim));
+    await victim.context().close();
 
     const exp = await newPage(c, "anon-expired");
     await exp.goto(`${APP}/login#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
