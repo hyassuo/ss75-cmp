@@ -34,12 +34,22 @@ supabase/
                                       triggers, storage bucket + policies,
                                       1 unit + 14 DROPS zones
     20260928000100_ifs_register.sql   IFS Equipment Register table
+    20260929000000_rate_limits.sql    shared rate-limit counters (C4)
+    20260929000100_active_reads_…     active-only reference reads, audit
+                                      of added readings/evidence (C6, D2)
+    20261030000000_last_admin_guard   security round C9: last active
+    20261030000100_no_bootstrap_admin admin kept by the database, no
+    20261030000200_history_author_…   hard-coded admin, colleagues'
+                                      emails in the audit trail for
+                                      admins only
   seed/
     ifs-data.sql              11,312-row IFS register (TRUNCATE + INSERT)
     demo.sql                  optional ~25 [DEMO] items (registered in
                               demo_seed_items; re-runs only replace those)
   upgrades/                   in-place upgrades for databases created
-                              before the baseline (see below)
+                              before the baseline (see below), and
+                              security-c9.sql: the C9 migrations as one
+                              file for production's SQL Editor
   ops/
     backup-snapshot.sql       read-only JSON dump of the app tables
 ```
@@ -103,12 +113,14 @@ IFS register read-only at runtime).
 Then adopt the migration history once, so `supabase db push` only applies
 future migrations, and check for drift. List every migration the database
 already has: in production that includes the two of 29/09
-(`20260929000000_rate_limits`, `20260929000100_active_reads_insert_audit`),
-which were applied by hand in the SQL Editor:
+(`20260929000000_rate_limits`, `20260929000100_active_reads_insert_audit`)
+and the three of 30/10 (security round C9, applied together as
+`supabase/upgrades/security-c9.sql`), all applied by hand in the SQL
+Editor:
 
 ```
 supabase link --project-ref <ref>
-supabase migration repair --status applied 20260928000000 20260928000100 20260929000000 20260929000100
+supabase migration repair --status applied 20260928000000 20260928000100 20260929000000 20260929000100 20261030000000 20261030000100 20261030000200
 supabase db diff --linked   # should report no schema differences
 ```
 
@@ -158,7 +170,7 @@ item modal copies when an Object is selected.
 | Command | What it covers |
 |---------|----------------|
 | `npm test` | Vitest unit tests: domain logic (priority, dates across time zones, corrosion rate…), the item-form diff/rebase logic, CSV escaping, paging, redirects (`tests/*.test.ts`). |
-| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role: fresh install, the full upgrade chain, demo seed and rollback guard. |
+| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role: fresh install, the full upgrade chain, `security-c9.sql` on a 29/09 database (same schema as the migrations, checked with `pg_dump`), demo seed and the guards of the old upgrade files. |
 | `npm run test:e2e` | End-to-end suite (`tests/e2e/`): builds the app and drives it in Chromium (Playwright) against a local Supabase stand-in: see below. |
 
 CI (`.github/workflows/ci.yml`, least-privilege, actions pinned by SHA)

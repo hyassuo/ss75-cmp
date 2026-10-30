@@ -10,8 +10,9 @@
  *
  * Bump VERSION to invalidate every cache on the next deploy of this file.
  */
+// v5: Next 16.4 build (v1.22.0): drop the old asset cache at once.
 // v4: re-precache the offline page (E8: PT title, English parts marked).
-const VERSION = "v4"; // v3: Next 16 (Turbopack) asset names
+const VERSION = "v5"; // v3: Next 16 (Turbopack) asset names
 const CACHE = "ss75-cmp-" + VERSION;
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icons/icon-192.png"];
