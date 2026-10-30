@@ -2105,7 +2105,7 @@ async function main() {
     await fb.context().close();
   });
 
-  await run("r3", "C1: 'Forgot password?': empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
+  await run("r3", "C1: 'Forgot password?': empty email hint; neutral confirmation; mail only for active accounts; link works on any device; C9: the answer does not wait for the lookup", async (c) => {
     const page = await newPage(c, "anon");
     await page.goto(`${APP}/login`);
     const forgot = page.getByRole("button", { name: "Forgot password?" });
@@ -2124,7 +2124,8 @@ async function main() {
         forgot.click(),
       ]);
       await sent.waitFor({ timeout: 10000 }).catch(() => {});
-      await page.waitForTimeout(300);
+      // The email goes out after the answer (C9): give it a moment.
+      await page.waitForTimeout(1500);
       return { status: resp.status(), shown: await sent.isVisible(), mails: await mailsSince(t) };
     };
     try {
@@ -2136,6 +2137,20 @@ async function main() {
       const inactive = await ask("viewer1@test.local");
       c.expect(inactive.status === 200 && inactive.shown, "inactive account -> the same neutral confirmation", inactive);
       c.expect(inactive.mails.length === 0, "no email for an inactive account", inactive.mails);
+      // C9: the answer doesn't wait for the account lookup (it and the
+      // email run after the response), so its timing reveals nothing.
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot%'");
+      await ctl.fault({ method: "GET", prefix: "/rest/v1/profiles", mode: "delay", delay: 3000, times: 1 });
+      const tSlow = Date.now();
+      const slow = await page.request.post(`${APP}/api/auth/forgot`, { headers: { Origin: APP }, data: { email: "insp2@test.local" } });
+      const slowMs = Date.now() - tSlow;
+      c.expect(slow.status() === 200 && slowMs < 2500, `answer in ${slowMs} ms while the account lookup takes 3 s`, { status: slow.status(), slowMs });
+      let late = [];
+      for (let i = 0; i < 40 && !late.length; i++) {
+        await page.waitForTimeout(200);
+        late = (await mailsSince(tSlow)).filter((m) => m.email === "insp2@test.local");
+      }
+      c.expect(late.length === 1, "...and the email still goes out afterwards", late);
       const active = await ask("Insp1@Test.local");
       c.expect(active.status === 200 && active.shown, "active account (mixed case) -> neutral confirmation", active);
       const m = active.mails[0];
@@ -2592,14 +2607,24 @@ async function main() {
       c.expect(fb.slice(0, 10).every((s) => s === 200) && fb[10] === 429, "RPC down -> memory fallback still allows 10/min then 429 (no 500s)", fb.join(","));
       c.expect((await count(K.min)) === 0, "nothing written to the database while the RPC fails");
 
-      // Forgot password (public): per-address limit, shared.
+      // Forgot password (public): per address from one client (tight), per
+      // address from all clients (ceiling), shared.
       const anon = await newPage(c, "anon-c4");
       const forgot = async (email) => (await anon.request.post(`${APP}/api/auth/forgot`, { headers: { Origin: APP }, data: { email } })).status();
       const f = [];
       for (let n = 0; n < 4; n++) f.push(await forgot("c4-nobody@test.local"));
-      c.expect(f.join(",") === "200,200,200,429", "forgot: 3 per address per hour, then 429", f.join(","));
-      c.expect((await count(`forgot-email:${sha("c4-nobody@test.local")}`)) === 4, "forgot counter lives in Postgres, keyed by the address's hash");
+      c.expect(f.join(",") === "200,200,200,429", "forgot: 3 per address per hour from one client, then 429", f.join(","));
+      c.expect((await one("SELECT count FROM rate_limits WHERE key LIKE 'forgot-email-ip:%'"))?.count === 4, "forgot per-address-and-client counter lives in Postgres (hashed key)");
+      c.expect((await count(`forgot-email:${sha("c4-nobody@test.local")}`)) === 3, "the per-address ceiling counts only what that limit let through");
       c.expect((await one("SELECT count(*)::int AS n FROM rate_limits WHERE key LIKE '%@%'")).n === 0, "no email address stored in rate_limits");
+      // C9: another client (its counters are fresh) is not locked out of
+      // that address by the first one...
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot-email-ip:%' OR key LIKE 'forgot-ip:%'");
+      c.expect((await forgot("c4-nobody@test.local")) === 200, "another client can still ask for the same address (no lockout by a third party)");
+      // ...until the address's ceiling (10 per hour, all clients together).
+      await sql("UPDATE rate_limits SET count = 10 WHERE key = $1", [`forgot-email:${sha("c4-nobody@test.local")}`]);
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot-email-ip:%'");
+      c.expect((await forgot("c4-nobody@test.local")) === 429, "per-address ceiling (10/hour across clients) -> 429");
       await sql("UPDATE rate_limits SET count = 5 WHERE key LIKE 'forgot-ip:%'");
       const ipBlocked = await forgot("c4-other@test.local");
       c.expect(ipBlocked === 429, "forgot: per-client limit -> 429", ipBlocked);
