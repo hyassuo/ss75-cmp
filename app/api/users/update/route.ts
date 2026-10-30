@@ -77,7 +77,9 @@ export async function POST(request: Request) {
   if (losesAdmin) {
     // Count active admins within the same unit: don't let a unit lose its
     // last admin (a global count would wrongly allow it when another unit
-    // still has admins).
+    // still has admins). The friendly first check: the database enforces
+    // the same rule under a lock (guard_last_admin), which two admins
+    // demoting each other at the same moment can't race.
     let q = admin
       .from("profiles")
       .select("*", { count: "exact", head: true })
@@ -124,7 +126,28 @@ export async function POST(request: Request) {
   const { error } = await admin.from("profiles").update(patch).eq("id", id);
   if (error) {
     console.error("[users/update]", error);
-    return NextResponse.json({ error: "Could not update user" }, { status: 400 });
+    // The profile is unchanged: put sign-in access back the way it was,
+    // or a refused deactivation would leave an active admin banned.
+    if (typeof active === "boolean" && active !== target.active) {
+      const { error: undoError } = await admin.auth.admin.updateUserById(id, {
+        ban_duration: target.active ? "none" : "876000h",
+      });
+      if (undoError) console.error("[users/update] undo ban", undoError);
+    }
+    return NextResponse.json(
+      {
+        error: isLastAdminError(error)
+          ? "Cannot remove the only active admin."
+          : "Could not update user",
+      },
+      { status: 400 }
+    );
   }
   return NextResponse.json({ ok: true });
+}
+
+// guard_last_admin (migration 20261030000000) refused the change: another
+// admin was demoted or deactivated at the same time.
+function isLastAdminError(error: { code?: string; message?: string }): boolean {
+  return error.code === "23514" && /last active admin/.test(error.message ?? "");
 }

@@ -171,3 +171,75 @@ describe("POST /api/users/delete: ids", () => {
     expect(db.deleteUser).toHaveBeenCalledWith(OTHER);
   });
 });
+
+// guard_last_admin (supabase/migrations/20261030000000_last_admin_guard.sql)
+// refuses what the route's own count let through when two admins act at
+// the same moment: the route reports it as the usual clean message.
+const LAST_ADMIN_DB_ERROR = {
+  code: "23514",
+  message: `last active admin of the unit: ${OTHER} cannot be demoted, deactivated or deleted`,
+};
+
+describe("last active admin refused by the database (race)", () => {
+  it("update: clean message, and a deactivation's ban is undone", async () => {
+    let counted = 0;
+    db.answer = (q) => {
+      if (q.update) return { error: LAST_ADMIN_DB_ERROR };
+      if (q.select?.[1]) {
+        counted++;
+        return { count: 2 }; // the route's own count passes
+      }
+      return { data: { role: "admin", active: true, unit_id: UNIT } };
+    };
+    const r = await call(updateUser, { id: OTHER, active: false });
+    expect(r).toEqual({ status: 400, error: "Cannot remove the only active admin." });
+    expect(counted).toBe(1);
+    expect(db.updateUserById.mock.calls).toEqual([
+      [OTHER, { ban_duration: "876000h" }],
+      [OTHER, { ban_duration: "none" }],
+    ]);
+  });
+
+  it("update: a role change refused the same way touches no ban", async () => {
+    db.answer = (q) =>
+      q.update
+        ? { error: LAST_ADMIN_DB_ERROR }
+        : q.select?.[1]
+          ? { count: 2 }
+          : { data: { role: "admin", active: true, unit_id: UNIT } };
+    const r = await call(updateUser, { id: OTHER, role: "viewer" });
+    expect(r).toEqual({ status: 400, error: "Cannot remove the only active admin." });
+    expect(db.updateUserById).not.toHaveBeenCalled();
+  });
+
+  it("update: any other database error stays generic (ban undone too)", async () => {
+    db.answer = (q) =>
+      q.update
+        ? { error: { code: "XX000", message: "internal detail" } }
+        : { data: { role: "inspector", active: true, unit_id: UNIT } };
+    const r = await call(updateUser, { id: OTHER, active: false });
+    expect(r).toEqual({ status: 400, error: "Could not update user" });
+    expect(db.updateUserById).toHaveBeenLastCalledWith(OTHER, { ban_duration: "none" });
+  });
+
+  it("delete: Auth's bare database error becomes the last-admin message", async () => {
+    let counts = 0;
+    db.answer = (q) =>
+      q.select?.[1]
+        ? { count: ++counts === 1 ? 2 : 1 } // 2 admins before, 1 after the other left
+        : { data: { role: "admin", active: true, unit_id: UNIT } };
+    db.deleteUser.mockResolvedValue({ error: { status: 500, message: "Database error deleting user" } });
+    const r = await call(deleteUser, { id: OTHER });
+    expect(r).toEqual({ status: 400, error: "Cannot delete the only active admin." });
+    expect(counts).toBe(2);
+  });
+
+  it("delete: other failures stay generic", async () => {
+    db.answer = () => ({ data: { role: "viewer", active: true, unit_id: UNIT } });
+    db.deleteUser.mockResolvedValue({ error: { status: 500, message: "Database error deleting user" } });
+    expect(await call(deleteUser, { id: OTHER })).toEqual({
+      status: 400,
+      error: "Could not delete user",
+    });
+  });
+});

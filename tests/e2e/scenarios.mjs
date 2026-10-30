@@ -4023,7 +4023,7 @@ async function main() {
     }
   });
 
-  await run("f3api", "F3: user API hygiene (malformed JSON 400, admin/origin gates, reset limit 429, generic GoTrue errors) + prefetch without a session cookie -> /login", async (c) => {
+  await run("f3api", "F3: user API hygiene (malformed JSON 400, admin/origin gates, reset limit 429, generic GoTrue errors; C9: canonical ids, last admin enforced by the database under a race) + prefetch without a session cookie -> /login", async (c) => {
     const LEAK = "Database error saving new user: duplicate key value violates unique constraint users_email_partial_key (SQLSTATE 23505)";
     const leaky = (status) => ({ code: status, error_code: "unexpected_failure", msg: LEAK });
     await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
@@ -4068,6 +4068,45 @@ async function main() {
       }
       await insp.context().close();
       c.expect((await one("SELECT role FROM profiles WHERE id = $1", [USERS.insp2])).role === "inspector", "nothing changed by the refused calls");
+
+      // C9: ids compared in canonical form (an upper-case copy of one's own
+      // id is still oneself), malformed ids refused.
+      const selfUp = USERS.admin1.toUpperCase();
+      const sd = await post(adm, "update", { id: selfUp, role: "viewer" });
+      c.expect(sd.status === 400 && sd.body.error === "You cannot demote or deactivate yourself.", "update: own id in upper case -> still 'yourself'", sd);
+      const sx = await post(adm, "delete", { id: selfUp });
+      c.expect(sx.status === 400 && sx.body.error === "You cannot delete yourself.", "delete: own id in upper case -> still 'yourself'", sx);
+      const bad = await post(adm, "update", { id: "not-a-uuid", role: "viewer" });
+      c.expect(bad.status === 400 && bad.body.error === "Invalid user id", "update: malformed id -> 400 'Invalid user id'", bad);
+      c.expect((await one("SELECT role, active FROM profiles WHERE id = $1", [USERS.admin1])).role === "admin", "admin1 still an admin");
+
+      // C9: "last active admin" is enforced by the database too. With two
+      // admins (admin1, and insp2 promoted here), admin1 asks to remove
+      // insp2; the gateway holds that request while someone else demotes
+      // admin1. The route's own count had passed, the database refuses, and
+      // the route answers its usual message.
+      try {
+        await sql("UPDATE profiles SET role = 'admin' WHERE id = $1", [USERS.insp2]);
+        const demoteAdmin1 = () => new Promise((r) => setTimeout(r, 600)).then(() =>
+          sql("UPDATE profiles SET role = 'inspector' WHERE id = $1", [USERS.admin1]));
+        await ctl.fault({ method: "PUT", prefix: "/auth/v1/admin/users/", mode: "delay", delay: 1500, times: 1 });
+        const [race] = await Promise.all([post(adm, "update", { id: USERS.insp2, active: false }), demoteAdmin1()]);
+        const after = await one("SELECT p.role, p.active, u.banned_until FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.id = $1", [USERS.insp2]);
+        c.expect(race.status === 400 && race.body.error === "Cannot remove the only active admin." && !/SQLSTATE|23514|last active admin of the unit/.test(race.text),
+          "deactivate raced by another demotion -> database refuses, 400 'Cannot remove the only active admin.'", race);
+        c.expect(after.role === "admin" && after.active === true && after.banned_until === null, "...the other admin stays active and its ban is undone", after);
+        await sql("UPDATE profiles SET role = 'admin' WHERE id = $1", [USERS.admin1]);
+        await ctl.fault({ method: "DELETE", prefix: "/auth/v1/admin/users/", mode: "delay", delay: 1500, times: 1 });
+        const [raceDel] = await Promise.all([post(adm, "delete", { id: USERS.insp2 }), demoteAdmin1()]);
+        c.expect(raceDel.status === 400 && raceDel.body.error === "Cannot delete the only active admin." && !/Database error|SQLSTATE/.test(raceDel.text),
+          "delete raced by another demotion -> refused by the database, 400 'Cannot delete the only active admin.'", raceDel);
+        c.expect((await one("SELECT count(*)::int n FROM profiles WHERE id = $1 AND role = 'admin' AND active", [USERS.insp2])).n === 1, "...the user is still there");
+      } finally {
+        await ctl.clear();
+        await sql("UPDATE profiles SET role = 'admin' WHERE id = $1", [USERS.admin1]);
+        await sql("UPDATE profiles SET role = 'inspector', active = true WHERE id = $1", [USERS.insp2]);
+        await sql("UPDATE auth.users SET banned_until = NULL WHERE id = $1", [USERS.insp2]);
+      }
 
       // GoTrue failures come back as generic messages.
       await ctl.fault({ method: "POST", prefix: "/auth/v1/admin/users", status: 500, times: 1, body: leaky(500) });

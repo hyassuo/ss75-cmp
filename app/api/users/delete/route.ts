@@ -58,7 +58,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  if (target.role === "admin" && target.active) {
+  // The friendly first check; the database enforces the same rule under a
+  // lock (guard_last_admin), which concurrent changes can't race.
+  const onlyActiveAdmin = async () => {
+    if (target.role !== "admin" || !target.active) return false;
     let q = admin
       .from("profiles")
       .select("*", { count: "exact", head: true })
@@ -68,18 +71,23 @@ export async function POST(request: Request) {
       ? q.eq("unit_id", guard.ctx.unitId)
       : q.is("unit_id", null);
     const { count } = await q;
-    if ((count ?? 0) <= 1) {
-      return NextResponse.json(
-        { error: "Cannot delete the only active admin." },
-        { status: 400 }
-      );
-    }
+    return (count ?? 0) <= 1;
+  };
+  const lastAdmin = { error: "Cannot delete the only active admin." };
+  if (await onlyActiveAdmin()) {
+    return NextResponse.json(lastAdmin, { status: 400 });
   }
 
   // Deleting the auth user cascades to public.profiles (ON DELETE CASCADE).
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) {
     console.error("[users/delete]", error);
+    // Auth reports a refused cascade as a bare "Database error deleting
+    // user": when the reason is guard_last_admin (another admin removed
+    // meanwhile), say so instead.
+    if (await onlyActiveAdmin().catch(() => false)) {
+      return NextResponse.json(lastAdmin, { status: 400 });
+    }
     return NextResponse.json({ error: "Could not delete user" }, { status: 400 });
   }
   return NextResponse.json({ ok: true });

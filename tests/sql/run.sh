@@ -167,6 +167,44 @@ suite() {
   check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
   check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
 
+  echo " last active admin"
+  # refused/allowed: whether guard_last_admin stopped the statement (run as
+  # the superuser, like the service role or the Auth service).
+  lastadm() {
+    local out; out=$("${PSQL[@]}" -d "$DB" -At -c "$1" 2>&1 || true)
+    case "$out" in *"ERROR:  last active admin of the unit"*) echo refused ;; *ERROR*) echo "$out" ;; *) echo allowed ;; esac
+  }
+  local UB2=00000000-0000-0000-0000-0000000000b2
+  check "the unit's last active admin cannot be demoted" "$(lastadm "UPDATE profiles SET role = 'inspector' WHERE id = '$A1'")" "refused"
+  check "...nor deactivated" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$A1'")" "refused"
+  check "...nor moved to another unit" "$(lastadm "UPDATE profiles SET unit_id = '$UB2' WHERE id = '$A1'")" "refused"
+  check "...nor deleted (cascade from auth.users)" "$(lastadm "DELETE FROM auth.users WHERE id = '$A1'")" "refused"
+  check "...nor its profile deleted directly" "$(lastadm "DELETE FROM profiles WHERE id = '$A1'")" "refused"
+  check "...and stays an active admin" "$(su_sql "SELECT role || ',' || active FROM profiles WHERE id = '$A1'")" "admin,true"
+  check "the rule is per unit: the other unit's only admin too" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$AB'")" "refused"
+  check "a last admin still edits their own name" "$(rows $A1 "UPDATE profiles SET full_name = 'Admin One' WHERE id = '$A1' RETURNING 1")" "1"
+  check "other users are not affected" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$V1'")/$(lastadm "UPDATE profiles SET active = true WHERE id = '$V1'")" "allowed/allowed"
+  su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d002', 'y@test')" >/dev/null
+  su_sql "UPDATE profiles SET role = 'admin', active = false, unit_id = '$U1' WHERE id = '00000000-0000-0000-0000-00000000d002'" >/dev/null
+  check "a deactivated admin can be deleted" "$(lastadm "DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000d002'")/$(su_sql "SELECT count(*) FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d002'")" "allowed/0"
+  su_sql "UPDATE profiles SET role = 'admin' WHERE id = '$I2'" >/dev/null
+  check "two admins: the first may be demoted" "$(lastadm "UPDATE profiles SET role = 'inspector' WHERE id = '$A1'")" "allowed"
+  check "...then the second may not (demoting each other)" "$(lastadm "UPDATE profiles SET role = 'viewer' WHERE id = '$I2'")" "refused"
+  su_sql "UPDATE profiles SET role = 'admin' WHERE id = '$A1'" >/dev/null
+  # The same, at the same moment: the second waits for the first's lock,
+  # then counts what the first left.
+  "${PSQL[@]}" -d "$DB" -At -c "BEGIN" -c "UPDATE profiles SET role = 'inspector' WHERE id = '$A1'" \
+    -c "SELECT pg_sleep(1.5)" -c "COMMIT" >/dev/null 2>&1 &
+  local FIRST=$!
+  sleep 0.5
+  local SECOND; SECOND=$(lastadm "UPDATE profiles SET active = false WHERE id = '$I2'")
+  wait $FIRST
+  check "concurrent: the second change waits for the first, then is refused" "$SECOND" "refused"
+  check "...leaving exactly one active admin" "$(su_sql "SELECT string_agg(id::text, ',') FROM profiles WHERE role = 'admin' AND active AND unit_id = '$U1'")" "$I2"
+  su_sql "UPDATE profiles SET role = 'admin' WHERE id = '$A1'" >/dev/null
+  su_sql "UPDATE profiles SET role = 'inspector' WHERE id = '$I2'" >/dev/null
+  check "fixtures restored (one admin, A1)" "$(su_sql "SELECT string_agg(id::text, ',') FROM profiles WHERE role = 'admin' AND active AND unit_id = '$U1'")" "$A1"
+
   local N0; N0=$(new_item $I1 'Depth check')
   echo " server-owned ids & folder squatting"
   check "client-chosen item id is ignored" "$(as $I1 "INSERT INTO items (id, unit_id, zone_id, name) VALUES ('00000000-0000-0000-0000-0000000000aa', '$U1', 'Z01', 'Chosen id') RETURNING id <> '00000000-0000-0000-0000-0000000000aa'")" "t"
@@ -309,7 +347,20 @@ scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrat
   supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql \
   supabase/migrations/20260929000000_rate_limits.sql \
   supabase/migrations/20260929000100_active_reads_insert_audit.sql \
+  supabase/migrations/20261030000000_last_admin_guard.sql \
   supabase/upgrades/hardening-5.sql
+
+# The C9 upgrade file (what production gets, in the SQL Editor) on a
+# database with every migration up to 29/09: twice (idempotency), the
+# whole suite, and the same schema as the fresh install's.
+PRE_C9=$(cd "$ROOT" && ls supabase/migrations/*.sql | sort | awk '$0 < "supabase/migrations/20261030"')
+# shellcheck disable=SC2086
+scenario c9upgrade $PRE_C9 supabase/upgrades/security-c9.sql supabase/upgrades/security-c9.sql
+# (pg_dump's \restrict lines carry a random key per dump; the demo seed,
+# loaded into "fresh" only, adds its own bookkeeping table.)
+dump() { "$PG_BIN/pg_dump" -h "$WORK" -p "$PORT" -U postgres -s -n public -T public.demo_seed_items "$1" | grep -Ev '^(--|\\(un)?restrict )'; }
+check "security-c9.sql leaves the same schema as the C9 migrations" \
+  "$(if diff <(dump fresh) <(dump c9upgrade) >"$WORK/c9.diff"; then echo same; else head -20 "$WORK/c9.diff" | tr "\n" " "; fi)" "same"
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs
@@ -318,6 +369,8 @@ load "$HERE/supabase-stub.sql"
 load "$ROOT/supabase/migrations/20260928000000_baseline.sql"
 check "supabase/upgrades/hardening-5.sql applies without ifs_objects" \
   "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/hardening-5.sql" >/dev/null 2>&1 && echo applied)" "applied"
+check "security-c9.sql refuses a database without the migrations of 29/09" \
+  "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c 'needs security round 5 and the migrations of 29/09')" "1"
 
 echo
 echo "$PASSES passed, $FAILS failed"

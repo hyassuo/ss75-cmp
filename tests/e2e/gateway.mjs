@@ -349,8 +349,15 @@ async function handleAuth(req, res, sub, query) {
     if (!isService()) return authErr(res, 403, "not_admin", "User not allowed");
     const u = await userRow("id", adminUser[1]);
     if (!u) return authErr(res, 404, "user_not_found", "User not found");
-    // Cascades to public.profiles (ON DELETE CASCADE), as in Supabase.
-    await pool.query("DELETE FROM auth.users WHERE id = $1", [u.id]);
+    // Cascades to public.profiles (ON DELETE CASCADE), as in Supabase. A
+    // trigger refusing the cascade (guard_last_admin) surfaces the way
+    // GoTrue reports it: a 500 without the database's message.
+    try {
+      await pool.query("DELETE FROM auth.users WHERE id = $1", [u.id]);
+    } catch (e) {
+      record({ t: Date.now(), kind: "admin-delete-user-failed", user: u.email, error: e.message });
+      return authErr(res, 500, "unexpected_failure", "Database error deleting user");
+    }
     for (const [tok, rt] of refreshTokens) if (rt.uid === u.id) refreshTokens.delete(tok);
     record({ t: Date.now(), kind: "admin-delete-user", user: u.email });
     return send(res, 200, userJson(u));
