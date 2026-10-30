@@ -2599,7 +2599,7 @@ async function main() {
   });
 
   // ------------------------------------------ C6 / D2 (migration 20260929000100)
-  await run("c6d2", "C6: a deactivated session reads no units/zones/IFS objects; D2: added readings/evidence show in the item history", async (c) => {
+  await run("c6d2", "C6: a deactivated session reads no units/zones/IFS objects; D2: added readings/evidence show in the item history; C9: names for colleagues, emails for admins only", async (c) => {
     const EMAIL = "insp2@test.local";
     const count = async (api, table) => {
       const { data, error } = await api.from(table).select("*");
@@ -2652,10 +2652,28 @@ async function main() {
     c.expect(/^Evidence added: \d{4}-\d{2}-\d{2} \u2014 audit evidence \(no file\)$/.test(stored?.note || ""), "DB: the trigger's note still has its long dash (database unchanged)", stored);
     // E8: the panel shows the date in the UI language ("9 Oct 2026" in EN).
     c.expect(/Evidence added: \d{1,2} [A-Z][a-z]{2} \d{4} - audit evidence \(no file\)/.test(txt) && !txt.includes("\u2014"), "History panel: 'Evidence added: <date> - <description>', no long dash anywhere", txt.slice(0, 400));
-    c.expect(/by insp1@test\.local/.test(txt), "…attributed to insp1", txt.slice(0, 400));
+    // C9: an inspector sees the author's name (captured when the event was
+    // written), never a colleague's email.
+    c.expect(/by insp1\b/.test(txt) && !/@test\.local/.test(txt), "…attributed to insp1 by name, no email shown to an inspector", txt.slice(0, 400));
     await shot(c, page, "history");
     await page.keyboard.press("Escape");
     await page.context().close();
+
+    // C9 over REST: the email column is closed to non-admins; history_log
+    // gives names to everyone and emails to the unit's admins only.
+    const viewer = await apiAs("viewer1@test.local");
+    const col = await viewer.from("history").select("by_user_email").limit(1);
+    const star = await viewer.from("history").select("*").limit(1);
+    c.expect(!!col.error && !!star.error, "viewer: history.by_user_email (and select=*) refused by PostgREST", { col: col.error?.message, star: star.error?.message });
+    const vlog = await viewer.from("history_log").select("by_user_email, by_user_name").eq("item_id", AUDIT);
+    c.expect(!vlog.error && vlog.data.length > 0 && vlog.data.every((r) => r.by_user_email === null) && vlog.data.some((r) => r.by_user_name === "insp1"),
+      "viewer: history_log rows carry names, no emails", vlog.error?.message ?? vlog.data);
+    const vfn = await viewer.rpc("history_author_email", { p_id: (await one("SELECT id FROM history WHERE item_id = $1 LIMIT 1", [AUDIT])).id });
+    c.expect(!vfn.error && vfn.data === null, "viewer: /rpc/history_author_email answers null", vfn);
+    const adm = await apiAs("admin1@test.local");
+    const alog = await adm.from("history_log").select("by_user_email, items(name)").eq("item_id", AUDIT);
+    c.expect(!alog.error && alog.data.some((r) => r.by_user_email === "insp1@test.local") && alog.data.every((r) => r.items?.name === "E2E Audit Target"),
+      "admin: history_log has the emails and embeds items(name) (the Audit Log query)", alog.error?.message ?? alog.data);
   });
 
   // ------------------------------------------------------------ E1 / E2

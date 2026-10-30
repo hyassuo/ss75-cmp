@@ -300,6 +300,36 @@ suite() {
   check "inspector sees the item history" "$(as $I1 "SELECT count(*) > 0 FROM history WHERE item_id = '$N'")" "t"
   check "audit rows snapshot unit and name" "$(su_sql "SELECT count(*) FROM history WHERE unit_id IS NULL OR item_ref IS NULL OR item_name IS NULL")" "0"
 
+  echo " audit authors: emails for admins only"
+  local HA; HA=$(new_item $I1 'Author check')
+  as $I1 "UPDATE items SET status = 'Attention' WHERE id = '$HA' RETURNING 1" >/dev/null
+  local HID; HID=$(su_sql "SELECT id FROM history WHERE item_id = '$HA' AND action = 'status_changed'")
+  check "an event keeps the author's display name, written with it" "$(su_sql "SELECT by_user_name || ',' || by_user_email FROM history WHERE id = '$HID'")" "Insp One,insp1@test"
+  for who in V1 I2; do
+    local U=${!who}
+    check "$who: history.by_user_email is not readable" "$(as $U "SELECT by_user_email FROM history LIMIT 1")" "permission denied.*"
+    check "$who: ...nor through SELECT *" "$(as $U "SELECT * FROM history LIMIT 1")" "permission denied.*"
+    check "$who: ...nor as a whole row (to_jsonb)" "$(as $U "SELECT to_jsonb(h) FROM history h LIMIT 1")" "permission denied.*"
+    check "$who: ...nor in a filter" "$(as $U "SELECT count(*) FROM history WHERE by_user_email LIKE 'insp1%'")" "permission denied.*"
+    check "$who: history_log shows the events with names, no emails" "$(as $U "SELECT count(*) > 0 AND count(by_user_email) = 0 AND bool_or(by_user_name = 'Insp One') FROM history_log")" "t"
+    check "$who: history_author_email() reveals nothing" "$(as $U "SELECT count(public.history_author_email(id)) FROM history_log")/$(as $U "SELECT coalesce(public.history_author_email('$HID'), 'null')")" "0/null"
+    check "$who: the other columns still read as before" "$(as $U "SELECT action || ',' || by_user FROM history WHERE id = '$HID'")" "status_changed,$I1"
+  done
+  check "admin of the unit: history_log has the author's email" "$(as $A1 "SELECT by_user_email FROM history_log WHERE id = '$HID'")" "insp1@test"
+  check "admin of the unit: ...for every attributed event" "$(as $A1 "SELECT count(*) FILTER (WHERE by_user_email IS NULL AND by_user IS NOT NULL) FROM history_log")" "0"
+  check "admin of another unit: history_author_email() reveals nothing" "$(as $AB "SELECT coalesce(public.history_author_email('$HID'), 'null')")" "null"
+  check "admin: the base column stays closed (only through history_log)" "$(as $A1 "SELECT by_user_email FROM history WHERE id = '$HID'")" "permission denied.*"
+  check "anon reads no history_log" "$("${PSQL[@]}" -d "$DB" -At -c "SET ROLE anon; SELECT count(*) FROM history_log" 2>&1 | tail -1 | sed 's/^ERROR: *//')" "permission denied.*"
+  check "history_log is read-only" "$(as $A1 "INSERT INTO history_log (action) VALUES ('forged')")" "permission denied.*"
+  # Rows written before the column existed get the name on (re-)applying
+  # the migration; it is idempotent.
+  su_sql "ALTER TABLE history DISABLE TRIGGER trg_history_author" >/dev/null
+  su_sql "INSERT INTO history (item_id, action, by_user, by_user_email) VALUES ('$HA', 'backfill_probe', '$I2', 'insp2@test')" >/dev/null
+  su_sql "ALTER TABLE history ENABLE TRIGGER trg_history_author" >/dev/null
+  load "$ROOT/supabase/migrations/20261030000200_history_author_privacy.sql"
+  check "backfill: older rows get their author's name" "$(su_sql "SELECT coalesce(by_user_name, 'null') FROM history WHERE action = 'backfill_probe'")" "insp2"
+  su_sql "DELETE FROM history WHERE action = 'backfill_probe'" >/dev/null
+
   echo " shared rate limits"
   svc() { "${PSQL[@]}" -d "$DB" -At -c "SET ROLE service_role;" -c "$1" 2>&1 | tail -1 | sed 's/^ERROR: *//'; }
   check "authenticated can't call rate_limit_hit" "$(as $I1 "SELECT * FROM rate_limit_hit('k', 1, 60)")" "permission denied.*"
@@ -354,6 +384,7 @@ scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrat
   supabase/migrations/20260929000100_active_reads_insert_audit.sql \
   supabase/migrations/20261030000000_last_admin_guard.sql \
   supabase/migrations/20261030000100_no_bootstrap_admin.sql \
+  supabase/migrations/20261030000200_history_author_privacy.sql \
   supabase/upgrades/hardening-5.sql
 
 # The C9 upgrade file (what production gets, in the SQL Editor) on a
@@ -365,6 +396,8 @@ scenario c9upgrade $PRE_C9 supabase/upgrades/security-c9.sql supabase/upgrades/s
 # (pg_dump's \restrict lines carry a random key per dump; the demo seed,
 # loaded into "fresh" only, adds its own bookkeeping table.)
 dump() { "$PG_BIN/pg_dump" -h "$WORK" -p "$PORT" -U postgres -s -n public -T public.demo_seed_items "$1" | grep -Ev '^(--|\\(un)?restrict )'; }
+check "security-c9.sql's verification query: every row true" \
+  "$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|true$')/$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|false$')" "5/0"
 check "security-c9.sql leaves the same schema as the C9 migrations" \
   "$(if diff <(dump fresh) <(dump c9upgrade) >"$WORK/c9.diff"; then echo same; else head -20 "$WORK/c9.diff" | tr "\n" " "; fi)" "same"
 

@@ -124,3 +124,25 @@ export function historyNoteText(note: string | null | undefined, lang: Lang): st
   }
   return n;
 }
+
+// Who did it, as this reader may see it. history_log fills by_user_email
+// only for an admin of the unit; everyone else gets the display name the
+// event was written with.
+export interface HistoryAuthorFields {
+  by_user: string | null;
+  by_user_email: string | null;
+  by_user_name: string | null;
+}
+
+/** Email (admins) or display name; null when neither is known. Exports
+ *  and the Audit Log's user filter use this raw value. */
+export function historyAuthorRaw(h: HistoryAuthorFields): string | null {
+  return h.by_user_email || h.by_user_name || null;
+}
+
+/** For the screen: as above, "a user" when the author is known but has no
+ *  name, null when the row has no author (a change made outside the app,
+ *  or an account deleted since, seen by a non-admin). */
+export function historyAuthor(h: HistoryAuthorFields, lang: Lang): string | null {
+  return historyAuthorRaw(h) ?? (h.by_user ? tf(lang, "history.someone") : null);
+}

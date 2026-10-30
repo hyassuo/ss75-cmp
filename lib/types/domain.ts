@@ -145,7 +145,11 @@ export interface HistoryEntry {
   new_value: string | null;
   note: string | null;
   by_user: string | null;
+  /** The author's email: filled by history_log for an admin of the unit
+   *  only (NULL for everyone else; the base column isn't readable). */
   by_user_email: string | null;
+  /** The author's display name when the event was written. */
+  by_user_name: string | null;
 }
 
 export interface Item {
