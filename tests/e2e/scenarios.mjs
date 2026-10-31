@@ -3959,7 +3959,9 @@ async function main() {
       c.expect(!(await modalOpen(page)), "continuing saves and closes");
       db = await one("SELECT mechanism, prob, cons, priority, freq_insp FROM items WHERE id = $1", [F3.ai]);
       c.expect(db.mechanism === "Atmospheric Corrosion" && db.prob === 3 && db.cons === 3 && db.priority === "Medium" && db.freq_insp === "Quarterly", "DB has the applied fields", db);
-      const rd = await sql("SELECT depth_mm::text d, location, checked_by, reading_date = current_date AS today FROM readings WHERE item_id = $1", [F3.ai]);
+      // "Today" on the browser's calendar (newPage: America/Sao_Paulo), not
+      // the database's (UTC): they differ every evening from 21:00 BRT.
+      const rd = await sql("SELECT depth_mm::text d, location, checked_by, reading_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date AS today FROM readings WHERE item_id = $1", [F3.ai]);
       c.expect(rd.length === 1 && rd[0].d === "0.400" && rd[0].location === "AI estimate" && rd[0].checked_by === "AI Vision" && rd[0].today,
         "exactly one reading: 0.400 mm, tagged 'AI estimate' / 'AI Vision', dated today", rd);
       c.expect((await one("SELECT count(*)::int n FROM evidences WHERE item_id = $1", [F3.ai])).n === 0, "the discarded evidence entry was not saved");
