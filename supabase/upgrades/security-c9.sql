@@ -1,9 +1,10 @@
 -- =============================================================================
 -- SS-75 CMP: SECURITY AUDIT C9 (v1.22.0): run once in the Supabase SQL Editor
 -- =============================================================================
--- In-place upgrade for the production database (created from
--- supabase/migrations/, with the two migrations of 29/09 applied by hand).
--- Idempotent: safe to re-run. It is the SQL of the C9 migrations below, in
+-- In-place upgrade for the production database: security round 5 (the
+-- upgrade chain of the README, "Existing database", or a database created
+-- from supabase/migrations/) plus the two migrations of 29/09, applied by
+-- hand. Idempotent: safe to re-run. It is the SQL of the C9 migrations below, in
 -- order, for pasting into the SQL Editor, inside one transaction (an error
 -- leaves the database as it was); tests/sql/run.sh checks that this file
 -- and those migrations leave identical schemas:
