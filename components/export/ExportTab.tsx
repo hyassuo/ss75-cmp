@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchAll } from "@/lib/supabase/fetchAll";
 import { csvRow } from "@/lib/utils/csv";
 import { latestNameByRef } from "@/lib/utils/historyNames";
+import { historyAuthorRaw } from "@/lib/i18n/history";
 import { historyNote } from "@/lib/utils/historyNote";
 import { download } from "@/lib/utils/download";
 import { PRIORITY_COLOR, STATUS_COLOR } from "@/lib/utils/constants";
@@ -232,7 +233,8 @@ export function ExportTab() {
       const res = await withTimeout(
         fetchAll<HistoryEntry>((from, to, withCount) =>
           supabase
-            .from("history")
+            // The author's email for admins, the name for everyone else.
+            .from("history_log")
             .select("*", { count: withCount ? "exact" : undefined })
             .order("event_date", { ascending: false })
             .order("id")
@@ -310,7 +312,7 @@ export function ExportTab() {
             Previous: h.prev_value ?? "",
             New: h.new_value ?? "",
             Note: historyNote(h.note),
-            User: h.by_user_email ?? "",
+            User: historyAuthorRaw(h) ?? "",
           }))
         ),
         // SheetJS reserves the name "History" (Excel change-history sheet),

@@ -4,16 +4,27 @@ import { useEffect, useRef, useState } from "react";
 import { DS } from "@/lib/design/tokens";
 import { Button } from "@/components/ui/Button";
 import { useLang } from "@/lib/context/LangContext";
+import { useData } from "@/lib/context/DataContext";
 import { createClient } from "@/lib/supabase/client";
+import {
+  ACTIVITY_PATH,
+  ACTIVITY_PING_MS,
+  IDLE_REASON,
+  IDLE_TIMEOUT_MS,
+  IDLE_EXPIRED_ERROR,
+  IDLE_WARNING_MS,
+  LAST_ACTIVITY_KEY,
+  readLastActivity,
+  writeLastActivity,
+} from "@/lib/security/idle";
 
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0";
 const VERSION_KEY = "ss75-cmp.lastVersion";
-// Single-tab session that does not survive 30 min of zero interaction.
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
-// Heads-up shown this long before the idle sign-out.
-const IDLE_WARNING_MS = 2 * 60 * 1000;
+// Local writes of the activity time are throttled to this (scroll and
+// mouse events come in bursts).
+const STORE_EVERY_MS = 5 * 1000;
 
-async function forceSignOut(reload: boolean) {
+async function forceSignOut(reload: boolean, reason?: string) {
   try {
     const supabase = createClient();
     // Local scope: end this device's session only. The default ('global')
@@ -26,60 +37,130 @@ async function forceSignOut(reload: boolean) {
   // Hard reload so any in-memory state is cleared (data context, modal
   // state, etc.) and the proxy redirects to /login on the next page.
   if (typeof window !== "undefined") {
-    if (reload) window.location.replace("/login");
+    if (reload) window.location.replace(reason ? `/login?reason=${reason}` : "/login");
   }
 }
 
 /**
- * Signs the user out after IDLE_TIMEOUT_MS with no input. Activity events
- * (mouse, keyboard, touch, scroll) reset the timer.
+ * Signs the user out after IDLE_TIMEOUT_MS with no input (mouse, keyboard,
+ * touch, scroll), in every tab of this browser.
  *
- * Mobile browsers freeze timers in background tabs, so the deadline is also
- * checked against the wall clock whenever the page becomes visible again:
- * returning to the tab is not "activity" and must not restart the count.
+ * The clock is the user's last activity in localStorage
+ * (lib/security/idle.ts), not the time this component mounted: closing the
+ * tab and opening the app again sees the real idle time, and activity in
+ * one tab keeps the others alive ("storage" events). Mobile browsers
+ * freeze timers in background tabs, so the deadline is also checked
+ * against the wall clock whenever the page becomes visible again (or
+ * comes back from the back/forward cache): returning to the tab is not
+ * "activity" and must not restart the count. While the user is active the
+ * server hears about it at most once a minute (ACTIVITY_PATH), so its own
+ * idle check (the proxy) agrees on long form-filling without navigation.
  * Unsaved item edits survive the sign-out in local storage (itemDraft).
  */
 export function IdleLogout() {
+  const { profile } = useData();
+  const uid = profile.id;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastActivity = useRef(Date.now());
   const [warning, setWarning] = useState(false);
   const { t } = useLang();
 
   useEffect(() => {
+    const mountedAt = Date.now();
+    // Last activity known to this tab; a stored one (another tab, an
+    // earlier visit) wins when newer. Nothing stored (first visit, storage
+    // off): count from now, as before.
+    let last = readLastActivity(uid) ?? mountedAt;
+    let lastStored = 0;
+    // The page load that mounted this told the server already.
+    let lastPing = mountedAt;
+    let signingOut = false;
+
+    const signOut = () => {
+      if (signingOut) return;
+      signingOut = true;
+      void forceSignOut(true, IDLE_REASON);
+    };
+    const latest = () => Math.max(last, readLastActivity(uid) ?? 0);
     const arm = (ms: number) => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (warnRef.current) clearTimeout(warnRef.current);
-      timerRef.current = setTimeout(() => void forceSignOut(true), ms);
+      timerRef.current = setTimeout(check, ms);
       warnRef.current = setTimeout(
         () => setWarning(true),
         Math.max(0, ms - IDLE_WARNING_MS)
       );
     };
+    // Deadline reached or page visible again: another tab may have seen
+    // activity meanwhile.
+    function check() {
+      last = latest();
+      const left = IDLE_TIMEOUT_MS - (Date.now() - last);
+      if (left <= 0) signOut();
+      else arm(left);
+    }
+    const ping = () => {
+      void fetch(ACTIVITY_PATH, { method: "POST", keepalive: true })
+        .then(async (r) => {
+          // The server already ended this session for inactivity. Only
+          // that answer signs out: a bare 401 can also be a transient
+          // failure to verify the session (Supabase Auth unreachable, a
+          // refresh racing this tab's own), and signing out on it would
+          // revoke the session of someone who is working.
+          if (r.status !== 401) return;
+          const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
+          if (body?.error === IDLE_EXPIRED_ERROR) signOut();
+        })
+        .catch(() => {
+          // offline: the next activity tries again
+          lastPing = 0;
+        });
+    };
     const activity = () => {
-      lastActivity.current = Date.now();
+      const now = Date.now();
+      last = now;
       setWarning(false);
       arm(IDLE_TIMEOUT_MS);
+      if (now - lastStored >= STORE_EVERY_MS) {
+        lastStored = now;
+        writeLastActivity(uid, now);
+      }
+      if (now - lastPing >= ACTIVITY_PING_MS) {
+        lastPing = now;
+        ping();
+      }
     };
     const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      const left = IDLE_TIMEOUT_MS - (Date.now() - lastActivity.current);
-      if (left <= 0) void forceSignOut(true);
-      else arm(left);
+      if (document.visibilityState === "visible") check();
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) check();
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LAST_ACTIVITY_KEY) {
+        setWarning(false);
+        check();
+      }
     };
     const events = ["mousedown", "keydown", "touchstart", "scroll"];
     events.forEach((e) =>
       window.addEventListener(e, activity, { passive: true })
     );
     document.addEventListener("visibilitychange", onVisible);
-    activity();
+    window.addEventListener("pageshow", onShow);
+    window.addEventListener("storage", onStorage);
+    // Not activity: mounting must not restart the clock.
+    if (readLastActivity(uid) === null) writeLastActivity(uid, last);
+    check();
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (warnRef.current) clearTimeout(warnRef.current);
       events.forEach((e) => window.removeEventListener(e, activity));
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onShow);
+      window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [uid]);
 
   if (!warning) return null;
   // Any tap/key counts as activity and dismisses this; the button just

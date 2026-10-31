@@ -1,10 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Database } from "@/lib/types/database.types";
+import { requestIsHttps, sessionCookieOptions } from "@/lib/supabase/cookieOptions";
 
 export async function createClient() {
   // cookies() is async (Next 15+; Next 16 removed the sync fallback).
   const cookieStore = await cookies();
+  const secure = requestIsHttps(null, await headers());
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,14 +18,11 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              // Strip maxAge/expires so the session ends when the browser
-              // closes: required by the session-policy decision.
-              const sessionOpts = { ...options };
-              delete sessionOpts.maxAge;
-              delete sessionOpts.expires;
-              cookieStore.set(name, value, sessionOpts);
-            });
+            // Session-only (ends when the browser closes: required by the
+            // session-policy decision), Secure over https.
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, sessionCookieOptions(options, secure))
+            );
           } catch {
             // Called from a Server Component: the proxy refreshes the session.
           }

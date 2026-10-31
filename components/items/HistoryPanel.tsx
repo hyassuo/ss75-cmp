@@ -5,6 +5,7 @@ import { DS } from "@/lib/design/tokens";
 import { fmt } from "@/lib/utils/format";
 import {
   historyAction,
+  historyAuthor,
   historyField,
   historyNoteText,
   historyValue,
@@ -22,8 +23,9 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
     let active = true;
     const supabase = createClient();
     (async () => {
+      // history_log: the author's email for admins, the name for others.
       const { data } = await supabase
-        .from("history")
+        .from("history_log")
         .select("*")
         .eq("item_id", itemId)
         .order("event_date", { ascending: false });
@@ -52,59 +54,62 @@ export function HistoryPanel({ itemId }: { itemId: string }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {rows.map((h) => (
-        <div
-          key={h.id}
-          style={{
-            background: DS.sur2,
-            border: "1px solid " + DS.bord,
-            borderRadius: 7,
-            padding: "8px 12px",
-            display: "flex",
-            gap: 10,
-          }}
-        >
+      {rows.map((h) => {
+        const author = historyAuthor(h, lang);
+        return (
           <div
+            key={h.id}
             style={{
-              fontFamily: "monospace",
-              fontSize: DS.fs.xs,
-              color: DS.text3,
-              flexShrink: 0,
-              paddingTop: 2,
-              minWidth: 96,
+              background: DS.sur2,
+              border: "1px solid " + DS.bord,
+              borderRadius: 7,
+              padding: "8px 12px",
+              display: "flex",
+              gap: 10,
             }}
           >
-            {fmt(h.event_date.split("T")[0], lang)}
-          </div>
-          <div>
             <div
               style={{
-                fontSize: DS.fs.md,
-                fontWeight: 700,
-                color: DS.text2,
-                marginBottom: 2,
+                fontFamily: "monospace",
+                fontSize: DS.fs.xs,
+                color: DS.text3,
+                flexShrink: 0,
+                paddingTop: 2,
+                minWidth: 96,
               }}
             >
-              {historyAction(h.action, lang)}
-              {h.field_changed ? ` · ${historyField(h.field_changed, lang)}` : ""}
+              {fmt(h.event_date.split("T")[0], lang)}
             </div>
-            {(h.prev_value || h.new_value) && (
-              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
-                {historyValue(h.field_changed, h.prev_value, lang)} →{" "}
-                {historyValue(h.field_changed, h.new_value, lang)}
+            <div>
+              <div
+                style={{
+                  fontSize: DS.fs.md,
+                  fontWeight: 700,
+                  color: DS.text2,
+                  marginBottom: 2,
+                }}
+              >
+                {historyAction(h.action, lang)}
+                {h.field_changed ? ` · ${historyField(h.field_changed, lang)}` : ""}
               </div>
-            )}
-            {h.note && (
-              <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{historyNoteText(h.note, lang)}</div>
-            )}
-            {h.by_user_email && (
-              <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 2 }}>
-                {t("history.by", h.by_user_email)}
-              </div>
-            )}
+              {(h.prev_value || h.new_value) && (
+                <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>
+                  {historyValue(h.field_changed, h.prev_value, lang)} →{" "}
+                  {historyValue(h.field_changed, h.new_value, lang)}
+                </div>
+              )}
+              {h.note && (
+                <div style={{ fontSize: DS.fs.sm, color: DS.text3 }}>{historyNoteText(h.note, lang)}</div>
+              )}
+              {author && (
+                <div style={{ fontSize: DS.fs.xs, color: DS.text3, marginTop: 2 }}>
+                  {t("history.by", author)}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

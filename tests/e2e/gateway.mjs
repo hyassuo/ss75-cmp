@@ -168,9 +168,12 @@ function userJson(u) {
   };
 }
 
-function issueSession(u) {
+// Like GoTrue: a session keeps its id and its "amr" (how it was obtained,
+// and when) across refreshes. Password sign-in -> "password"; the implicit
+// flow's /verify (recovery link) -> "otp" (supabase/auth verify.go).
+function issueSession(u, { method = "password", sid = crypto.randomUUID(), amr } = {}) {
   const now = Math.floor(Date.now() / 1000);
-  const sid = crypto.randomUUID();
+  amr = amr || [{ method, timestamp: now }];
   const access_token = sign(
     {
       aud: "authenticated",
@@ -182,6 +185,7 @@ function issueSession(u) {
       phone: "",
       role: "authenticated",
       aal: "aal1",
+      amr,
       session_id: sid,
       is_anonymous: false,
       app_metadata: { provider: "email", providers: ["email"] },
@@ -191,7 +195,7 @@ function issueSession(u) {
     jwtAlg === "ES256" ? ES : null
   );
   const refresh_token = crypto.randomBytes(16).toString("hex");
-  refreshTokens.set(refresh_token, { uid: u.id, sid });
+  refreshTokens.set(refresh_token, { uid: u.id, sid, amr });
   return {
     access_token,
     token_type: "bearer",
@@ -253,7 +257,7 @@ async function handleAuth(req, res, sub, query) {
       if (!u) return authErr(res, 400, "user_not_found", "User not found");
       if (isBanned(u)) return authErr(res, 400, "user_banned", "Invalid Refresh Token: User Banned");
       refreshTokens.delete(body.refresh_token);
-      return send(res, 200, issueSession(u));
+      return send(res, 200, issueSession(u, { sid: rt.sid, amr: rt.amr }));
     }
     return authErr(res, 400, "unsupported_grant_type", "Unsupported grant type");
   }
@@ -314,7 +318,7 @@ async function handleAuth(req, res, sub, query) {
       return send(res, 303, null, { Location: `${fallback}#${err}` });
     }
     otps.delete(query.get("token"));
-    const s = issueSession(await userRow("id", o.uid));
+    const s = issueSession(await userRow("id", o.uid), { method: "otp" });
     const frag = new URLSearchParams({
       access_token: s.access_token, expires_at: String(s.expires_at), expires_in: String(s.expires_in),
       refresh_token: s.refresh_token, token_type: "bearer", type: "recovery",
@@ -349,8 +353,15 @@ async function handleAuth(req, res, sub, query) {
     if (!isService()) return authErr(res, 403, "not_admin", "User not allowed");
     const u = await userRow("id", adminUser[1]);
     if (!u) return authErr(res, 404, "user_not_found", "User not found");
-    // Cascades to public.profiles (ON DELETE CASCADE), as in Supabase.
-    await pool.query("DELETE FROM auth.users WHERE id = $1", [u.id]);
+    // Cascades to public.profiles (ON DELETE CASCADE), as in Supabase. A
+    // trigger refusing the cascade (guard_last_admin) surfaces the way
+    // GoTrue reports it: a 500 without the database's message.
+    try {
+      await pool.query("DELETE FROM auth.users WHERE id = $1", [u.id]);
+    } catch (e) {
+      record({ t: Date.now(), kind: "admin-delete-user-failed", user: u.email, error: e.message });
+      return authErr(res, 500, "unexpected_failure", "Database error deleting user");
+    }
     for (const [tok, rt] of refreshTokens) if (rt.uid === u.id) refreshTokens.delete(tok);
     record({ t: Date.now(), kind: "admin-delete-user", user: u.email });
     return send(res, 200, userJson(u));

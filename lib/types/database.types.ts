@@ -266,6 +266,7 @@ export interface Database {
           note: string | null;
           by_user: string | null;
           by_user_email: string | null;
+          by_user_name: string | null;
         };
         Insert: {
           id?: string;
@@ -281,6 +282,7 @@ export interface Database {
           note?: string | null;
           by_user?: string | null;
           by_user_email?: string | null;
+          by_user_name?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["history"]["Insert"]>;
         Relationships: [];
@@ -300,7 +302,14 @@ export interface Database {
         Relationships: [];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      // The audit trail as the app reads it: by_user_email is NULL unless
+      // the caller is an admin of the row's unit (security audit C9).
+      history_log: {
+        Row: Database["public"]["Tables"]["history"]["Row"];
+        Relationships: [];
+      };
+    };
     Functions: {
       current_user_role: {
         Args: Record<string, never>;

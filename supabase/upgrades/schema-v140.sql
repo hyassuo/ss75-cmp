@@ -8,6 +8,21 @@
 -- supabase/ops/backup-snapshot.sql).
 -- =============================================================================
 
+-- 0) Guard ---------------------------------------------------------------------
+-- For databases created before security round 5 only (see README, "Existing
+-- database"): a database created from supabase/migrations/ already has all of
+-- this, in newer versions.
+-- Run on a newer schema (supabase/migrations/, or after hardening-5.sql) this
+-- file would weaken it: it redefines audit_item_changes() and other objects
+-- with their v1.4 bodies. Refuse; nothing is changed.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_pristine_draft(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION
+      'schema-v140.sql is only for databases older than security round 5 (is_pristine_draft exists) and would weaken this one. Nothing was changed.';
+  END IF;
+END $$;
+
 
 -- =============================================================================
 -- SECTION 1: SUBAREAS CATALOG (compartments inside a DROPS zone)

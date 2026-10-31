@@ -1,6 +1,17 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/types/database.types";
+import { requestIsHttps, sessionCookieOptions } from "@/lib/supabase/cookieOptions";
+import {
+  IDLE_REASON,
+  LAST_SEEN_COOKIE,
+  formatLastSeen,
+  idleVerdict,
+  lastSeenCookieOptions,
+  lastSeenRecent,
+  parseLastSeen,
+  sessionKey,
+} from "@/lib/security/idle";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -32,7 +43,11 @@ export async function updateSession(
   const hasSupabaseCookie = request.cookies
     .getAll()
     .some((c) => c.name.startsWith("sb-"));
-  if (isPrefetch && hasSupabaseCookie) {
+  // ...and only while the idle clock (lib/security/idle.ts) is recent: a
+  // session that may have gone idle takes the full check below.
+  const lastSeen = request.cookies.get(LAST_SEEN_COOKIE)?.value;
+  const now = Date.now();
+  if (isPrefetch && hasSupabaseCookie && lastSeenRecent(lastSeen, now)) {
     return supabaseResponse;
   }
 
@@ -45,6 +60,7 @@ export async function updateSession(
     return supabaseResponse;
   }
 
+  const secure = requestIsHttps(request.url, request.headers);
   try {
     const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
       cookies: {
@@ -56,14 +72,11 @@ export async function updateSession(
             request.cookies.set(name, value)
           );
           supabaseResponse = forward();
-          cookiesToSet.forEach(({ name, value, options }) => {
-            // Session-only cookies: drop maxAge/expires so the session
-            // ends when the browser closes.
-            const sessionOpts = { ...options };
-            delete sessionOpts.maxAge;
-            delete sessionOpts.expires;
-            supabaseResponse.cookies.set(name, value, sessionOpts);
-          });
+          // Session-only cookies (the session ends when the browser
+          // closes), Secure over https.
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, sessionCookieOptions(options, secure))
+          );
         },
       },
     });
@@ -84,11 +97,13 @@ export async function updateSession(
     // signs such a user (inactive profile) out and sends them here:
     // bouncing them back to /dashboard would loop. getUser also clears the
     // cookies of a session Auth reports gone.
-    const user =
+    const claims =
       path === "/login"
-        ? (await supabase.auth.getUser()).data.user
+        ? null
         : ((await supabase.auth.getClaims().catch(() => null))?.data?.claims ??
           null);
+    const user =
+      path === "/login" ? (await supabase.auth.getUser()).data.user : claims;
 
     // Redirects carry any session cookies set above (a refreshed session,
     // whose old refresh token has just been spent, or a cleared one).
@@ -99,6 +114,37 @@ export async function updateSession(
     };
 
     const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
+
+    // Server-side idle limit (lib/security/idle.ts). /login itself only
+    // redirects a signed-in user to /dashboard, which is checked there.
+    if (claims) {
+      if (idleVerdict(parseLastSeen(lastSeen), claims, now) === "expired") {
+        // Revoke the session at Supabase Auth (best effort), then clear
+        // every session cookie whatever that call did: the browser must
+        // not come back signed in.
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        url.search = "";
+        url.searchParams.set("reason", IDLE_REASON);
+        if (!isPublic) url.searchParams.set("next", path + request.nextUrl.search);
+        const res = redirectTo(url);
+        for (const c of request.cookies.getAll()) {
+          if (c.name.startsWith("sb-")) res.cookies.set(c.name, "", { path: "/", maxAge: 0 });
+        }
+        res.cookies.set(LAST_SEEN_COOKIE, "", { path: "/", maxAge: 0 });
+        return res;
+      }
+      // A signed-in page request is a sign of life (prefetches, which
+      // the user didn't ask for, don't count).
+      if (!isPrefetch) {
+        supabaseResponse.cookies.set(
+          LAST_SEEN_COOKIE,
+          formatLastSeen(sessionKey(claims), now),
+          lastSeenCookieOptions(secure)
+        );
+      }
+    }
 
     if (!user && !isPublic) {
       // Remember where the user was going (e.g. a shared item link) so the

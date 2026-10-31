@@ -6,8 +6,9 @@
 -- for fresh installs.
 --
 -- RUN THIS LAST: supabase/upgrades/security-fixes.sql and supabase/upgrades/hardening-4.sql
--- redefine some of the objects below with their older (weaker) versions. If
--- you ever re-run one of those files, re-run this one afterwards.
+-- redefine some of the objects below with their older (weaker) versions.
+-- Once this file has run, they (and the other pre-round-5 files) refuse to
+-- run again.
 --
 -- Closes:
 --   1. Server-owned timestamps and authorship. enforce_author() forced

@@ -60,6 +60,25 @@ export function clearItemDraft(userId: string, itemId: string): void {
   }
 }
 
+// Every draft of this user on this browser: signing out on purpose means
+// leaving the device, so nothing typed is kept for whoever comes next. (An
+// idle sign-out keeps them: the inspector is coming back to the same
+// tablet, which is what the drafts are for.)
+export function clearUserItemDrafts(userId: string): void {
+  try {
+    const ls = window.localStorage;
+    const mine = `${PREFIX}${userId}.`;
+    const doomed: string[] = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k && k.startsWith(mine)) doomed.push(k);
+    }
+    doomed.forEach((k) => ls.removeItem(k));
+  } catch {
+    // ignore
+  }
+}
+
 // Drop this user's drafts for items that no longer exist (or are too old).
 export function pruneItemDrafts(userId: string, liveIds: Set<string>): void {
   try {

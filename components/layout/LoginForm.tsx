@@ -3,6 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { safeNext } from "@/lib/utils/safeNext";
+import { IDLE_REASON, writeLastActivity } from "@/lib/security/idle";
 import { S } from "@/lib/design/styles";
 import { DS } from "@/lib/design/tokens";
 import { Label } from "@/components/ui/Label";
@@ -103,6 +104,9 @@ export function LoginForm() {
     // The app's data starts loading now, while the destination is still
     // being rendered on the server; DataProvider takes it over.
     preloadAppData(supabase, data.user.id);
+    // A new session: the idle clock (SessionGuards) starts now, not at
+    // whatever an earlier session on this browser left behind.
+    writeLastActivity(data.user.id, Date.now());
     // The session cookies are written before signInWithPassword resolves,
     // so this navigation already renders as the signed-in user. (A
     // router.refresh() on top rendered the destination a second time: two
@@ -232,6 +236,12 @@ export function LoginForm() {
         {info ? (
           <Notice tone="success" style={NOTICE}>
             {info}
+          </Notice>
+        ) : null}
+
+        {!err && !info && params.get("reason") === IDLE_REASON ? (
+          <Notice tone="info" style={NOTICE}>
+            {t("login.idleSignedOut")}
           </Notice>
         ) : null}
 

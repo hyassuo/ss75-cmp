@@ -763,10 +763,10 @@ CREATE TRIGGER trg_subareas_author
 -- SECTION 5: AUTH HOOK: auto-create profile on signup
 -- =============================================================================
 
--- NOTE: 'hyassuo@gmail.com' is the bootstrap admin (auto-active on first
--- sign-in so the very first login works). After the first admin exists,
--- this special case can be removed by re-running this function definition
--- without the email checks.
+-- NOTE: 'hyassuo@gmail.com' was the bootstrap admin (auto-active on first
+-- sign-in so the very first login worked). Removed by
+-- 20261030000100_no_bootstrap_admin.sql: every new account is an inactive
+-- viewer, and a new project's first admin is promoted by hand (README).
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -1197,6 +1197,9 @@ UNION ALL SELECT 'history',   count(*)::text FROM public.history;
 --
 --   UPDATE public.zones SET system = 'Third Party' WHERE zid = 'Z14';
 --
--- If the schema was provisioned before the security review, run
--- supabase/upgrades/security-fixes.sql (idempotent) to apply the RLS hardening.
+-- The files of supabase/upgrades/ are for databases created before this
+-- baseline (README, "Existing database"); never run them on a database
+-- created from this file. The pre-round-5 ones (security-fixes, hardening,
+-- hardening-3/4, schema-v130/140) would put back older, weaker objects, so
+-- they refuse to run on it.
 -- =============================================================================

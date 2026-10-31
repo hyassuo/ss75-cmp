@@ -14,7 +14,13 @@ import { useLang } from "@/lib/context/LangContext";
 import { download } from "@/lib/utils/download";
 import { latestNameByRef } from "@/lib/utils/historyNames";
 import { historyNote } from "@/lib/utils/historyNote";
-import { historyAction, historyField, historyValue } from "@/lib/i18n/history";
+import {
+  historyAction,
+  historyAuthor,
+  historyAuthorRaw,
+  historyField,
+  historyValue,
+} from "@/lib/i18n/history";
 import type { HistoryEntry } from "@/lib/types/domain";
 
 type Row = HistoryEntry & { itemName: string };
@@ -51,8 +57,10 @@ export function AuditLogTable() {
         HistoryEntry & { items: { name: string } | null }
       >(
         (lo, hi, withCount) => {
+          // history_log: the author's email for admins (this screen is
+          // admin-only), the name otherwise.
           let q = supabase
-            .from("history")
+            .from("history_log")
             .select("*, items(name)", { count: withCount ? "exact" : undefined })
             .order("event_date", { ascending: false })
             .order("id");
@@ -94,14 +102,14 @@ export function AuditLogTable() {
   const users = useMemo(
     () =>
       Array.from(
-        new Set(rows.map((r) => r.by_user_email).filter(Boolean))
+        new Set(rows.map(historyAuthorRaw).filter(Boolean))
       ).sort() as string[],
     [rows]
   );
 
   const filtered = rows.filter((r) => {
     if (action && r.action !== action) return false;
-    if (user && r.by_user_email !== user) return false;
+    if (user && historyAuthorRaw(r) !== user) return false;
     return true;
   });
 
@@ -130,7 +138,7 @@ export function AuditLogTable() {
           r.prev_value,
           r.new_value,
           historyNote(r.note),
-          r.by_user_email,
+          historyAuthorRaw(r),
         ], csvSep)
       ),
     ].join("\n");
@@ -336,7 +344,7 @@ export function AuditLogTable() {
                       color: DS.text3,
                     }}
                   >
-                    {r.by_user_email ?? "-"}
+                    {historyAuthor(r, lang) ?? "-"}
                   </td>
                 </tr>
               ))}

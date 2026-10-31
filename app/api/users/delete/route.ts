@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readJson, requireAdmin, sameOrigin } from "@/lib/supabase/adminGuard";
 import { createServiceClient } from "@/lib/supabase/server";
 import { rateLimitShared } from "@/lib/utils/rateLimit";
+import { canonicalUuid } from "@/lib/utils/uuid";
 
 export const runtime = "nodejs";
 
@@ -26,11 +27,16 @@ export async function POST(request: Request) {
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
-  const { id } = body;
-  if (!id) {
+  if (!body.id) {
     return NextResponse.json({ error: "User id required" }, { status: 400 });
   }
-  if (id === guard.ctx.userId) {
+  // Canonical (lower-case) form before any comparison or query: an
+  // upper-case copy of the admin's own id must not pass as someone else.
+  const id = canonicalUuid(body.id);
+  if (!id) {
+    return NextResponse.json({ error: "Invalid user id" }, { status: 400 });
+  }
+  if (id === canonicalUuid(guard.ctx.userId)) {
     return NextResponse.json(
       { error: "You cannot delete yourself." },
       { status: 400 }
@@ -52,7 +58,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  if (target.role === "admin" && target.active) {
+  // The friendly first check; the database enforces the same rule under a
+  // lock (guard_last_admin), which concurrent changes can't race.
+  const onlyActiveAdmin = async () => {
+    if (target.role !== "admin" || !target.active) return false;
     let q = admin
       .from("profiles")
       .select("*", { count: "exact", head: true })
@@ -62,18 +71,23 @@ export async function POST(request: Request) {
       ? q.eq("unit_id", guard.ctx.unitId)
       : q.is("unit_id", null);
     const { count } = await q;
-    if ((count ?? 0) <= 1) {
-      return NextResponse.json(
-        { error: "Cannot delete the only active admin." },
-        { status: 400 }
-      );
-    }
+    return (count ?? 0) <= 1;
+  };
+  const lastAdmin = { error: "Cannot delete the only active admin." };
+  if (await onlyActiveAdmin()) {
+    return NextResponse.json(lastAdmin, { status: 400 });
   }
 
   // Deleting the auth user cascades to public.profiles (ON DELETE CASCADE).
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) {
     console.error("[users/delete]", error);
+    // Auth reports a refused cascade as a bare "Database error deleting
+    // user": when the reason is guard_last_admin (another admin removed
+    // meanwhile), say so instead.
+    if (await onlyActiveAdmin().catch(() => false)) {
+      return NextResponse.json(lastAdmin, { status: 400 });
+    }
     return NextResponse.json({ error: "Could not delete user" }, { status: 400 });
   }
   return NextResponse.json({ ok: true });

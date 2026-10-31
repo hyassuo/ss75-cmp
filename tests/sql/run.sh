@@ -8,8 +8,9 @@
 #
 # Scenarios:
 #   fresh    every file in supabase/migrations/, in order (run twice: idempotency)
-#   upgrade  fresh install, then every in-place upgrade file in README order,
-#            ending with the latest hardening round
+#   upgrade  baseline with round 5 removed (pre-round5.sql), then every
+#            in-place upgrade file in README order, ending with the latest
+#            hardening round
 #
 # Usage: tests/sql/run.sh            (from the repo root or anywhere)
 # Env:   PG_BIN       directory with initdb/pg_ctl (auto-detected)
@@ -152,6 +153,11 @@ suite() {
   check "...without bumping updated_at (no false edit conflicts)" "$(su_sql "SELECT updated_at = created_at FROM items WHERE id = '$KEEP'")" "t"
   check "...and the trail keeps the email" "$(su_sql "SELECT by_user IS NULL AND by_user_email = 'admin2@test' FROM history WHERE item_ref = '$DU' AND action = 'deleted'")" "t"
   check "new sign-ups start inactive" "$(su_sql "SELECT active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d001'")" "f"
+  su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d003', 'hyassuo@gmail.com')" >/dev/null
+  check "the former bootstrap address signs up as an inactive viewer, not an admin" "$(su_sql "SELECT role || ',' || active FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d003'")" "viewer,false"
+  check "...and reads nothing" "$(as 00000000-0000-0000-0000-00000000d003 "SELECT (SELECT count(*) FROM items) + (SELECT count(*) FROM units)")" "0"
+  check "no function hard-codes an email address any more" "$(su_sql "SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND prosrc ~ '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+[.][A-Za-z]'")" "0"
+  su_sql "DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000d003'" >/dev/null
   local NU=00000000-0000-0000-0000-00000000d001
   check "an inactive account reads no units" "$(as $NU "SELECT count(*) FROM units")" "0"
   check "an inactive account reads no zones" "$(as $NU "SELECT count(*) FROM zones")" "0"
@@ -162,9 +168,49 @@ suite() {
   check "admin cannot insert profiles" "$(as $A1 "INSERT INTO profiles (id, email, role, unit_id, active) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test', 'admin', '$U1', true)")" "$DENIED"
   check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "4"
   check "inspector sees only self" "$(as $I1 "SELECT count(*) FROM profiles")" "1"
-  check "user can edit own full_name" "$(rows $I1 "UPDATE profiles SET full_name = 'Insp One' WHERE id = '$I1' RETURNING 1")" "1"
+  # Names are set through the Users API (service role), not by their owner.
+  su_sql "UPDATE profiles SET full_name = 'Insp One' WHERE id = '$I1'" >/dev/null
+  check "user can edit own dept" "$(rows $I1 "UPDATE profiles SET dept = 'Inspection' WHERE id = '$I1' RETURNING 1")" "1"
   check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
   check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
+
+  echo " last active admin"
+  # refused/allowed: whether guard_last_admin stopped the statement (run as
+  # the superuser, like the service role or the Auth service).
+  lastadm() {
+    local out; out=$("${PSQL[@]}" -d "$DB" -At -c "$1" 2>&1 || true)
+    case "$out" in *"ERROR:  last active admin of the unit"*) echo refused ;; *ERROR*) echo "$out" ;; *) echo allowed ;; esac
+  }
+  local UB2=00000000-0000-0000-0000-0000000000b2
+  check "the unit's last active admin cannot be demoted" "$(lastadm "UPDATE profiles SET role = 'inspector' WHERE id = '$A1'")" "refused"
+  check "...nor deactivated" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$A1'")" "refused"
+  check "...nor moved to another unit" "$(lastadm "UPDATE profiles SET unit_id = '$UB2' WHERE id = '$A1'")" "refused"
+  check "...nor deleted (cascade from auth.users)" "$(lastadm "DELETE FROM auth.users WHERE id = '$A1'")" "refused"
+  check "...nor its profile deleted directly" "$(lastadm "DELETE FROM profiles WHERE id = '$A1'")" "refused"
+  check "...and stays an active admin" "$(su_sql "SELECT role || ',' || active FROM profiles WHERE id = '$A1'")" "admin,true"
+  check "the rule is per unit: the other unit's only admin too" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$AB'")" "refused"
+  check "a last admin still edits their own profile (dept)" "$(rows $A1 "UPDATE profiles SET dept = 'QA' WHERE id = '$A1' RETURNING 1")" "1"
+  check "other users are not affected" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$V1'")/$(lastadm "UPDATE profiles SET active = true WHERE id = '$V1'")" "allowed/allowed"
+  su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d002', 'y@test')" >/dev/null
+  su_sql "UPDATE profiles SET role = 'admin', active = false, unit_id = '$U1' WHERE id = '00000000-0000-0000-0000-00000000d002'" >/dev/null
+  check "a deactivated admin can be deleted" "$(lastadm "DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-00000000d002'")/$(su_sql "SELECT count(*) FROM profiles WHERE id = '00000000-0000-0000-0000-00000000d002'")" "allowed/0"
+  su_sql "UPDATE profiles SET role = 'admin' WHERE id = '$I2'" >/dev/null
+  check "two admins: the first may be demoted" "$(lastadm "UPDATE profiles SET role = 'inspector' WHERE id = '$A1'")" "allowed"
+  check "...then the second may not (demoting each other)" "$(lastadm "UPDATE profiles SET role = 'viewer' WHERE id = '$I2'")" "refused"
+  su_sql "UPDATE profiles SET role = 'admin' WHERE id = '$A1'" >/dev/null
+  # The same, at the same moment: the second waits for the first's lock,
+  # then counts what the first left.
+  "${PSQL[@]}" -d "$DB" -At -c "BEGIN" -c "UPDATE profiles SET role = 'inspector' WHERE id = '$A1'" \
+    -c "SELECT pg_sleep(1.5)" -c "COMMIT" >/dev/null 2>&1 &
+  local FIRST=$!
+  sleep 0.5
+  local SECOND; SECOND=$(lastadm "UPDATE profiles SET active = false WHERE id = '$I2'")
+  wait $FIRST
+  check "concurrent: the second change waits for the first, then is refused" "$SECOND" "refused"
+  check "...leaving exactly one active admin" "$(su_sql "SELECT string_agg(id::text, ',') FROM profiles WHERE role = 'admin' AND active AND unit_id = '$U1'")" "$I2"
+  su_sql "UPDATE profiles SET role = 'admin' WHERE id = '$A1'" >/dev/null
+  su_sql "UPDATE profiles SET role = 'inspector' WHERE id = '$I2'" >/dev/null
+  check "fixtures restored (one admin, A1)" "$(su_sql "SELECT string_agg(id::text, ',') FROM profiles WHERE role = 'admin' AND active AND unit_id = '$U1'")" "$A1"
 
   local N0; N0=$(new_item $I1 'Depth check')
   echo " server-owned ids & folder squatting"
@@ -256,6 +302,38 @@ suite() {
   check "inspector sees the item history" "$(as $I1 "SELECT count(*) > 0 FROM history WHERE item_id = '$N'")" "t"
   check "audit rows snapshot unit and name" "$(su_sql "SELECT count(*) FROM history WHERE unit_id IS NULL OR item_ref IS NULL OR item_name IS NULL")" "0"
 
+  echo " audit authors: emails for admins only"
+  local HA; HA=$(new_item $I1 'Author check')
+  as $I1 "UPDATE items SET status = 'Attention' WHERE id = '$HA' RETURNING 1" >/dev/null
+  local HID; HID=$(su_sql "SELECT id FROM history WHERE item_id = '$HA' AND action = 'status_changed'")
+  check "an event keeps the author's display name, written with it" "$(su_sql "SELECT by_user_name || ',' || by_user_email FROM history WHERE id = '$HID'")" "Insp One,insp1@test"
+  for who in V1 I2; do
+    local U=${!who}
+    check "$who: history.by_user_email is not readable" "$(as $U "SELECT by_user_email FROM history LIMIT 1")" "permission denied.*"
+    check "$who: ...nor through SELECT *" "$(as $U "SELECT * FROM history LIMIT 1")" "permission denied.*"
+    check "$who: ...nor as a whole row (to_jsonb)" "$(as $U "SELECT to_jsonb(h) FROM history h LIMIT 1")" "permission denied.*"
+    check "$who: ...nor in a filter" "$(as $U "SELECT count(*) FROM history WHERE by_user_email LIKE 'insp1%'")" "permission denied.*"
+    check "$who: history_log shows the events with names, no emails" "$(as $U "SELECT count(*) > 0 AND count(by_user_email) = 0 AND bool_or(by_user_name = 'Insp One') FROM history_log")" "t"
+    check "$who: history_author_email() reveals nothing" "$(as $U "SELECT count(public.history_author_email(id)) FROM history_log")/$(as $U "SELECT coalesce(public.history_author_email('$HID'), 'null')")" "0/null"
+    check "$who: the other columns still read as before" "$(as $U "SELECT action || ',' || by_user FROM history WHERE id = '$HID'")" "status_changed,$I1"
+  done
+  check "a user can't rename themselves (the name the trail shows)" "$(as $I1 "UPDATE profiles SET full_name = 'Admin One' WHERE id = '$I1'")" "$DENIED"
+  check "...an admin neither (names are set by the Users API)" "$(as $A1 "UPDATE profiles SET full_name = 'Someone Else' WHERE id = '$A1'")" "$DENIED"
+  check "admin of the unit: history_log has the author's email" "$(as $A1 "SELECT by_user_email FROM history_log WHERE id = '$HID'")" "insp1@test"
+  check "admin of the unit: ...for every attributed event" "$(as $A1 "SELECT count(*) FILTER (WHERE by_user_email IS NULL AND by_user IS NOT NULL) FROM history_log")" "0"
+  check "admin of another unit: history_author_email() reveals nothing" "$(as $AB "SELECT coalesce(public.history_author_email('$HID'), 'null')")" "null"
+  check "admin: the base column stays closed (only through history_log)" "$(as $A1 "SELECT by_user_email FROM history WHERE id = '$HID'")" "permission denied.*"
+  check "anon reads no history_log" "$("${PSQL[@]}" -d "$DB" -At -c "SET ROLE anon; SELECT count(*) FROM history_log" 2>&1 | tail -1 | sed 's/^ERROR: *//')" "permission denied.*"
+  check "history_log is read-only" "$(as $A1 "INSERT INTO history_log (action) VALUES ('forged')")" "permission denied.*"
+  # Rows written before the column existed get the name on (re-)applying
+  # the migration; it is idempotent.
+  su_sql "ALTER TABLE history DISABLE TRIGGER trg_history_author" >/dev/null
+  su_sql "INSERT INTO history (item_id, action, by_user, by_user_email) VALUES ('$HA', 'backfill_probe', '$I2', 'insp2@test')" >/dev/null
+  su_sql "ALTER TABLE history ENABLE TRIGGER trg_history_author" >/dev/null
+  load "$ROOT/supabase/migrations/20261030000200_history_author_privacy.sql"
+  check "backfill: older rows get their author's name" "$(su_sql "SELECT coalesce(by_user_name, 'null') FROM history WHERE action = 'backfill_probe'")" "insp2"
+  su_sql "DELETE FROM history WHERE action = 'backfill_probe'" >/dev/null
+
   echo " shared rate limits"
   svc() { "${PSQL[@]}" -d "$DB" -At -c "SET ROLE service_role;" -c "$1" 2>&1 | tail -1 | sed 's/^ERROR: *//'; }
   check "authenticated can't call rate_limit_hit" "$(as $I1 "SELECT * FROM rate_limit_hit('k', 1, 60)")" "permission denied.*"
@@ -293,14 +371,52 @@ check "re-running the demo seed leaves no orphaned history" "$(su_sql "SELECT co
 check "demo seed loads its items" "$(su_sql "SELECT count(*) > 20 FROM items WHERE notes LIKE '[DEMO]%'")" "t"
 check "demo seed never removes an unregistered item" "$(su_sql "SELECT count(*) FROM items WHERE id = '$REAL'")" "1"
 check "rollback-v140 refuses to run under round 5" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/rollback-v140.sql" 2>&1 | grep -c 'not compatible with security round 5')" "1"
+for f in schema-v130 schema-v140 security-fixes hardening hardening-3 hardening-4; do
+  check "$f.sql refuses to run on a current schema" "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/$f.sql" 2>&1 | grep -c "$f.sql is only for databases older than security round 5")" "1"
+done
+check "...and the storage policies stay qualified" "$(su_sql "SELECT count(*) FROM pg_policy WHERE polrelid = 'storage.objects'::regclass AND pg_get_expr(polqual, polrelid) || COALESCE(pg_get_expr(polwithcheck, polrelid), '') LIKE '%foldername(i%.name)%'")" "0"
+check "...and no FOR ALL admin policy came back on profiles" "$(su_sql "SELECT count(*) FROM pg_policy WHERE polname = 'profiles_admin_all'")" "0"
 
+# The pre-round-5 files refuse to run on a round-5 schema, so the chain
+# starts from the baseline with round 5's marker removed (pre-round5.sql).
 scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql \
+  tests/sql/pre-round5.sql \
   supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
   supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql supabase/upgrades/hardening-5.sql \
   supabase/upgrades/schema-v115.sql supabase/upgrades/schema-v115.sql \
   supabase/migrations/20260929000000_rate_limits.sql \
   supabase/migrations/20260929000100_active_reads_insert_audit.sql \
+  supabase/migrations/20261030000000_last_admin_guard.sql \
+  supabase/migrations/20261030000100_no_bootstrap_admin.sql \
+  supabase/migrations/20261030000200_history_author_privacy.sql \
   supabase/upgrades/hardening-5.sql
+
+# Production's own history: the upgrade chain above, the migrations of 29/09
+# by hand, then security-c9.sql (twice) in the SQL Editor.
+scenario c9chain supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql \
+  tests/sql/pre-round5.sql \
+  supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
+  supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql \
+  supabase/upgrades/schema-v115.sql supabase/migrations/20260928000100_ifs_register.sql \
+  supabase/migrations/20260929000000_rate_limits.sql \
+  supabase/migrations/20260929000100_active_reads_insert_audit.sql \
+  supabase/upgrades/security-c9.sql supabase/upgrades/security-c9.sql
+
+# The C9 upgrade file (what production gets, in the SQL Editor) on a
+# database with every migration up to 29/09: twice (idempotency), the
+# whole suite, and the same schema as the fresh install's.
+PRE_C9=$(cd "$ROOT" && ls supabase/migrations/*.sql | sort | awk '$0 < "supabase/migrations/20261030"')
+# shellcheck disable=SC2086
+scenario c9upgrade $PRE_C9 supabase/upgrades/security-c9.sql supabase/upgrades/security-c9.sql
+# (pg_dump's \restrict lines carry a random key per dump; the demo seed,
+# loaded into "fresh" only, adds its own bookkeeping table.)
+dump() { "$PG_BIN/pg_dump" -h "$WORK" -p "$PORT" -U postgres -s -n public -T public.demo_seed_items "$1" | grep -Ev '^(--|\\(un)?restrict )'; }
+check "security-c9.sql's verification query: every row true" \
+  "$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|true$')/$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|false$')" "6/0"
+check "security-c9.sql on production's upgrade chain: every verification row true" \
+  "$("${PSQL[@]}" -d c9chain -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|true$')" "6"
+check "security-c9.sql leaves the same schema as the C9 migrations" \
+  "$(if diff <(dump fresh) <(dump c9upgrade) >"$WORK/c9.diff"; then echo same; else head -20 "$WORK/c9.diff" | tr "\n" " "; fi)" "same"
 
 echo "== no-ifs (upgrade file on a database without the IFS table)"
 DB=noifs
@@ -309,6 +425,8 @@ load "$HERE/supabase-stub.sql"
 load "$ROOT/supabase/migrations/20260928000000_baseline.sql"
 check "supabase/upgrades/hardening-5.sql applies without ifs_objects" \
   "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/hardening-5.sql" >/dev/null 2>&1 && echo applied)" "applied"
+check "security-c9.sql refuses a database without the migrations of 29/09" \
+  "$("${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c 'needs security round 5 and the migrations of 29/09')" "1"
 
 echo
 echo "$PASSES passed, $FAILS failed"

@@ -1277,7 +1277,7 @@ async function main() {
     await page.context().close();
   });
 
-  await run("n5", "Deep link while logged out -> /login?next= -> item; open redirect blocked", async (c) => {
+  await run("n5", "Deep link while logged out -> /login?next= -> item; open redirect blocked (incl. TAB and dot-segment tricks)", async (c) => {
     const page = await newPage(c, "anon");
     await page.goto(`${APP}/dashboard?tab=zones&item=${ID.nav}`);
     await page.waitForURL(/\/login/, { timeout: 15000 });
@@ -1291,7 +1291,7 @@ async function main() {
     c.expect((await modalOpen(page)) && (await title(page)) === "E2E Nav Target", "after login the shared item is open", page.url());
     await shot(c, page, "landed");
     await page.context().close();
-    for (const evil of ["https://evil.example", "//evil.example", "/\\evil.example"]) {
+    for (const evil of ["https://evil.example", "//evil.example", "/\\evil.example", "/\t/evil.example", "/.//evil.example"]) {
       const p = await newPage(c, "anon");
       await p.goto(`${APP}/login?next=${encodeURIComponent(evil)}`);
       await p.locator('input[type="email"]').fill("insp1@test.local");
@@ -1625,6 +1625,133 @@ async function main() {
     c.step(`logout calls: ${JSON.stringify(lo.map((l) => l.url))}`);
     c.expect(lo.every((l) => l.url.includes("scope=local")), "signOut used scope=local");
     await page.context().close();
+  });
+
+  await run("c9idle", "C9: idle limit on the server too: HttpOnly session-only last-seen cookie; old last-seen, or no cookie on an old session -> signed out by the proxy to /login?reason=idle; fresh session without it -> cookie set; activity ping keeps it (401 once idle); a reopened tab sees the real idle time; signing in again starts afresh", async (c) => {
+    const LS = "ss75-cmp.last-seen";
+    const b64 = (o) => Buffer.from(typeof o === "string" ? o : JSON.stringify(o)).toString("base64url");
+    const hs = (payload) => {
+      const data = `${b64({ alg: "HS256", typ: "JWT" })}.${b64(payload)}`;
+      return `${data}.${crypto.createHmac("sha256", process.env.JWT_SECRET).update(data).digest("base64url")}`;
+    };
+    const sessionCookie = async (page) => (await page.context().cookies()).filter((k) => /^sb-.*-auth-token(\.\d+)?$/.test(k.name));
+    const lastSeen = async (page) => (await page.context().cookies()).find((k) => k.name === LS);
+    const setLastSeen = async (page, value) => page.context().addCookies([{ name: LS, value, url: APP, httpOnly: true, sameSite: "Lax" }]);
+    const idleNotice = (page) => page.getByText("You were signed out after 30 minutes without activity.");
+
+    const page = await newPage(c, "insp1");
+    await login(page, "insp1@test.local");
+    const ck = await lastSeen(page);
+    c.expect(!!ck && ck.httpOnly && ck.sameSite === "Lax" && ck.expires === -1 && ck.secure === false && ck.path === "/",
+      "after sign-in: last-seen cookie, HttpOnly, SameSite=Lax, session-only, not Secure on http://localhost", ck);
+    const sess = await sessionFromCookies(page);
+    const claims = JSON.parse(Buffer.from(sess.access_token.split(".")[1], "base64url").toString("utf8"));
+    c.expect(ck?.value.startsWith(`${claims.session_id}.`), "...bound to the session id", { cookie: ck?.value, sid: claims.session_id });
+
+    // Old last-seen (31 min) for this session: the proxy signs out.
+    await setLastSeen(page, `${claims.session_id}.${Date.now() - 31 * 60_000 - 5_000}`);
+    const t0 = Date.now();
+    await page.goto(`${APP}/dashboard?tab=zones`);
+    await page.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(page).pathname === "/login" && q(page).searchParams.get("reason") === "idle" && q(page).searchParams.get("next") === "/dashboard?tab=zones",
+      "stale last-seen -> /login?reason=idle&next=", page.url());
+    c.expect(await idleNotice(page).isVisible().catch(() => false), "login page says why");
+    c.expect((await sessionCookie(page)).filter((k) => k.value).length === 0 && !(await lastSeen(page)), "session and last-seen cookies cleared");
+    const lo = (await ctl.log(t0)).filter((l) => l.url.startsWith("/auth/v1/logout"));
+    c.expect(lo.length >= 1 && lo.every((l) => l.src === "server" && l.url.includes("scope=local")), "the server revoked the session (logout, scope=local)", lo);
+    await shot(c, page, "idle-login");
+
+    // Signing in again starts a fresh clock: no immediate sign-out.
+    await page.locator('input[type="email"]').fill("insp1@test.local");
+    await page.locator('input[type="password"]').fill(PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(2000);
+    c.expect(q(page).pathname === "/dashboard", "signed in again after an idle sign-out -> stays on the dashboard", page.url());
+
+    // No last-seen cookie: a session that just started is fine (cookie set
+    // again)...
+    const fresh = await sessionFromCookies(page);
+    const fclaims = JSON.parse(Buffer.from(fresh.access_token.split(".")[1], "base64url").toString("utf8"));
+    const keep = (await page.context().cookies()).filter((k) => k.name !== LS);
+    await page.context().clearCookies();
+    await page.context().addCookies(keep);
+    await page.goto(`${APP}/dashboard`);
+    await waitLoaded(page).catch(() => {});
+    c.expect(q(page).pathname === "/dashboard" && !!(await lastSeen(page)), "no last-seen cookie, session just started -> dashboard, cookie set", page.url());
+    // ...but one that started 2 h ago (a browser restart kept the Supabase
+    // cookies, not ours) is signed out.
+    const oldTok = hs({ ...fclaims, amr: [{ method: "password", timestamp: Math.floor(Date.now() / 1000) - 7200 }] });
+    const base = (await sessionCookie(page))[0].name.replace(/\.\d+$/, "");
+    const oldCookie = `${base}=base64-${b64({ ...fresh, access_token: oldTok })}`;
+    const r = await fetch(`${APP}/dashboard`, { redirect: "manual", headers: { cookie: oldCookie } });
+    const loc = new URL(r.headers.get("location") || "/", APP);
+    c.expect(r.status === 307 && loc.pathname === "/login" && loc.searchParams.get("reason") === "idle", "no last-seen cookie, session started 2 h ago -> /login?reason=idle", { status: r.status, loc: loc.href });
+    const set = r.headers.getSetCookie();
+    c.expect(set.some((x) => x.startsWith(`${base}=;`) && /Max-Age=0/i.test(x)), "...and its session cookie is deleted", set);
+    // A prefetch with an old/missing last-seen gets no shortcut either.
+    const pf = await fetch(`${APP}/dashboard`, { redirect: "manual", headers: { cookie: oldCookie, "next-router-prefetch": "1" } });
+    c.expect(pf.status === 307 && new URL(pf.headers.get("location") || "/", APP).searchParams.get("reason") === "idle", "prefetch without a recent last-seen -> full check -> idle", pf.status);
+
+    // The activity ping (long form-filling without navigation).
+    const api = (cookie) => fetch(`${APP}/api/session/activity`, { method: "POST", headers: { Origin: APP, cookie } });
+    const jar = async () => (await page.context().cookies()).map((k) => `${k.name}=${k.value}`).join("; ");
+    const before = Number((await lastSeen(page)).value.split(".")[1]);
+    await page.waitForTimeout(1100);
+    const okPing = await api(await jar());
+    const newSeen = (okPing.headers.getSetCookie().find((x) => x.startsWith(`${LS}=`)) || "").split(";")[0].split("=")[1] || "";
+    c.expect(okPing.status === 204 && Number(newSeen.split(".")[1]) > before && /HttpOnly/i.test(okPing.headers.getSetCookie().join()), "POST /api/session/activity -> 204, last-seen moved forward", { status: okPing.status, newSeen, before });
+    const stalePing = await api((await jar()).replace(new RegExp(`${LS}=[^;]+`), `${LS}=${fclaims.session_id}.${Date.now() - 40 * 60_000}`));
+    c.expect(stalePing.status === 401 && (await stalePing.json()).error === "Session expired", "ping with an idle last-seen -> 401 'Session expired' (never revived)", stalePing.status);
+    const anonPing = await api("");
+    c.expect(anonPing.status === 401, "ping without a session -> 401", anonPing.status);
+    const xPing = await fetch(`${APP}/api/session/activity`, { method: "POST", headers: { Origin: "https://evil.example", cookie: await jar() } });
+    c.expect(xPing.status === 403, "cross-origin ping -> 403", xPing.status);
+
+    // The browser pings while the user is active (at most once a minute).
+    await page.clock.install();
+    await page.goto(`${APP}/dashboard`);
+    await waitLoaded(page);
+    await page.clock.fastForward("01:05");
+    const [pinged] = await Promise.all([
+      page.waitForResponse((rs) => rs.url().endsWith("/api/session/activity") && rs.request().method() === "POST", { timeout: 10000 }).catch(() => null),
+      page.keyboard.press("Shift"),
+    ]);
+    c.expect(pinged?.status() === 204, "activity after a minute -> the browser pings the server (204)", pinged?.status());
+    // A 401 that is not the idle verdict (e.g. the server could not verify
+    // the session for a moment) must not sign a working user out.
+    await page.route("**/api/session/activity", (rt) => rt.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Unauthorized" }) }));
+    await page.clock.fastForward("01:05");
+    const [bare] = await Promise.all([
+      page.waitForResponse((rs) => rs.url().endsWith("/api/session/activity"), { timeout: 10000 }).catch(() => null),
+      page.keyboard.press("Shift"),
+    ]);
+    await page.waitForTimeout(1500);
+    c.expect(bare?.status() === 401 && q(page).pathname === "/dashboard", "a bare 401 from the ping (not 'Session expired') -> still signed in", { status: bare?.status(), url: page.url() });
+    await page.unroute("**/api/session/activity");
+    // The server says the session is idle -> the tab signs out.
+    await setLastSeen(page, `${fclaims.session_id}.${Date.now() - 40 * 60_000}`);
+    await page.clock.fastForward("01:05");
+    await page.keyboard.press("Shift");
+    await page.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(page).pathname === "/login" && q(page).searchParams.get("reason") === "idle", "ping answered 401 -> the tab goes to /login?reason=idle", page.url());
+    await page.context().close();
+
+    // A reopened tab sees the real idle time (stored in this browser).
+    const p2 = await newPage(c, "insp1-reopen");
+    await login(p2, "insp1@test.local");
+    await p2.evaluate((uid) => localStorage.setItem("ss75-cmp.lastActivity", JSON.stringify({ u: uid, t: Date.now() - 31 * 60_000 })), USERS.insp1);
+    await p2.goto(`${APP}/dashboard`);
+    await p2.waitForURL(/\/login/, { timeout: 20000 }).catch(() => {});
+    c.expect(q(p2).pathname === "/login" && q(p2).searchParams.get("reason") === "idle", "reopened after 31 min idle (stored activity) -> signed out, not a fresh 30 min", p2.url());
+    // Recent stored activity: the reload keeps the session.
+    await login(p2, "insp1@test.local");
+    await p2.evaluate((uid) => localStorage.setItem("ss75-cmp.lastActivity", JSON.stringify({ u: uid, t: Date.now() - 10 * 60_000 })), USERS.insp1);
+    await p2.goto(`${APP}/dashboard`);
+    await waitLoaded(p2).catch(() => {});
+    await p2.waitForTimeout(1500);
+    c.expect(q(p2).pathname === "/dashboard", "reopened after 10 min -> still signed in", p2.url());
+    await p2.context().close();
   });
 
   await run("n12", "Language PT: <html lang>, cookie, SSR after reload, login in PT, CSV ';' + decimal comma", async (c) => {
@@ -2026,7 +2153,7 @@ async function main() {
   const resetForm = (page) => page.getByLabel("New password", { exact: true });
   const invalidMsg = (page) => page.getByText(/This reset link is invalid/);
 
-  await run("r2", "C1: /auth/reset without tokens (even signed in) refuses; expired link on /login is forwarded; Site-URL fallback forwarded", async (c) => {
+  await run("r2", "C1: /auth/reset without tokens (even signed in) refuses; expired link on /login is forwarded; Site-URL fallback forwarded; C9: a link never switches a signed-in device to another account, password-session tokens are not a reset link", async (c) => {
     const anon = await newPage(c, "anon");
     await anon.goto(`${APP}/auth/reset`);
     await invalidMsg(anon).waitFor({ timeout: 15000 }).catch(() => {});
@@ -2044,7 +2171,8 @@ async function main() {
     await invalidMsg(insp).waitFor({ timeout: 15000 }).catch(() => {});
     c.expect(await invalidMsg(insp).isVisible() && (await insp.locator('input[type="password"]').count()) === 0, "?code= (PKCE) is not accepted -> invalid, no form");
     // Someone else's recovery link opened on this signed-in device, landing
-    // on /dashboard: forwarded to /auth/reset, tokens gone from the URL.
+    // on /dashboard: forwarded to /auth/reset, tokens gone from the URL, and
+    // refused (C9): it must not silently switch the device to that account.
     const tr = Date.now();
     await fetch(`${GW}/auth/v1/recover?redirect_to=${encodeURIComponent(`${APP}/auth/reset`)}`, {
       method: "POST", headers: { apikey: process.env.ANON_KEY, "content-type": "application/json" }, body: JSON.stringify({ email: "viewer1@test.local" }),
@@ -2055,14 +2183,27 @@ async function main() {
     c.expect(/type=recovery/.test(frag) && /access_token=/.test(frag), "recovery fragment obtained from the email link", loc.slice(0, 80));
     await insp.goto(`${APP}/dashboard${frag}`);
     await insp.waitForURL(/\/auth\/reset/, { timeout: 20000 }).catch(() => {});
-    await resetForm(insp).waitFor({ timeout: 20000 }).catch(() => {});
-    c.expect(q(insp).pathname === "/auth/reset" && (await resetForm(insp).isVisible()), "recovery hash on /dashboard (other user signed in) -> forwarded, form shown", insp.url());
+    const other = insp.getByText(/Another account is signed in on this device/);
+    await other.waitFor({ timeout: 20000 }).catch(() => {});
+    c.expect(q(insp).pathname === "/auth/reset" && (await other.isVisible()) && (await insp.locator('input[type="password"]').count()) === 0,
+      "recovery hash on /dashboard (other user signed in) -> forwarded, refused ('another account'), no form", insp.url());
     c.expect(!/access_token|refresh_token|type=recovery/.test(insp.url()), "tokens gone from the URL", insp.url());
     const who = (await sessionFromCookies(insp))?.user?.email;
     c.step(`session in this browser after the forward: ${who}`);
-    c.expect(who === "viewer1@test.local", "the browser's session is now the link's user (viewer1), not insp1", who);
+    c.expect(who === "insp1@test.local", "the browser's session is still insp1's (no silent account switch)", who);
     await shot(c, insp, "dashboard-forwarded");
     await insp.context().close();
+
+    // C9: an insider's own password-session tokens dressed up as a reset
+    // link: refused (the token's amr says "password"), no session stored.
+    const own = (await (await apiAs("insp2@test.local")).auth.getSession()).data.session;
+    const fake = new URLSearchParams({ access_token: own.access_token, refresh_token: own.refresh_token, expires_in: "3600", token_type: "bearer", type: "recovery" });
+    const victim = await newPage(c, "victim");
+    await victim.goto(`${APP}/auth/reset#${fake}`);
+    await invalidMsg(victim).waitFor({ timeout: 15000 }).catch(() => {});
+    c.expect(await invalidMsg(victim).isVisible() && (await victim.locator('input[type="password"]').count()) === 0, "password-session tokens as a 'reset link' -> invalid, no form");
+    c.expect(!(await sessionFromCookies(victim)), "...and no session stored in the browser", await sessionFromCookies(victim));
+    await victim.context().close();
 
     const exp = await newPage(c, "anon-expired");
     await exp.goto(`${APP}/login#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired`);
@@ -2091,7 +2232,7 @@ async function main() {
     await fb.context().close();
   });
 
-  await run("r3", "C1: 'Forgot password?': empty email hint; neutral confirmation; mail only for active accounts; link works on any device", async (c) => {
+  await run("r3", "C1: 'Forgot password?': empty email hint; neutral confirmation; mail only for active accounts; link works on any device; C9: the answer does not wait for the lookup", async (c) => {
     const page = await newPage(c, "anon");
     await page.goto(`${APP}/login`);
     const forgot = page.getByRole("button", { name: "Forgot password?" });
@@ -2110,7 +2251,8 @@ async function main() {
         forgot.click(),
       ]);
       await sent.waitFor({ timeout: 10000 }).catch(() => {});
-      await page.waitForTimeout(300);
+      // The email goes out after the answer (C9): give it a moment.
+      await page.waitForTimeout(1500);
       return { status: resp.status(), shown: await sent.isVisible(), mails: await mailsSince(t) };
     };
     try {
@@ -2122,6 +2264,20 @@ async function main() {
       const inactive = await ask("viewer1@test.local");
       c.expect(inactive.status === 200 && inactive.shown, "inactive account -> the same neutral confirmation", inactive);
       c.expect(inactive.mails.length === 0, "no email for an inactive account", inactive.mails);
+      // C9: the answer doesn't wait for the account lookup (it and the
+      // email run after the response), so its timing reveals nothing.
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot%'");
+      await ctl.fault({ method: "GET", prefix: "/rest/v1/profiles", mode: "delay", delay: 3000, times: 1 });
+      const tSlow = Date.now();
+      const slow = await page.request.post(`${APP}/api/auth/forgot`, { headers: { Origin: APP }, data: { email: "insp2@test.local" } });
+      const slowMs = Date.now() - tSlow;
+      c.expect(slow.status() === 200 && slowMs < 2500, `answer in ${slowMs} ms while the account lookup takes 3 s`, { status: slow.status(), slowMs });
+      let late = [];
+      for (let i = 0; i < 40 && !late.length; i++) {
+        await page.waitForTimeout(200);
+        late = (await mailsSince(tSlow)).filter((m) => m.email === "insp2@test.local");
+      }
+      c.expect(late.length === 1, "...and the email still goes out afterwards", late);
       const active = await ask("Insp1@Test.local");
       c.expect(active.status === 200 && active.shown, "active account (mixed case) -> neutral confirmation", active);
       const m = active.mails[0];
@@ -2578,14 +2734,24 @@ async function main() {
       c.expect(fb.slice(0, 10).every((s) => s === 200) && fb[10] === 429, "RPC down -> memory fallback still allows 10/min then 429 (no 500s)", fb.join(","));
       c.expect((await count(K.min)) === 0, "nothing written to the database while the RPC fails");
 
-      // Forgot password (public): per-address limit, shared.
+      // Forgot password (public): per address from one client (tight), per
+      // address from all clients (ceiling), shared.
       const anon = await newPage(c, "anon-c4");
       const forgot = async (email) => (await anon.request.post(`${APP}/api/auth/forgot`, { headers: { Origin: APP }, data: { email } })).status();
       const f = [];
       for (let n = 0; n < 4; n++) f.push(await forgot("c4-nobody@test.local"));
-      c.expect(f.join(",") === "200,200,200,429", "forgot: 3 per address per hour, then 429", f.join(","));
-      c.expect((await count(`forgot-email:${sha("c4-nobody@test.local")}`)) === 4, "forgot counter lives in Postgres, keyed by the address's hash");
+      c.expect(f.join(",") === "200,200,200,429", "forgot: 3 per address per hour from one client, then 429", f.join(","));
+      c.expect((await one("SELECT count FROM rate_limits WHERE key LIKE 'forgot-email-ip:%'"))?.count === 4, "forgot per-address-and-client counter lives in Postgres (hashed key)");
+      c.expect((await count(`forgot-email:${sha("c4-nobody@test.local")}`)) === 3, "the per-address ceiling counts only what that limit let through");
       c.expect((await one("SELECT count(*)::int AS n FROM rate_limits WHERE key LIKE '%@%'")).n === 0, "no email address stored in rate_limits");
+      // C9: another client (its counters are fresh) is not locked out of
+      // that address by the first one...
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot-email-ip:%' OR key LIKE 'forgot-ip:%'");
+      c.expect((await forgot("c4-nobody@test.local")) === 200, "another client can still ask for the same address (no lockout by a third party)");
+      // ...until the address's ceiling (10 per hour, all clients together).
+      await sql("UPDATE rate_limits SET count = 10 WHERE key = $1", [`forgot-email:${sha("c4-nobody@test.local")}`]);
+      await sql("DELETE FROM rate_limits WHERE key LIKE 'forgot-email-ip:%'");
+      c.expect((await forgot("c4-nobody@test.local")) === 429, "per-address ceiling (10/hour across clients) -> 429");
       await sql("UPDATE rate_limits SET count = 5 WHERE key LIKE 'forgot-ip:%'");
       const ipBlocked = await forgot("c4-other@test.local");
       c.expect(ipBlocked === 429, "forgot: per-client limit -> 429", ipBlocked);
@@ -2599,7 +2765,7 @@ async function main() {
   });
 
   // ------------------------------------------ C6 / D2 (migration 20260929000100)
-  await run("c6d2", "C6: a deactivated session reads no units/zones/IFS objects; D2: added readings/evidence show in the item history", async (c) => {
+  await run("c6d2", "C6: a deactivated session reads no units/zones/IFS objects; D2: added readings/evidence show in the item history; C9: names for colleagues, emails for admins only", async (c) => {
     const EMAIL = "insp2@test.local";
     const count = async (api, table) => {
       const { data, error } = await api.from(table).select("*");
@@ -2652,10 +2818,28 @@ async function main() {
     c.expect(/^Evidence added: \d{4}-\d{2}-\d{2} \u2014 audit evidence \(no file\)$/.test(stored?.note || ""), "DB: the trigger's note still has its long dash (database unchanged)", stored);
     // E8: the panel shows the date in the UI language ("9 Oct 2026" in EN).
     c.expect(/Evidence added: \d{1,2} [A-Z][a-z]{2} \d{4} - audit evidence \(no file\)/.test(txt) && !txt.includes("\u2014"), "History panel: 'Evidence added: <date> - <description>', no long dash anywhere", txt.slice(0, 400));
-    c.expect(/by insp1@test\.local/.test(txt), "…attributed to insp1", txt.slice(0, 400));
+    // C9: an inspector sees the author's name (captured when the event was
+    // written), never a colleague's email.
+    c.expect(/by insp1\b/.test(txt) && !/@test\.local/.test(txt), "…attributed to insp1 by name, no email shown to an inspector", txt.slice(0, 400));
     await shot(c, page, "history");
     await page.keyboard.press("Escape");
     await page.context().close();
+
+    // C9 over REST: the email column is closed to non-admins; history_log
+    // gives names to everyone and emails to the unit's admins only.
+    const viewer = await apiAs("viewer1@test.local");
+    const col = await viewer.from("history").select("by_user_email").limit(1);
+    const star = await viewer.from("history").select("*").limit(1);
+    c.expect(!!col.error && !!star.error, "viewer: history.by_user_email (and select=*) refused by PostgREST", { col: col.error?.message, star: star.error?.message });
+    const vlog = await viewer.from("history_log").select("by_user_email, by_user_name").eq("item_id", AUDIT);
+    c.expect(!vlog.error && vlog.data.length > 0 && vlog.data.every((r) => r.by_user_email === null) && vlog.data.some((r) => r.by_user_name === "insp1"),
+      "viewer: history_log rows carry names, no emails", vlog.error?.message ?? vlog.data);
+    const vfn = await viewer.rpc("history_author_email", { p_id: (await one("SELECT id FROM history WHERE item_id = $1 LIMIT 1", [AUDIT])).id });
+    c.expect(!vfn.error && vfn.data === null, "viewer: /rpc/history_author_email answers null", vfn);
+    const adm = await apiAs("admin1@test.local");
+    const alog = await adm.from("history_log").select("by_user_email, items(name)").eq("item_id", AUDIT);
+    c.expect(!alog.error && alog.data.some((r) => r.by_user_email === "insp1@test.local") && alog.data.every((r) => r.items?.name === "E2E Audit Target"),
+      "admin: history_log has the emails and embeds items(name) (the Audit Log query)", alog.error?.message ?? alog.data);
   });
 
   // ------------------------------------------------------------ E1 / E2
@@ -3786,7 +3970,9 @@ async function main() {
       c.expect(!(await modalOpen(page)), "continuing saves and closes");
       db = await one("SELECT mechanism, prob, cons, priority, freq_insp FROM items WHERE id = $1", [F3.ai]);
       c.expect(db.mechanism === "Atmospheric Corrosion" && db.prob === 3 && db.cons === 3 && db.priority === "Medium" && db.freq_insp === "Quarterly", "DB has the applied fields", db);
-      const rd = await sql("SELECT depth_mm::text d, location, checked_by, reading_date = current_date AS today FROM readings WHERE item_id = $1", [F3.ai]);
+      // "Today" on the browser's calendar (newPage: America/Sao_Paulo), not
+      // the database's (UTC): they differ every evening from 21:00 BRT.
+      const rd = await sql("SELECT depth_mm::text d, location, checked_by, reading_date = (now() AT TIME ZONE 'America/Sao_Paulo')::date AS today FROM readings WHERE item_id = $1", [F3.ai]);
       c.expect(rd.length === 1 && rd[0].d === "0.400" && rd[0].location === "AI estimate" && rd[0].checked_by === "AI Vision" && rd[0].today,
         "exactly one reading: 0.400 mm, tagged 'AI estimate' / 'AI Vision', dated today", rd);
       c.expect((await one("SELECT count(*)::int n FROM evidences WHERE item_id = $1", [F3.ai])).n === 0, "the discarded evidence entry was not saved");
@@ -4023,7 +4209,7 @@ async function main() {
     }
   });
 
-  await run("f3api", "F3: user API hygiene (malformed JSON 400, admin/origin gates, reset limit 429, generic GoTrue errors) + prefetch without a session cookie -> /login", async (c) => {
+  await run("f3api", "F3: user API hygiene (malformed JSON 400, admin/origin gates, reset limit 429, generic GoTrue errors; C9: canonical ids, last admin enforced by the database under a race) + prefetch without a session cookie -> /login", async (c) => {
     const LEAK = "Database error saving new user: duplicate key value violates unique constraint users_email_partial_key (SQLSTATE 23505)";
     const leaky = (status) => ({ code: status, error_code: "unexpected_failure", msg: LEAK });
     await sql("DELETE FROM rate_limits WHERE key LIKE 'users%'");
@@ -4068,6 +4254,45 @@ async function main() {
       }
       await insp.context().close();
       c.expect((await one("SELECT role FROM profiles WHERE id = $1", [USERS.insp2])).role === "inspector", "nothing changed by the refused calls");
+
+      // C9: ids compared in canonical form (an upper-case copy of one's own
+      // id is still oneself), malformed ids refused.
+      const selfUp = USERS.admin1.toUpperCase();
+      const sd = await post(adm, "update", { id: selfUp, role: "viewer" });
+      c.expect(sd.status === 400 && sd.body.error === "You cannot demote or deactivate yourself.", "update: own id in upper case -> still 'yourself'", sd);
+      const sx = await post(adm, "delete", { id: selfUp });
+      c.expect(sx.status === 400 && sx.body.error === "You cannot delete yourself.", "delete: own id in upper case -> still 'yourself'", sx);
+      const bad = await post(adm, "update", { id: "not-a-uuid", role: "viewer" });
+      c.expect(bad.status === 400 && bad.body.error === "Invalid user id", "update: malformed id -> 400 'Invalid user id'", bad);
+      c.expect((await one("SELECT role, active FROM profiles WHERE id = $1", [USERS.admin1])).role === "admin", "admin1 still an admin");
+
+      // C9: "last active admin" is enforced by the database too. With two
+      // admins (admin1, and insp2 promoted here), admin1 asks to remove
+      // insp2; the gateway holds that request while someone else demotes
+      // admin1. The route's own count had passed, the database refuses, and
+      // the route answers its usual message.
+      try {
+        await sql("UPDATE profiles SET role = 'admin' WHERE id = $1", [USERS.insp2]);
+        const demoteAdmin1 = () => new Promise((r) => setTimeout(r, 600)).then(() =>
+          sql("UPDATE profiles SET role = 'inspector' WHERE id = $1", [USERS.admin1]));
+        await ctl.fault({ method: "PUT", prefix: "/auth/v1/admin/users/", mode: "delay", delay: 1500, times: 1 });
+        const [race] = await Promise.all([post(adm, "update", { id: USERS.insp2, active: false }), demoteAdmin1()]);
+        const after = await one("SELECT p.role, p.active, u.banned_until FROM profiles p JOIN auth.users u ON u.id = p.id WHERE p.id = $1", [USERS.insp2]);
+        c.expect(race.status === 400 && race.body.error === "Cannot remove the only active admin." && !/SQLSTATE|23514|last active admin of the unit/.test(race.text),
+          "deactivate raced by another demotion -> database refuses, 400 'Cannot remove the only active admin.'", race);
+        c.expect(after.role === "admin" && after.active === true && after.banned_until === null, "...the other admin stays active and its ban is undone", after);
+        await sql("UPDATE profiles SET role = 'admin' WHERE id = $1", [USERS.admin1]);
+        await ctl.fault({ method: "DELETE", prefix: "/auth/v1/admin/users/", mode: "delay", delay: 1500, times: 1 });
+        const [raceDel] = await Promise.all([post(adm, "delete", { id: USERS.insp2 }), demoteAdmin1()]);
+        c.expect(raceDel.status === 400 && raceDel.body.error === "Cannot delete the only active admin." && !/Database error|SQLSTATE/.test(raceDel.text),
+          "delete raced by another demotion -> refused by the database, 400 'Cannot delete the only active admin.'", raceDel);
+        c.expect((await one("SELECT count(*)::int n FROM profiles WHERE id = $1 AND role = 'admin' AND active", [USERS.insp2])).n === 1, "...the user is still there");
+      } finally {
+        await ctl.clear();
+        await sql("UPDATE profiles SET role = 'admin' WHERE id = $1", [USERS.admin1]);
+        await sql("UPDATE profiles SET role = 'inspector', active = true WHERE id = $1", [USERS.insp2]);
+        await sql("UPDATE auth.users SET banned_until = NULL WHERE id = $1", [USERS.insp2]);
+      }
 
       // GoTrue failures come back as generic messages.
       await ctl.fault({ method: "POST", prefix: "/auth/v1/admin/users", status: 500, times: 1, body: leaky(500) });
@@ -4938,7 +5163,7 @@ async function main() {
   // Same browser, two users of different units, one after the other within
   // the sign-in preload's 30 s window (a shared tablet offshore): the
   // second user must never see the first one's data, not even for a frame.
-  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser: only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again", async (c) => {
+  await run("f6switch", "F6: sign out and straight back in as a user of another unit on the same browser: only the new user's data is ever rendered (KPIs watched on every DOM change, Zones list); and back again; C9: sign-out clears the user's local drafts", async (c) => {
     const OTHER = { id: "00000000-0000-0000-0000-00000000f001", email: "other1@test.local", item: "00000000-0000-0000-0000-0000000e2ef1" };
     await sql("INSERT INTO public.units (code, name) VALUES ('E2E-99', 'E2E other unit') ON CONFLICT (code) DO NOTHING");
     await sql("INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING", [OTHER.id, OTHER.email]);
@@ -4983,8 +5208,19 @@ async function main() {
     const totalA = await kpiTotal();
     c.expect(totalA > 1000, `insp1 (SS-75) sees its unit's items (${totalA})`);
 
+    // C9: an explicit sign-out leaves none of this user's unsaved item
+    // edits on the device (other users' stay; an idle sign-out keeps them).
+    await page.evaluate((uid) => {
+      const d = JSON.stringify({ form: { notes: "x" }, baseForm: { notes: "" }, baseUpdatedAt: "t", savedAt: Date.now() });
+      localStorage.setItem(`ss75-cmp.itemDraft.${uid}.00000000-0000-0000-0000-0000000e2e01`, d);
+      localStorage.setItem("ss75-cmp.itemDraft.00000000-0000-0000-0000-00000000c002.00000000-0000-0000-0000-0000000e2e01", d);
+    }, USERS.insp1);
     const t0 = Date.now();
     await signOut();
+    const left = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("ss75-cmp.itemDraft.")));
+    c.expect(!left.some((k) => k.includes("00000000-0000-0000-0000-00000000c001")) && left.some((k) => k.includes("00000000-0000-0000-0000-00000000c002")),
+      "sign-out removed insp1's local drafts, kept another user's", left);
+    await page.evaluate(() => localStorage.removeItem("ss75-cmp.itemDraft.00000000-0000-0000-0000-00000000c002.00000000-0000-0000-0000-0000000e2e01"));
     await signIn(OTHER.email);
     const totalB = await kpiTotal();
     c.step(`other1 signed in and loaded ${Date.now() - t0} ms after insp1 signed out`);

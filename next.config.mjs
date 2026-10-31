@@ -27,6 +27,9 @@ const lockedCsp = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";
 const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
+  // A page opened from the app (or opening it) gets no window handle to
+  // it: no cross-window navigation or probing from another origin.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
     key: "Strict-Transport-Security",
@@ -48,6 +51,9 @@ const { version } = JSON.parse(
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,
+  // The app never uses next/image (photos are blob: URLs, icons static
+  // files): this turns the /_next/image optimiser endpoint off.
+  images: { unoptimized: true },
   env: { NEXT_PUBLIC_APP_VERSION: version },
   async headers() {
     return [

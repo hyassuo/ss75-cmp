@@ -34,12 +34,22 @@ supabase/
                                       triggers, storage bucket + policies,
                                       1 unit + 14 DROPS zones
     20260928000100_ifs_register.sql   IFS Equipment Register table
+    20260929000000_rate_limits.sql    shared rate-limit counters (C4)
+    20260929000100_active_reads_…     active-only reference reads, audit
+                                      of added readings/evidence (C6, D2)
+    20261030000000_last_admin_guard   security round C9: last active
+    20261030000100_no_bootstrap_admin admin kept by the database, no
+    20261030000200_history_author_…   hard-coded admin, colleagues'
+                                      emails in the audit trail for
+                                      admins only
   seed/
     ifs-data.sql              11,312-row IFS register (TRUNCATE + INSERT)
     demo.sql                  optional ~25 [DEMO] items (registered in
                               demo_seed_items; re-runs only replace those)
   upgrades/                   in-place upgrades for databases created
-                              before the baseline (see below)
+                              before the baseline (see below), and
+                              security-c9.sql: the C9 migrations as one
+                              file for production's SQL Editor
   ops/
     backup-snapshot.sql       read-only JSON dump of the app tables
 ```
@@ -49,14 +59,23 @@ supabase/
 With the [Supabase CLI](https://supabase.com/docs/guides/cli):
 `supabase link --project-ref <ref>` then `supabase db push` (applies
 `migrations/`), and load `seed/ifs-data.sql` in the SQL Editor. Without
-the CLI, paste the two migration files and then the seed into the SQL
-Editor, in that order: every file is idempotent.
+the CLI, paste every file of `migrations/`, in file-name order, and then
+the seed into the SQL Editor: every file is idempotent. Don't stop at the
+baseline: later files change it (e.g. `20261030000100` removes the
+baseline's hard-coded bootstrap admin).
 
 **Before opening the app to users:** in Supabase → Authentication, turn
-**off** public sign-ups and turn **on** email confirmation. The baseline
-auto-promotes the first sign-in of `hyassuo@gmail.com` to admin (the
-bootstrap account); every other account is created by an admin on the
-**Users** page and starts inactive otherwise.
+**off** public sign-ups and turn **on** email confirmation. Every new
+account starts as an inactive viewer (no address is special); create the
+first admin in Supabase → Authentication → Users → *Add user*, then
+promote it in the SQL Editor:
+
+```sql
+UPDATE public.profiles SET role = 'admin', active = true
+ WHERE email = '<your address>';
+```
+
+Every other account is created by an admin on the **Users** page.
 
 **Auth emails** (password reset, confirmation): Supabase's built-in mailer
 only delivers to members of the project's team (2/hour), so configure a
@@ -82,22 +101,28 @@ IFS register read-only at runtime).
 
 - `hardening-5.sql` is security round 5 (authorship, an audit trail that
   survives deletion, the storage-policy fix, the server-side draft sweep;
-  details in its header). It depends on the v1.4 columns. If you ever
-  re-run an older file (`security-fixes`, `hardening*`, `schema-v130/140`),
-  re-run `hardening-5.sql` afterwards: older rounds redefine some objects
-  with weaker versions.
+  details in its header). It depends on the v1.4 columns.
+- The older files (`schema-v130/140`, `security-fixes`, `hardening`,
+  `hardening-3`, `hardening-4`) redefine some objects with weaker versions
+  (e.g. a photo policy that opens every unit's photos), so they refuse to
+  run on a database that already has round 5, including any database
+  created from `migrations/`: they are only for the chain above. The SQL
+  Editor runs a file as one transaction, so a refusal changes nothing (with
+  `psql`, use `-v ON_ERROR_STOP=1`).
 - `rollback-v140.sql` refuses to run under round 5: restore a backup
   instead.
 
 Then adopt the migration history once, so `supabase db push` only applies
 future migrations, and check for drift. List every migration the database
 already has: in production that includes the two of 29/09
-(`20260929000000_rate_limits`, `20260929000100_active_reads_insert_audit`),
-which were applied by hand in the SQL Editor:
+(`20260929000000_rate_limits`, `20260929000100_active_reads_insert_audit`)
+and the three of 30/10 (security round C9, applied together as
+`supabase/upgrades/security-c9.sql`), all applied by hand in the SQL
+Editor:
 
 ```
 supabase link --project-ref <ref>
-supabase migration repair --status applied 20260928000000 20260928000100 20260929000000 20260929000100
+supabase migration repair --status applied 20260928000000 20260928000100 20260929000000 20260929000100 20261030000000 20261030000100 20261030000200
 supabase db diff --linked   # should report no schema differences
 ```
 
@@ -147,7 +172,7 @@ item modal copies when an Object is selected.
 | Command | What it covers |
 |---------|----------------|
 | `npm test` | Vitest unit tests: domain logic (priority, dates across time zones, corrosion rate…), the item-form diff/rebase logic, CSV escaping, paging, redirects (`tests/*.test.ts`). |
-| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role: fresh install, the full upgrade chain, demo seed and rollback guard. |
+| `npm run test:sql` | RLS / trigger regression suite (`tests/sql/run.sh`): spins up a throwaway PostgreSQL (needs the server binaries, e.g. `apt install postgresql`), loads a minimal Supabase stand-in and the schema files, then attacks the policies as each role: fresh install, the full upgrade chain, `security-c9.sql` on a 29/09 database (same schema as the migrations, checked with `pg_dump`), demo seed and the guards of the old upgrade files. |
 | `npm run test:e2e` | End-to-end suite (`tests/e2e/`): builds the app and drives it in Chromium (Playwright) against a local Supabase stand-in: see below. |
 
 CI (`.github/workflows/ci.yml`, least-privilege, actions pinned by SHA)

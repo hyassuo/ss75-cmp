@@ -12,6 +12,7 @@ import { useShell, type MainTab } from "@/lib/context/ShellContext";
 import { useData } from "@/lib/context/DataContext";
 import { useNewItem } from "@/lib/context/NewItemContext";
 import { createClient } from "@/lib/supabase/client";
+import { clearUserItemDrafts } from "@/lib/utils/itemDraft";
 
 import type { DictKey } from "@/lib/i18n/dict";
 import { useLang } from "@/lib/context/LangContext";
@@ -78,6 +79,8 @@ export function Sidebar() {
 
   async function signOut() {
     if (!(await confirm(t("nav.signOutConfirm")))) return;
+    // Leaving the device: no unsaved item edits stay behind in it.
+    clearUserItemDrafts(profile.id);
     const supabase = createClient();
     // This device only: other devices keep their sessions.
     await supabase.auth.signOut({ scope: "local" });
