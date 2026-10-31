@@ -59,8 +59,10 @@ supabase/
 With the [Supabase CLI](https://supabase.com/docs/guides/cli):
 `supabase link --project-ref <ref>` then `supabase db push` (applies
 `migrations/`), and load `seed/ifs-data.sql` in the SQL Editor. Without
-the CLI, paste the two migration files and then the seed into the SQL
-Editor, in that order: every file is idempotent.
+the CLI, paste every file of `migrations/`, in file-name order, and then
+the seed into the SQL Editor: every file is idempotent. Don't stop at the
+baseline: later files change it (e.g. `20261030000100` removes the
+baseline's hard-coded bootstrap admin).
 
 **Before opening the app to users:** in Supabase → Authentication, turn
 **off** public sign-ups and turn **on** email confirmation. Every new
