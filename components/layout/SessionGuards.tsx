@@ -11,6 +11,7 @@ import {
   ACTIVITY_PING_MS,
   IDLE_REASON,
   IDLE_TIMEOUT_MS,
+  IDLE_EXPIRED_ERROR,
   IDLE_WARNING_MS,
   LAST_ACTIVITY_KEY,
   readLastActivity,
@@ -100,9 +101,15 @@ export function IdleLogout() {
     }
     const ping = () => {
       void fetch(ACTIVITY_PATH, { method: "POST", keepalive: true })
-        .then((r) => {
-          // The server already ended this session (idle elsewhere).
-          if (r.status === 401) signOut();
+        .then(async (r) => {
+          // The server already ended this session for inactivity. Only
+          // that answer signs out: a bare 401 can also be a transient
+          // failure to verify the session (Supabase Auth unreachable, a
+          // refresh racing this tab's own), and signing out on it would
+          // revoke the session of someone who is working.
+          if (r.status !== 401) return;
+          const body = (await r.json().catch(() => null)) as { error?: unknown } | null;
+          if (body?.error === IDLE_EXPIRED_ERROR) signOut();
         })
         .catch(() => {
           // offline: the next activity tries again

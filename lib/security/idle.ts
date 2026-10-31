@@ -35,6 +35,9 @@ export const LAST_SEEN_COOKIE = "ss75-cmp.last-seen";
 /** /login?reason=idle shows "signed out after inactivity". */
 export const IDLE_REASON = "idle";
 export const ACTIVITY_PATH = "/api/session/activity";
+/** The activity ping's 401 body when the session went idle (the only
+ *  answer on which the browser signs out). */
+export const IDLE_EXPIRED_ERROR = "Session expired";
 
 // ------------------------------------------------------------------ server
 

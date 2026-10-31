@@ -1718,6 +1718,17 @@ async function main() {
       page.keyboard.press("Shift"),
     ]);
     c.expect(pinged?.status() === 204, "activity after a minute -> the browser pings the server (204)", pinged?.status());
+    // A 401 that is not the idle verdict (e.g. the server could not verify
+    // the session for a moment) must not sign a working user out.
+    await page.route("**/api/session/activity", (rt) => rt.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Unauthorized" }) }));
+    await page.clock.fastForward("01:05");
+    const [bare] = await Promise.all([
+      page.waitForResponse((rs) => rs.url().endsWith("/api/session/activity"), { timeout: 10000 }).catch(() => null),
+      page.keyboard.press("Shift"),
+    ]);
+    await page.waitForTimeout(1500);
+    c.expect(bare?.status() === 401 && q(page).pathname === "/dashboard", "a bare 401 from the ping (not 'Session expired') -> still signed in", { status: bare?.status(), url: page.url() });
+    await page.unroute("**/api/session/activity");
     // The server says the session is idle -> the tab signs out.
     await setLastSeen(page, `${fclaims.session_id}.${Date.now() - 40 * 60_000}`);
     await page.clock.fastForward("01:05");

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requestIsHttps } from "@/lib/supabase/cookieOptions";
 import { rateLimit } from "@/lib/utils/rateLimit";
 import {
+  IDLE_EXPIRED_ERROR,
   LAST_SEEN_COOKIE,
   formatLastSeen,
   idleVerdict,
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
   const claims =
     (await supabase.auth.getClaims().catch(() => null))?.data?.claims ?? null;
   if (!claims) {
+    // Not an idle verdict: the browser does not sign out on this one (it
+    // may be a transient failure to verify the session).
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // Cheap, so a per-instance cap is plenty (pings come once a minute).
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
       if (c.name.startsWith("sb-")) store.set(c.name, "", { path: "/", maxAge: 0 });
     }
     store.set(LAST_SEEN_COOKIE, "", { path: "/", maxAge: 0 });
-    return NextResponse.json({ error: "Session expired" }, { status: 401 });
+    return NextResponse.json({ error: IDLE_EXPIRED_ERROR }, { status: 401 });
   }
   store.set(
     LAST_SEEN_COOKIE,
