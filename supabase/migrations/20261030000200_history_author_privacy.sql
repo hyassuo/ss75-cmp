@@ -8,7 +8,8 @@
 --   - history.by_user_name keeps the author's display name (their
 --     profiles.full_name), captured when the event is written, so everyone
 --     still sees who did what. Existing rows are backfilled from the
---     profiles that still exist.
+--     profiles that still exist. Users can no longer change their own
+--     full_name through the API, so that name can't be borrowed.
 --   - API roles may no longer SELECT history.by_user_email: SELECT on
 --     history is granted per column, without it. (A column added to
 --     history later is NOT readable by the app until it is granted here.)
@@ -49,6 +50,14 @@ UPDATE public.history h
   FROM public.profiles p
  WHERE p.id = h.by_user
    AND h.by_user_name IS NULL;
+
+-- The name is now what non-admins see as the author, so a user may no
+-- longer rename themselves through the API (the app never did: names are
+-- set by an admin when the account is created). Otherwise an inspector
+-- could take a colleague's name, make changes and take their own back,
+-- and the trail would show the colleague to viewers and inspectors.
+-- (dept stays editable by its owner.)
+REVOKE UPDATE (full_name) ON public.profiles FROM authenticated, anon;
 
 -- Column-level SELECT: everything but by_user_email. Revoking the table
 -- privilege also drops any column grants, so this is the complete list.

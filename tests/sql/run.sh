@@ -168,7 +168,9 @@ suite() {
   check "admin cannot insert profiles" "$(as $A1 "INSERT INTO profiles (id, email, role, unit_id, active) VALUES ('00000000-0000-0000-0000-00000000d001', 'x@test', 'admin', '$U1', true)")" "$DENIED"
   check "admin lists own unit's profiles" "$(as $A1 "SELECT count(*) FROM profiles")" "4"
   check "inspector sees only self" "$(as $I1 "SELECT count(*) FROM profiles")" "1"
-  check "user can edit own full_name" "$(rows $I1 "UPDATE profiles SET full_name = 'Insp One' WHERE id = '$I1' RETURNING 1")" "1"
+  # Names are set through the Users API (service role), not by their owner.
+  su_sql "UPDATE profiles SET full_name = 'Insp One' WHERE id = '$I1'" >/dev/null
+  check "user can edit own dept" "$(rows $I1 "UPDATE profiles SET dept = 'Inspection' WHERE id = '$I1' RETURNING 1")" "1"
   check "user cannot escalate own role" "$(as $I1 "UPDATE profiles SET role = 'admin' WHERE id = '$I1'")" "$DENIED"
   check "user cannot reactivate/transfer self" "$(as $I1 "UPDATE profiles SET unit_id = NULL WHERE id = '$I1'")" "$DENIED"
 
@@ -187,7 +189,7 @@ suite() {
   check "...nor its profile deleted directly" "$(lastadm "DELETE FROM profiles WHERE id = '$A1'")" "refused"
   check "...and stays an active admin" "$(su_sql "SELECT role || ',' || active FROM profiles WHERE id = '$A1'")" "admin,true"
   check "the rule is per unit: the other unit's only admin too" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$AB'")" "refused"
-  check "a last admin still edits their own name" "$(rows $A1 "UPDATE profiles SET full_name = 'Admin One' WHERE id = '$A1' RETURNING 1")" "1"
+  check "a last admin still edits their own profile (dept)" "$(rows $A1 "UPDATE profiles SET dept = 'QA' WHERE id = '$A1' RETURNING 1")" "1"
   check "other users are not affected" "$(lastadm "UPDATE profiles SET active = false WHERE id = '$V1'")/$(lastadm "UPDATE profiles SET active = true WHERE id = '$V1'")" "allowed/allowed"
   su_sql "INSERT INTO auth.users (id, email) VALUES ('00000000-0000-0000-0000-00000000d002', 'y@test')" >/dev/null
   su_sql "UPDATE profiles SET role = 'admin', active = false, unit_id = '$U1' WHERE id = '00000000-0000-0000-0000-00000000d002'" >/dev/null
@@ -315,6 +317,8 @@ suite() {
     check "$who: history_author_email() reveals nothing" "$(as $U "SELECT count(public.history_author_email(id)) FROM history_log")/$(as $U "SELECT coalesce(public.history_author_email('$HID'), 'null')")" "0/null"
     check "$who: the other columns still read as before" "$(as $U "SELECT action || ',' || by_user FROM history WHERE id = '$HID'")" "status_changed,$I1"
   done
+  check "a user can't rename themselves (the name the trail shows)" "$(as $I1 "UPDATE profiles SET full_name = 'Admin One' WHERE id = '$I1'")" "$DENIED"
+  check "...an admin neither (names are set by the Users API)" "$(as $A1 "UPDATE profiles SET full_name = 'Someone Else' WHERE id = '$A1'")" "$DENIED"
   check "admin of the unit: history_log has the author's email" "$(as $A1 "SELECT by_user_email FROM history_log WHERE id = '$HID'")" "insp1@test"
   check "admin of the unit: ...for every attributed event" "$(as $A1 "SELECT count(*) FILTER (WHERE by_user_email IS NULL AND by_user IS NOT NULL) FROM history_log")" "0"
   check "admin of another unit: history_author_email() reveals nothing" "$(as $AB "SELECT coalesce(public.history_author_email('$HID'), 'null')")" "null"
@@ -387,6 +391,17 @@ scenario upgrade supabase/migrations/20260928000000_baseline.sql supabase/migrat
   supabase/migrations/20261030000200_history_author_privacy.sql \
   supabase/upgrades/hardening-5.sql
 
+# Production's own history: the upgrade chain above, the migrations of 29/09
+# by hand, then security-c9.sql (twice) in the SQL Editor.
+scenario c9chain supabase/migrations/20260928000000_baseline.sql supabase/migrations/20260928000100_ifs_register.sql \
+  tests/sql/pre-round5.sql \
+  supabase/upgrades/security-fixes.sql supabase/upgrades/hardening.sql supabase/upgrades/hardening-3.sql \
+  supabase/upgrades/hardening-4.sql supabase/upgrades/hardening-5.sql \
+  supabase/upgrades/schema-v115.sql supabase/migrations/20260928000100_ifs_register.sql \
+  supabase/migrations/20260929000000_rate_limits.sql \
+  supabase/migrations/20260929000100_active_reads_insert_audit.sql \
+  supabase/upgrades/security-c9.sql supabase/upgrades/security-c9.sql
+
 # The C9 upgrade file (what production gets, in the SQL Editor) on a
 # database with every migration up to 29/09: twice (idempotency), the
 # whole suite, and the same schema as the fresh install's.
@@ -397,7 +412,9 @@ scenario c9upgrade $PRE_C9 supabase/upgrades/security-c9.sql supabase/upgrades/s
 # loaded into "fresh" only, adds its own bookkeeping table.)
 dump() { "$PG_BIN/pg_dump" -h "$WORK" -p "$PORT" -U postgres -s -n public -T public.demo_seed_items "$1" | grep -Ev '^(--|\\(un)?restrict )'; }
 check "security-c9.sql's verification query: every row true" \
-  "$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|true$')/$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|false$')" "5/0"
+  "$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|true$')/$("${PSQL[@]}" -d c9upgrade -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|false$')" "6/0"
+check "security-c9.sql on production's upgrade chain: every verification row true" \
+  "$("${PSQL[@]}" -d c9chain -At -f "$ROOT/supabase/upgrades/security-c9.sql" 2>&1 | grep -c '|true$')" "6"
 check "security-c9.sql leaves the same schema as the C9 migrations" \
   "$(if diff <(dump fresh) <(dump c9upgrade) >"$WORK/c9.diff"; then echo same; else head -20 "$WORK/c9.diff" | tr "\n" " "; fi)" "same"
 
